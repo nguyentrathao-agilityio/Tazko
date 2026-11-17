@@ -56,7 +56,7 @@ SECRET_PATTERNS = [
     re.compile(r"GOCSPX-[A-Za-z0-9_-]{20,}"),
     re.compile(r"AIza[0-9A-Za-z_-]{35}"),
     re.compile(r"(?:xox[abpr]|ghp|glpat)-?[A-Za-z0-9_-]{20,}"),
-    re.compile(r"^\s*TAZKO_(?:GOOGLE_CLIENT_SECRET|SMTP_PASSWORD|SECRET)\s*=\s*\S{8,}", re.M),
+    re.compile(r"^[ \t]*TAZKO_(?:GOOGLE_CLIENT_SECRET|SMTP_PASSWORD|SECRET)[ \t]*=[ \t]*\S{8,}", re.M),
 ]
 SECRET_FILES = re.compile(r"(^|/)(\.env(\..*)?|.*\.env|secret|.*\.pem|.*\.key|.*\.db(-wal|-shm)?)$")
 

@@ -66,6 +66,10 @@ new_repo secrets; echo "TAZKO_PORT=8791" > notes.md; git add notes.md
 expect pass "no secrets" "$PY" "$CHECKS" secrets
 printf 'TAZKO_GOOGLE_CLIENT_SECRET=%s\n' "$(printf 'GOCSPX-%s' abcdefghijklmnopqrstuvwx)" > conf.txt; git add conf.txt
 expect fail "client secret in a file" "$PY" "$CHECKS" secrets
+new_repo placeholders; printf 'TAZKO_SECRET=\nTAZKO_MAX_UPLOAD_MB=10\nTAZKO_GOOGLE_CLIENT_SECRET=\nTAZKO_SMTP_PASSWORD=\nTAZKO_MAIL_FROM=x\n' > env.example; git add env.example
+expect pass "empty secret placeholders" "$PY" "$CHECKS" secrets
+printf 'TAZKO_SECRET=%s\n' "$(printf 'x%.0s' $(seq 32))" > env2.example; git add env2.example
+expect fail "filled TAZKO_SECRET" "$PY" "$CHECKS" secrets
 new_repo envfile; echo "X=1" > tazko.env; git add -f tazko.env
 expect fail "settings file tracked" "$PY" "$CHECKS" secrets
 
