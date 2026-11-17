@@ -1,0 +1,28 @@
+# Build output
+/target/
+/web/node_modules/
+/web/dist/
+/dist/
+*.tar.gz
+
+# Local data and databases
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets and local settings
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+secret
+
+# Tool and editor state
+.claude/settings.local.json
+.DS_Store
+.idea/
+.vscode/
+*.swp

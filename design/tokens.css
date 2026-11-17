@@ -1,0 +1,52 @@
+/* Tazko design tokens, taken from design/tazko-prototype.html (prototype v2).
+   Light values sit on :root. Dark values apply when the device prefers dark
+   (unless <html data-theme="light">) or when <html data-theme="dark"> is set.
+   The build turns these into the Tailwind theme. The --proto* tokens belong to
+   the prototype bar only and are not built. */
+
+/* Colour, type and shadow */
+:root{
+  --bg:#F5F5FA; --surface:#FFFFFF; --sunken:#EEEEF6; --ink:#1B1B2F; --muted:#66667F; --line:#E2E2EE;
+  --accent:#4B4FD8; --accent-ink:#FFFFFF; --accent-soft:#E9E9FC; --accent-line:#C9CAF5;
+  --ok:#1C7C54; --ok-bg:#DDF3E8; --warn:#9A6212; --warn-bg:#FBEFD5; --bad:#B8344A; --bad-bg:#FBE3E7;
+  --proto:#1B1B2F; --proto-ink:#E8E8F5; --shadow:0 8px 30px rgba(27,27,47,.12);
+  --c0-bg:#E1E2FB; --c0-fg:#3A3DB0; --c1-bg:#D4F1EA; --c1-fg:#17695A; --c2-bg:#FBE9C9; --c2-fg:#845411;
+  --c3-bg:#FADDE3; --c3-fg:#A02E45; --c4-bg:#E4E8D3; --c4-fg:#516025;
+  --sans:"Hanken Grotesk","Segoe UI",system-ui,sans-serif; --mono:"DM Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12121C; --surface:#1B1B29; --sunken:#151522; --ink:#E9E9F6; --muted:#9A9AB5; --line:#2D2D42;
+  --accent:#8B8EF5; --accent-ink:#12122A; --accent-soft:#25264A; --accent-line:#3C3E7A;
+  --ok:#5DD3A0; --ok-bg:#163428; --warn:#E8B45C; --warn-bg:#3A2D12; --bad:#F08196; --bad-bg:#3E1D26;
+  --proto:#0A0A12; --proto-ink:#C9C9E0; --shadow:0 8px 30px rgba(0,0,0,.45);
+  --c0-bg:#2A2B5E; --c0-fg:#B9BBFA; --c1-bg:#163A33; --c1-fg:#8ADBC8; --c2-bg:#443214; --c2-fg:#F0C47A;
+  --c3-bg:#4A2230; --c3-fg:#F4A3B4; --c4-bg:#2E3519; --c4-fg:#C2D27F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12121C; --surface:#1B1B29; --sunken:#151522; --ink:#E9E9F6; --muted:#9A9AB5; --line:#2D2D42;
+  --accent:#8B8EF5; --accent-ink:#12122A; --accent-soft:#25264A; --accent-line:#3C3E7A;
+  --ok:#5DD3A0; --ok-bg:#163428; --warn:#E8B45C; --warn-bg:#3A2D12; --bad:#F08196; --bad-bg:#3E1D26;
+  --proto:#0A0A12; --proto-ink:#C9C9E0; --shadow:0 8px 30px rgba(0,0,0,.45);
+  --c0-bg:#2A2B5E; --c0-fg:#B9BBFA; --c1-bg:#163A33; --c1-fg:#8ADBC8; --c2-bg:#443214; --c2-fg:#F0C47A;
+  --c3-bg:#4A2230; --c3-fg:#F4A3B4; --c4-bg:#2E3519; --c4-fg:#C2D27F; color-scheme:dark}
+
+/* Board surfaces: list background, card shadow, highlight on board colour */
+:root{--lst:rgba(243,243,250,.95);--lst-sh:0 1px 3px rgba(20,20,40,.18);--hl:rgba(255,255,255,.18)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--lst:rgba(24,24,38,.95)}}
+:root[data-theme="dark"]{--lst:rgba(24,24,38,.95)}
+
+/* Radii and spacing as used across the prototype (not named there; named here) */
+:root{
+  --radius-xs:4px;   /* label chips, kbd */
+  --radius-sm:6px;   /* small buttons, inline inputs */
+  --radius-md:8px;   /* buttons, inputs, nav items */
+  --radius-card:9px; /* cards on a board, card-modal fields */
+  --radius-lg:12px;  /* boxes, tables, lists on a board */
+  --radius-xl:14px;  /* dialogs, project tiles */
+  --radius-2xl:16px; /* sign-in card */
+  --radius-pill:99px;
+  --control-h:36px; --control-h-sm:30px; --input-h:38px;
+  --list-w:288px;   /* a list on a board */
+  --rail-w:252px;   /* left navigation */
+  --page-max:1120px;
+  --gutter:16px;    /* minimum side gutter on phones */
+}
