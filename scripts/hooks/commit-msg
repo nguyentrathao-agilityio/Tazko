@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Rejects a commit message with attribution lines. Enable once with:
+#   git config core.hooksPath scripts/hooks
+exec "${PYTHON:-python3}" "$(git rev-parse --show-toplevel)/scripts/checks.py" commit-msg "$1"
