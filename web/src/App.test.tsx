@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
+import { Toaster } from '@/ui/Toaster'
 
 type Call = { url: string; method: string; body?: unknown; csrf?: string }
 
@@ -63,7 +64,11 @@ afterEach(() => {
 
 function open(path: string) {
   window.history.pushState(null, '', path)
-  render(<App />)
+  render(
+    <Toaster>
+      <App />
+    </Toaster>,
+  )
 }
 
 describe('App', () => {
@@ -87,6 +92,7 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Switch company' }))
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Northwind Labs/ }))
     expect(await screen.findByText('Northwind Labs · you see the projects you were invited to')).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Switched to Northwind Labs')
     expect(window.location.pathname).toBe('/c/north')
     expect(screen.queryByRole('link', { name: 'Company settings' })).toBeNull()
     cleanup()

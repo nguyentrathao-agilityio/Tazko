@@ -4,6 +4,7 @@ import { t } from '@/i18n'
 import { Link, type Go } from '@/ui/Link'
 import { Modal } from '@/ui/Modal'
 import { Avatar } from '@/ui/people'
+import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import { StatusPill } from '@/admin/Companies'
 import { MembersPanel } from '@/admin/MembersPanel'
@@ -17,12 +18,16 @@ export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
   const { data: c, error, reload } = useLoad(() => api<Detail>('GET', base), base)
   const [tab, setTab] = useState<Tab>('members')
   const [problem, setProblem] = useState<string | null>(null)
+  const toast = useToast()
 
-  const status = async (to: 'suspend' | 'resume') => {
+  const status = async (to: 'suspend' | 'resume', undoable = true) => {
     setProblem(null)
     try {
       await api('POST', `${base}/${to}`)
       reload()
+      const name = c?.name ?? slug
+      const back = to === 'suspend' ? 'resume' : 'suspend'
+      toast(t(to === 'suspend' ? 'toast.suspended' : 'toast.resumed', { company: name }), undoable ? () => status(back, false) : undefined)
     } catch (e) {
       setProblem(e instanceof HttpError ? e.message : String(e))
     }
@@ -89,7 +94,10 @@ export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
         </>
       )}
       {tab === 'projects' && <ProjectsPanel projects={c.projects} />}
-      {tab === 'settings' && <SettingsPanel company={c} base={base} onSaved={reload} onDeleted={() => go('/admin/companies')} />}
+      {tab === 'settings' && <SettingsPanel company={c} base={base} onSaved={reload} onDeleted={() => {
+            toast(t('toast.companyDeleted', { company: c.name }))
+            go('/admin/companies')
+          }} />}
     </>
   )
 }
@@ -147,18 +155,20 @@ function SettingsPanel({
   onSaved: () => void
   onDeleted: () => void
 }) {
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const toast = useToast()
 
   const save = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     try {
       await api('PATCH', base, { name: String(f.get('name') ?? ''), storage_gb: Number(f.get('limit')) })
-      setMsg({ ok: true, text: t('company.saved') })
+      setMsg(null)
+      toast(t('toast.saved'))
       onSaved()
     } catch (err) {
-      setMsg({ ok: false, text: err instanceof HttpError ? err.message : String(err) })
+      setMsg(err instanceof HttpError ? err.message : String(err))
     }
   }
 
@@ -183,8 +193,8 @@ function SettingsPanel({
             />
           </div>
           {msg && (
-            <p className={msg.ok ? 'note' : 'error'} role="status" style={{ margin: '0 0 12px' }}>
-              {msg.text}
+            <p className="error" role="alert" style={{ margin: '0 0 12px' }}>
+              {msg}
             </p>
           )}
           <button className="btn primary" type="submit">

@@ -3,8 +3,11 @@ import { Mark } from '@/ui/Mark'
 
 export function AuthCard({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-screen place-items-center px-4 py-10">
-      <div className="w-full max-w-[420px] rounded-2xl border border-line bg-surface px-7 py-8 text-center shadow-[var(--shadow)]">
+    <div
+      className="grid min-h-screen place-items-center px-4 py-6"
+      style={{ background: 'radial-gradient(900px 420px at 50% -10%, var(--accent-soft), transparent 70%), var(--bg)' }}
+    >
+      <div className="w-full max-w-[420px] rounded-2xl border border-line bg-surface px-7 py-8 text-center shadow-raised">
         <div className="mb-[18px] flex justify-center">
           <Mark />
         </div>

@@ -4,6 +4,8 @@ import { t } from '@/i18n'
 import { when } from '@/ui/format'
 import { AccountPill, Person } from '@/ui/people'
 import { displayName } from '@/ui/names'
+import { PageHead } from '@/ui/PageHead'
+import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { PersonRow } from '@/admin/types'
 
@@ -11,33 +13,38 @@ export function People() {
   const { data, error, reload } = useLoad(() => api<{ people: PersonRow[] }>('GET', '/api/v1/admin/people'), 'people')
   const [q, setQ] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
+  const toast = useToast()
   const needle = q.trim().toLowerCase()
   const list = (data?.people ?? []).filter(
     (p) => !needle || p.name.toLowerCase().includes(needle) || p.email.toLowerCase().includes(needle),
   )
 
-  const change = async (p: PersonRow, body: Partial<Pick<PersonRow, 'is_super_admin' | 'disabled'>>) => {
+  const change = async (p: PersonRow, body: Partial<Pick<PersonRow, 'is_super_admin' | 'disabled'>>, undoable = true) => {
     setProblem(null)
     try {
       await api('PATCH', `/api/v1/admin/people/${p.id}`, body)
       reload()
     } catch (e) {
       setProblem(e instanceof HttpError ? e.message : String(e))
+      return
     }
+
+    const name = displayName(p.name, p.email)
+    const message =
+      body.is_super_admin !== undefined
+        ? t(body.is_super_admin ? 'toast.superOn' : 'toast.superOff', { name })
+        : t(body.disabled ? 'toast.activeOff' : 'toast.activeOn', { name })
+    const back = body.is_super_admin !== undefined ? { is_super_admin: p.is_super_admin } : { disabled: p.disabled }
+    toast(message, undoable ? () => change(p, back, false) : undefined)
   }
 
   return (
     <>
-      <div className="head">
-        <div>
-          <h1>{t('rail.people')}</h1>
-          <p className="muted">{t('people.lead')}</p>
-        </div>
-        <span className="sp" />
+      <PageHead title={t('rail.people')} lead={t('people.lead')}>
         <div style={{ width: 260, maxWidth: '100%' }}>
           <input type="search" placeholder={t('people.search')} aria-label={t('people.search')} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-      </div>
+      </PageHead>
       {(error || problem) && (
         <p className="error" role="alert">
           {error ?? problem}

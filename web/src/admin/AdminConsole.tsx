@@ -1,5 +1,6 @@
 import type { Me } from '@/api'
 import { t } from '@/i18n'
+import { EmptyState } from '@/ui/EmptyState'
 import type { Go } from '@/ui/Link'
 import { AdminShell } from '@/admin/AdminShell'
 import { Audit } from '@/admin/Audit'
@@ -13,9 +14,7 @@ export function AdminConsole({ me, path, go, onSignOut }: { me: Me; path: string
   if (!me.is_super_admin) {
     return (
       <main className="page">
-        <div className="empty">
-          <h2>{t('admin.notAllowed')}</h2>
-        </div>
+        <EmptyState title={t('admin.notAllowed')} />
       </main>
     )
   }

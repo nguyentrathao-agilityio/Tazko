@@ -18,7 +18,7 @@ export function SignIn({ search }: { search: string }) {
       <h1 className="text-2xl font-bold">{t('signin.title')}</h1>
       <p className="mt-2 text-muted">{t('signin.lead')}</p>
       {error && (
-        <p role="alert" className="mt-4 rounded-[10px] bg-[var(--bad-bg)] px-3.5 py-2.5 text-left text-[.85rem] text-[var(--bad)]">
+        <p role="alert" className="mt-4 rounded-[10px] bg-bad-bg px-3.5 py-2.5 text-left text-[.85rem] text-bad">
           {t(error)}
         </p>
       )}
