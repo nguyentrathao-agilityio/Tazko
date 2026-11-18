@@ -16,6 +16,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::api::routes())
         .merge(crate::auth::routes())
         .merge(crate::admin::routes())
+        .merge(crate::company::routes())
         .fallback(static_file)
         .with_state(state)
 }

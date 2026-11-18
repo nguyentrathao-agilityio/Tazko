@@ -12,7 +12,7 @@ use crate::tenant::{Company, CurrentUser};
 
 pub const COMPANY_PREFIX: &str = "/api/v1/c/{company}";
 
-pub const COMPANY_GET_PATHS: &[&str] = &[""];
+pub const COMPANY_GET_PATHS: &[&str] = &["", "/settings", "/projects"];
 
 pub fn routes() -> Router<AppState> {
     Router::new()

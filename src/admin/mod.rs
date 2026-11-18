@@ -81,11 +81,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/server", get(server))
 }
 
-fn bad(message: &str) -> ApiError {
+pub(crate) fn bad(message: &str) -> ApiError {
     ApiError::BadRequest(message.to_string())
 }
 
-fn conflict(message: &str) -> Response {
+pub(crate) fn conflict(message: &str) -> Response {
     (StatusCode::CONFLICT, Json(json!({ "error": message }))).into_response()
 }
 
@@ -106,16 +106,16 @@ fn finish<T>(o: Outcome<T>) -> Result<T, ApiError> {
 }
 
 #[derive(Debug, Clone)]
-struct Org {
-    id: i64,
-    slug: String,
-    name: String,
-    status: String,
-    storage_limit: Option<i64>,
-    created_at: i64,
+pub(crate) struct Org {
+    pub(crate) id: i64,
+    pub(crate) slug: String,
+    pub(crate) name: String,
+    pub(crate) status: String,
+    pub(crate) storage_limit: Option<i64>,
+    pub(crate) created_at: i64,
 }
 
-fn org(c: &Connection, slug: &str) -> rusqlite::Result<Option<Org>> {
+pub(crate) fn org(c: &Connection, slug: &str) -> rusqlite::Result<Option<Org>> {
     c.query_row(
         "SELECT id, slug, name, status, storage_limit, created_at FROM orgs WHERE slug = ?1 AND status != 'deleted'",
         params![slug],
@@ -268,12 +268,12 @@ struct NewCompany {
     storage_gb: Option<i64>,
 }
 
-enum Invited {
+pub(crate) enum Invited {
     Added,
     Invited,
 }
 
-fn invite_or_add(
+pub(crate) fn invite_or_add(
     tx: &Connection,
     org: &Org,
     email: &str,
@@ -460,7 +460,7 @@ async fn company_detail(
     })))
 }
 
-fn pending_invites(c: &Connection, org_id: Option<i64>) -> rusqlite::Result<Vec<Value>> {
+pub(crate) fn pending_invites(c: &Connection, org_id: Option<i64>) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = c.prepare(
         "SELECT i.id, i.email, i.company_role, coalesce(nullif(u.name, ''), u.email), i.created_at, o.slug, o.name
          FROM invites i JOIN orgs o ON o.id = i.org_id LEFT JOIN users u ON u.id = i.created_by
@@ -679,7 +679,7 @@ struct NewInvite {
     role: String,
 }
 
-fn company_role(raw: &str) -> Result<&'static str, ApiError> {
+pub(crate) fn company_role(raw: &str) -> Result<&'static str, ApiError> {
     match raw {
         "owner" => Ok("owner"),
         "member" => Ok("member"),
@@ -757,7 +757,7 @@ async fn revoke_invite(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
+pub(crate) fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
     c.query_row(
         "SELECT count(*) FROM org_members WHERE org_id = ?1 AND role = 'owner'",
         [org_id],
@@ -765,7 +765,11 @@ fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
     )
 }
 
-fn member(c: &Connection, org_id: i64, user_id: i64) -> rusqlite::Result<Option<(String, String)>> {
+pub(crate) fn member(
+    c: &Connection,
+    org_id: i64,
+    user_id: i64,
+) -> rusqlite::Result<Option<(String, String)>> {
     c.query_row(
         "SELECT m.role, u.email FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ?1 AND m.user_id = ?2",
         params![org_id, user_id],

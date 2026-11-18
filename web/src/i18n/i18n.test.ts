@@ -7,10 +7,10 @@ describe('t', () => {
   })
 
   it('fills in variables', () => {
-    expect(t('home.signedInAs', { email: 'a@example.com' })).toBe('Signed in as a@example.com')
+    expect(t('noAccess.body', { company: 'Acme' })).toBe('Ask an owner of Acme.')
   })
 
   it('leaves unknown variables in place', () => {
-    expect(t('home.signedInAs')).toContain('{email}')
+    expect(t('noAccess.body')).toContain('{company}')
   })
 })

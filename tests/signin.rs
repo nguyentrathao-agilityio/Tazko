@@ -635,3 +635,63 @@ fn google_signing_keys_load_over_tls() {
         .to_string();
     assert!(err.contains("unknown signing key"), "{err}");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_owner_invites_a_member_who_joins_on_first_sign_in() {
+    let h = harness().await;
+    let org = h.app.company("acme", "active").await;
+    let owner = h.app.user("owner@acme.example").await;
+    h.app.member(org, owner, "owner").await;
+    let cookie = h.app.sign_in(owner).await;
+    let csrf = body_json(h.app.get("/api/v1/me", Some(&cookie)).await).await["csrf_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let res = h
+        .app
+        .send(
+            Request::post("/api/v1/c/acme/invites")
+                .header(header::COOKIE, &cookie)
+                .header(CSRF_HEADER, &csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({ "email": "Newbie@Gmail.com", "role": "member" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    assert_eq!(body_json(res).await["result"], "invited");
+
+    let res = sign_in(&h, claims("sub-newbie", "newbie@gmail.com", None)).await;
+    let session = cookie_pair(&session_cookie(&res).expect("the invited member signs in"));
+    let me = body_json(h.app.get("/api/v1/me", Some(&session)).await).await;
+    assert_eq!(
+        me["companies"],
+        json!([{ "slug": "acme", "name": "ACME", "role": "member" }])
+    );
+    assert_eq!(
+        h.app.get("/api/v1/c/acme", Some(&session)).await.status(),
+        StatusCode::OK
+    );
+
+    let settings = h
+        .app
+        .send(
+            Request::get("/api/v1/c/acme/settings")
+                .header(header::COOKIE, &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    let settings = body_json(settings).await;
+    assert_eq!(settings["invites"], json!([]));
+    assert!(
+        settings["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["email"] == "newbie@gmail.com")
+    );
+}

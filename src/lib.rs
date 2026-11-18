@@ -2,6 +2,7 @@ pub mod admin;
 pub mod api;
 pub mod auth;
 pub mod cli;
+pub mod company;
 pub mod config;
 pub mod db;
 pub mod error;
