@@ -3,6 +3,7 @@
 @import './ui/theme.css';
 @import './ui/console.css';
 @import './ui/projects.css';
+@import './board/board.css';
 
 body {
   margin: 0;
