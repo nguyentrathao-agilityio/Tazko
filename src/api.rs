@@ -12,7 +12,7 @@ use crate::tenant::{Company, CurrentUser};
 
 pub const COMPANY_PREFIX: &str = "/api/v1/c/{company}";
 
-pub const COMPANY_GET_PATHS: &[&str] = &[""];
+pub const COMPANY_GET_PATHS: &[&str] = &["", "/settings", "/projects"];
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -25,6 +25,35 @@ async fn me(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Value>, ApiError> {
     let user_id = user.user_id;
+    let email = user.email.clone();
+    let pending: bool = state
+        .dbs
+        .control()
+        .read({
+            let email = email.clone();
+            move |c| {
+                Ok(c.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM invites i JOIN orgs o ON o.id = i.org_id
+                     WHERE i.email = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND o.status = 'active')",
+                    [email],
+                    |r| r.get(0),
+                )?)
+            }
+        })
+        .await?;
+    if pending {
+        state
+            .dbs
+            .control()
+            .write(move |c| {
+                let tx = c.transaction()?;
+                crate::auth::accounts::accept_invites(&tx, user_id, &email)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
+    }
+
     let companies = state
         .dbs
         .control()

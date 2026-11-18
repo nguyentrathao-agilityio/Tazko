@@ -9,11 +9,13 @@ import type { Invite, Member } from '@/admin/types'
 
 export function MembersPanel({
   base,
+  revokePath,
   members,
   invites,
   onChange,
 }: {
   base: string
+  revokePath: (id: number) => string
   members: Member[]
   invites: Invite[]
   onChange: () => void
@@ -132,7 +134,7 @@ export function MembersPanel({
         {invites.length === 0 ? (
           <p className="muted">{t('invites.none')}</p>
         ) : (
-          <InviteTable invites={invites} withCompany={false} onRevoke={(id) => void run(() => api('DELETE', `/api/v1/admin/invites/${id}`))} />
+          <InviteTable invites={invites} withCompany={false} onRevoke={(id) => void run(() => api('DELETE', revokePath(id)))} />
         )}
       </section>
     </>

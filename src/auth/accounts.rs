@@ -128,7 +128,7 @@ fn decide(tx: &Connection, claims: &Claims, email: &str) -> DbResult<Result<i64,
     Ok(Ok(tx.last_insert_rowid()))
 }
 
-fn accept_invites(tx: &Connection, user_id: i64, email: &str) -> DbResult<()> {
+pub fn accept_invites(tx: &Connection, user_id: i64, email: &str) -> DbResult<()> {
     let at = now();
     tx.execute(
         "INSERT INTO org_members (org_id, user_id, role)

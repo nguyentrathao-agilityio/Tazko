@@ -3,7 +3,7 @@ import { getMe, signOut, SignInNeeded, type Me } from '@/api'
 import { AdminConsole } from '@/admin/AdminConsole'
 import { Refused } from '@/auth/Refused'
 import { SignIn } from '@/auth/SignIn'
-import { Home } from '@/Home'
+import { CompanyRoutes } from '@/company/CompanyRoutes'
 import { t } from '@/i18n'
 
 function current() {
@@ -24,8 +24,9 @@ export function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  const go = useCallback((to: string) => {
-    window.history.pushState(null, '', to)
+  const go = useCallback((to: string, replace = false) => {
+    if (replace) window.history.replaceState(null, '', to)
+    else window.history.pushState(null, '', to)
     setLoc(current())
     window.scrollTo?.(0, 0)
   }, [])
@@ -61,5 +62,5 @@ export function App() {
   if (session.kind === 'loading') return <p role="status" className="p-8 text-center text-muted">{t('app.status.checking')}</p>
   if (loc.path === '/admin' || loc.path.startsWith('/admin/'))
     return <AdminConsole me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} />
-  return <Home me={session.me} go={go} onSignOut={() => void onSignOut()} />
+  return <CompanyRoutes me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} />
 }

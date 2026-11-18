@@ -79,7 +79,13 @@ export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
           <div className="note" style={{ margin: '0 0 16px' }}>
             {t('company.adminNote')}
           </div>
-          <MembersPanel base={base} members={c.members} invites={c.invites} onChange={reload} />
+          <MembersPanel
+            base={base}
+            revokePath={(id) => `/api/v1/admin/invites/${id}`}
+            members={c.members}
+            invites={c.invites}
+            onChange={reload}
+          />
         </>
       )}
       {tab === 'projects' && <ProjectsPanel projects={c.projects} />}
