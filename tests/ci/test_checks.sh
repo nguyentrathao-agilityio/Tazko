@@ -44,6 +44,9 @@ expect fail "session trailer" "$PY" "$CHECKS" commits
 new_repo toolname; printf 'Seed with help from %s\n' "$tool_word" | commit
 expect fail "tool named in message" "$PY" "$CHECKS" commits
 
+new_repo productname; printf 'Import boards from %s\n' "$product_word" | commit
+expect fail "product named in message" "$PY" "$CHECKS" commits
+
 new_repo author; printf 'Seed\n' | commit --author "Someone Else <else@example.com>"
 expect fail "author is not the owner" "$PY" "$CHECKS" commits
 
@@ -92,6 +95,20 @@ new_repo placeholders; printf 'TAZKO_SECRET=\nTAZKO_MAX_UPLOAD_MB=10\nTAZKO_GOOG
 expect pass "empty secret placeholders" "$PY" "$CHECKS" secrets
 printf 'TAZKO_SECRET=%s\n' "$(printf 'x%.0s' $(seq 32))" > env2.example; git add env2.example
 expect fail "filled TAZKO_SECRET" "$PY" "$CHECKS" secrets
+new_repo jslic
+printf '{"MIT":[{"name":"react"}],"Apache-2.0":[{"name":"cva"}],"(MIT OR CC0-1.0)":[{"name":"dual"}]}' > prod.json
+printf '{"MIT":[{"name":"react"},{"name":"vite"}],"MPL-2.0":[{"name":"lightningcss"},{"name":"lightningcss-linux-x64-gnu"}],"BlueOak-1.0.0":[{"name":"lru-cache"}]}' > all.json
+expect pass "allowed and listed build-tool licences" "$PY" "$CHECKS" js-licenses prod.json all.json
+printf '{"MIT":[{"name":"react"}],"GPL-3.0":[{"name":"copyleft"}]}' > prod2.json
+expect fail "a shipped GPL package" "$PY" "$CHECKS" js-licenses prod2.json all.json
+printf '{"MPL-2.0":[{"name":"lightningcss"}]}' > prod3.json
+expect fail "a build-tool exception that ships" "$PY" "$CHECKS" js-licenses prod3.json all.json
+printf '{"MIT":[{"name":"vite"}],"MPL-2.0":[{"name":"new-tool"}]}' > all2.json
+expect fail "an unlisted build tool" "$PY" "$CHECKS" js-licenses prod.json all2.json
+printf '{"MIT":[{"name":"vite"}],"GPL-3.0":[{"name":"lightningcss"}]}' > all3.json
+expect fail "a listed tool under another licence" "$PY" "$CHECKS" js-licenses prod.json all3.json
+printf '{"MIT AND GPL-3.0":[{"name":"mixed"}]}' > prod4.json
+expect fail "an AND with a disallowed licence" "$PY" "$CHECKS" js-licenses prod4.json all.json
 new_repo envfile; echo "X=1" > tazko.env; git add -f tazko.env
 expect fail "settings file tracked" "$PY" "$CHECKS" secrets
 

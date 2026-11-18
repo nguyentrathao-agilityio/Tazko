@@ -52,6 +52,14 @@ pub fn redirect_uri(state: &AppState) -> String {
     format!("{}/auth/google/callback", state.settings.public_url)
 }
 
+fn dot_segment(seg: &str) -> Option<usize> {
+    match seg.to_ascii_lowercase().as_str() {
+        "." | "%2e" => Some(1),
+        ".." | ".%2e" | "%2e." | "%2e%2e" => Some(2),
+        _ => None,
+    }
+}
+
 pub fn safe_next(next: Option<&str>) -> String {
     let Some(n) = next else {
         return "/".to_string();
@@ -63,26 +71,36 @@ pub fn safe_next(next: Option<&str>) -> String {
         return "/".to_string();
     }
 
-    let base = url::Url::parse("http://tazko.invalid/").expect("valid base");
-    let Ok(joined) = base.join(n) else {
-        return "/".to_string();
+    let n = n.split('#').next().unwrap_or("/");
+    let (path, query) = match n.split_once('?') {
+        Some((p, q)) => (p, Some(q)),
+        None => (n, None),
     };
-    if joined.origin() != base.origin() || joined.path().starts_with("/auth/") {
+    let segments: Vec<&str> = path.split('/').skip(1).collect();
+    let mut kept: Vec<&str> = Vec::new();
+    for seg in &segments {
+        match dot_segment(seg) {
+            Some(1) => {}
+            Some(_) => {
+                kept.pop();
+            }
+            None => kept.push(seg),
+        }
+    }
+
+    if segments.last().is_some_and(|s| dot_segment(s).is_some()) {
+        kept.push("");
+    }
+
+    let resolved = format!("/{}", kept.join("/"));
+    if resolved[1..].starts_with('/') || resolved.starts_with("/auth/") || resolved == "/auth" {
         return "/".to_string();
     }
 
-    let path = joined.path();
-    if !path.starts_with('/') || path[1..].starts_with('/') || path.contains('\\') {
-        return "/".to_string();
+    match query {
+        Some(q) => format!("{resolved}?{q}"),
+        None => resolved,
     }
-
-    let mut out = path.to_string();
-    if let Some(q) = joined.query() {
-        out.push('?');
-        out.push_str(q);
-    }
-
-    out
 }
 
 fn pkce_challenge(verifier: &str) -> String {
@@ -101,8 +119,7 @@ async fn start(State(state): State<AppState>, Query(q): Query<StartQuery>) -> Re
         verifier: random_token(),
         next: safe_next(q.next.as_deref()),
     };
-    let mut url = url::Url::parse(&state.google.endpoints.auth_url).expect("valid auth URL");
-    url.query_pairs_mut()
+    let query = form_urlencoded::Serializer::new(String::new())
         .append_pair("client_id", &state.settings.google_client_id)
         .append_pair("redirect_uri", &redirect_uri(&state))
         .append_pair("response_type", "code")
@@ -111,14 +128,18 @@ async fn start(State(state): State<AppState>, Query(q): Query<StartQuery>) -> Re
         .append_pair("nonce", &pending.nonce)
         .append_pair("code_challenge", &pkce_challenge(&pending.verifier))
         .append_pair("code_challenge_method", "S256")
-        .append_pair("prompt", "select_account");
+        .append_pair("prompt", "select_account")
+        .finish();
+    let auth_url = &state.google.endpoints.auth_url;
+    let sep = if auth_url.contains('?') { '&' } else { '?' };
+    let url = format!("{auth_url}{sep}{query}");
     let sealed = cookies::seal(state.secret.expose(), "oauth", OAUTH_TTL, &pending);
     (
         [(
             header::SET_COOKIE,
             cookies::set(OAUTH_COOKIE, &sealed, OAUTH_PATH, OAUTH_TTL),
         )],
-        Redirect::to(url.as_str()),
+        Redirect::to(&url),
     )
         .into_response()
 }

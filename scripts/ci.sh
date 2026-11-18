@@ -20,8 +20,15 @@ step "tests for dev-env";    run bash tests/ci/test_dev_env.sh
 
 if [ -f web/package.json ]; then
   step "web"
-  (cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build) || failed=1
+  (cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build) || failed=1
   run "$PY" scripts/checks.py js-budget web/dist
+  lic=$(mktemp -d)
+  if (cd web && pnpm licenses list --prod --json >"$lic/prod.json" && pnpm licenses list --json >"$lic/all.json"); then
+    run "$PY" scripts/checks.py js-licenses "$lic/prod.json" "$lic/all.json"
+  else
+    failed=1
+  fi
+  rm -rf "$lic"
 else
   printf '== web: skip, no web/package.json yet\n'
 fi
@@ -32,7 +39,7 @@ if [ -f Cargo.toml ]; then
   run cargo fmt --check
   run cargo clippy --all-targets -- -D warnings
   run cargo test
-  # Licence check (MIT, Apache-2.0, BSD, ISC only) is added with the Cargo project in M1.
+  run cargo deny --log-level error check licenses bans sources
 else
   printf '\n== rust: skip, no Cargo.toml yet\n'
 fi
