@@ -17,3 +17,22 @@ One entry per step: what was built, how its checks were verified, and anything l
 | 1.9 | 18 Nov 2026 | CI: web type check step, web licence check, `cargo deny` (licences, bans, sources) with `deny.toml`; `url` crate removed (PR #12). | `ci.sh` passes on a fresh clone of the branch with no tracked changes afterwards; 29 check tests including licence and product-name cases. | Licence exceptions (open question 4). |
 | 1.10 | 18 Nov 2026 | `tazko backup`, `backup restore`, `backup verify`, `tazko check`; `deploy/` setup script, service and timers, sudoers, release script with rollback, bundle script; backup results on the Server page (PR #13). | Restoring a backup into a fresh folder passes `tazko check` (Rust and command-line tests); a broken release rolls itself back (release script test with a fake health check). | On the VM: the rollback and restore checks run for real in 1.11. |
 
+| 1.13 | 18 Nov 2026 | M1 acceptance on localhost (below). The owner accepted M1 on the local target with the VM and tunnel checks deferred; the `v0.1` tag waits for full acceptance. | `scripts/ci.sh` on `dev` at `67bde53`: `ci: ok`. Live Google sign-in on `http://localhost:8791` with the "Tazko local" client. | Step 1.11 (test VM), tunnel, `tazko dev seed`. |
+
+## M1 acceptance on localhost
+
+Checked on 18 Nov 2026 against the M1 "Done when" list in `plan.md`, on `dev` at `67bde53`, release build, `127.0.0.1:8791`.
+
+| Done when | Result | Evidence |
+| --- | --- | --- |
+| The site loads through the tunnel with no new port open, and the other service still works | Deferred | No public hostname or tunnel in this environment; the shared machine is not touched. Needs step 1.11 and the deployment. |
+| `tazko admin --email` then Google sign-in reaches `/admin` | Pass | `tazko admin --email` made the first super admin (audit row `super_admin_granted`); the owner then signed in with Google on localhost and a session was created for that super admin. Tests: `the_command_line_makes_the_first_super_admin`, `an_admin_added_from_the_command_line_signs_in_by_email`. |
+| A Workspace account and a personal Gmail account can both be invited and both sign in | Pass (tests); live Gmail sign-in not tried | `invited_workspace_and_personal_accounts_both_sign_in` with fake Google endpoints. Live: the Workspace account signed in. |
+| An account with no person and no invite is refused and the refusal is in the audit log | Pass | `an_uninvited_account_is_refused_and_audit_logged`. Live: a personal Gmail account with no invite was refused and audit row `sign_in_refused` was written. |
+| A company can be created, suspended, resumed and deleted (folder lands in `trash/`) | Pass | `creating_a_company_makes_its_folder_and_invites_the_first_owner`, `every_admin_action_writes_an_audit_row` (suspend, resume), `deleting_a_company_needs_its_short_name_and_moves_it_to_trash`, `trash_is_emptied_after_thirty_days`. |
+| A person in two companies sees only the chosen company's data | Pass | `a_person_in_two_companies_only_sees_the_chosen_ones_data`, `a_member_of_company_a_gets_not_found_for_every_company_b_address`. |
+| Deploying a broken build rolls back by itself | Logic pass; on a machine deferred | `tests/ci/test_deploy.sh` runs `release.sh` with a failing health check and the previous release comes back. systemd and sudo run for real only in step 1.11. |
+| The weekly restore test restores the newest backup, passes `tazko check`, and shows on the Server page | Logic pass; timer deferred | `a_backup_restored_into_a_fresh_folder_passes_the_check`, `the_restore_test_is_recorded_and_shown_on_the_server_page`, `the_command_line_backs_up_checks_restores_and_verifies`. The timer runs for real only in step 1.11. |
+| The local target runs end to end with `tazko dev seed` | Not built | The local target runs end to end (serve, admin, Google sign-in). `tazko dev seed` does not exist yet, although `docs/dev.md` describes it; the prototype's sample data needs the M2 boards, lists and cards, so it is built with M2. |
+
+Deferred to later: step 1.11 on a test VM (setup, release and rollback, timers), the tunnel and the shared machine, and `tazko dev seed` (with M2).
