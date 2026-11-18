@@ -1,0 +1,53 @@
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-c0-bg: var(--c0-bg);
+  --color-c0-fg: var(--c0-fg);
+  --color-c1-bg: var(--c1-bg);
+  --color-c1-fg: var(--c1-fg);
+  --color-c2-bg: var(--c2-bg);
+  --color-c2-fg: var(--c2-fg);
+  --color-c3-bg: var(--c3-bg);
+  --color-c3-fg: var(--c3-fg);
+  --color-c4-bg: var(--c4-bg);
+  --color-c4-fg: var(--c4-fg);
+  --color-list: var(--lst);
+  --color-highlight: var(--hl);
+
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-card: var(--radius-card);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-pill: var(--radius-pill);
+
+  --shadow-raised: var(--shadow);
+  --shadow-list: var(--lst-sh);
+
+  --spacing-control: var(--control-h);
+  --spacing-control-sm: var(--control-h-sm);
+  --spacing-input: var(--input-h);
+  --spacing-rail: var(--rail-w);
+  --spacing-list: var(--list-w);
+  --spacing-gutter: var(--gutter);
+  --container-page: var(--page-max);
+}

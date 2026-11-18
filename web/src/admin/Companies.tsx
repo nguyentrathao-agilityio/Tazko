@@ -6,6 +6,9 @@ import { Icon } from '@/ui/Icon'
 import type { Go } from '@/ui/Link'
 import { Modal } from '@/ui/Modal'
 import { Avatar } from '@/ui/people'
+import { EmptyState } from '@/ui/EmptyState'
+import { PageHead } from '@/ui/PageHead'
+import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { CompanyRow } from '@/admin/types'
 
@@ -34,25 +37,19 @@ export function Storage({ used, limit }: { used: number; limit: number | null })
 export function Companies({ go }: { go: Go }) {
   const { data, error, reload } = useLoad(() => api<{ companies: CompanyRow[] }>('GET', '/api/v1/admin/companies'), 'companies')
   const [creating, setCreating] = useState(false)
+  const toast = useToast()
 
   return (
     <>
-      <div className="head">
-        <div>
-          <h1>{t('rail.companies')}</h1>
-          <p className="muted">{t('companies.lead')}</p>
-        </div>
-        <span className="sp" />
+      <PageHead title={t('rail.companies')} lead={t('companies.lead')}>
         <button type="button" className="btn primary" onClick={() => setCreating(true)}>
           <Icon name="plus" />
           {t('companies.new')}
         </button>
-      </div>
+      </PageHead>
       {error && <p className="error" role="alert">{error}</p>}
       {data && data.companies.length === 0 ? (
-        <div className="empty">
-          <h2>{t('companies.empty')}</h2>
-        </div>
+        <EmptyState title={t('companies.empty')} />
       ) : (
         <div className="tw">
           <table>
@@ -104,8 +101,9 @@ export function Companies({ go }: { go: Go }) {
       {creating && (
         <NewCompany
           onClose={() => setCreating(false)}
-          onCreated={(slug) => {
+          onCreated={(slug, name) => {
             setCreating(false)
+            toast(t('toast.companyCreated', { company: name }))
             reload()
             go(`/admin/companies/${slug}`)
           }}
@@ -115,7 +113,7 @@ export function Companies({ go }: { go: Go }) {
   )
 }
 
-function NewCompany({ onClose, onCreated }: { onClose: () => void; onCreated: (slug: string) => void }) {
+function NewCompany({ onClose, onCreated }: { onClose: () => void; onCreated: (slug: string, name: string) => void }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -124,13 +122,13 @@ function NewCompany({ onClose, onCreated }: { onClose: () => void; onCreated: (s
     const f = new FormData(e.currentTarget)
     setBusy(true)
     try {
-      const res = await api<{ slug: string }>('POST', '/api/v1/admin/companies', {
+      const res = await api<{ slug: string; name: string }>('POST', '/api/v1/admin/companies', {
         name: String(f.get('name') ?? ''),
         slug: String(f.get('slug') ?? '') || undefined,
         owner_email: String(f.get('owner') ?? ''),
         storage_gb: Number(f.get('limit') ?? 2),
       })
-      onCreated(res.slug)
+      onCreated(res.slug, res.name)
     } catch (err) {
       setError(err instanceof HttpError ? err.message : String(err))
       setBusy(false)

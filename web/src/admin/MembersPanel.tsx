@@ -4,6 +4,7 @@ import { t } from '@/i18n'
 import { when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
 import { AccountPill, Person } from '@/ui/people'
+import { useToast } from '@/ui/toast'
 import { displayName } from '@/ui/names'
 import type { Invite, Member } from '@/admin/types'
 
@@ -21,24 +22,48 @@ export function MembersPanel({
   onChange: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   const run = async (fn: () => Promise<unknown>) => {
     setError(null)
     try {
       await fn()
       onChange()
+      return true
     } catch (e) {
       setError(e instanceof HttpError ? e.message : String(e))
+      return false
     }
+  }
+
+  const reinvite = (email: string, role: string) => run(() => api('POST', `${base}/invites`, { email, role }))
+
+  const setRole = async (m: Member, role: string) => {
+    const name = displayName(m.name, m.email)
+    if (!(await run(() => api('PATCH', `${base}/members/${m.id}`, { role })))) return
+    toast(t('toast.roleChanged', { name, role: t(role === 'owner' ? 'role.owner' : 'role.member').toLowerCase() }), () =>
+      run(() => api('PATCH', `${base}/members/${m.id}`, { role: m.role })),
+    )
+  }
+
+  const remove = async (m: Member) => {
+    if (await run(() => api('DELETE', `${base}/members/${m.id}`))) toast(t('toast.removed', { name: displayName(m.name, m.email) }))
+  }
+
+  const revoke = async (v: Invite) => {
+    if (!(await run(() => api('DELETE', revokePath(v.id))))) return
+    toast(t('toast.revoked', { email: v.email }), () => reinvite(v.email, v.role))
   }
 
   const onInvite = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = e.currentTarget
     const f = new FormData(form)
+    const email = String(f.get('email') ?? '').trim()
     void run(async () => {
-      await api('POST', `${base}/invites`, { email: String(f.get('email') ?? ''), role: String(f.get('role') ?? 'member') })
+      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? 'member') })
       form.reset()
+      toast(t(res?.result === 'added' ? 'toast.added' : 'toast.invited', { email: email.toLowerCase() }))
     })
   }
 
@@ -103,7 +128,7 @@ export function MembersPanel({
                     <select
                       aria-label={`${t('members.col.role')}: ${displayName(m.name, m.email)}`}
                       value={m.role}
-                      onChange={(e) => void run(() => api('PATCH', `${base}/members/${m.id}`, { role: e.target.value }))}
+                      onChange={(e) => void setRole(m, e.target.value)}
                     >
                       <option value="member">{t('role.member')}</option>
                       <option value="owner">{t('role.owner')}</option>
@@ -115,7 +140,7 @@ export function MembersPanel({
                       type="button"
                       className="btn sm quiet"
                       aria-label={t('members.removeLabel', { name: displayName(m.name, m.email) })}
-                      onClick={() => void run(() => api('DELETE', `${base}/members/${m.id}`))}
+                      onClick={() => void remove(m)}
                     >
                       <Icon name="x" />
                       {t('common.remove')}
@@ -134,7 +159,10 @@ export function MembersPanel({
         {invites.length === 0 ? (
           <p className="muted">{t('invites.none')}</p>
         ) : (
-          <InviteTable invites={invites} withCompany={false} onRevoke={(id) => void run(() => api('DELETE', revokePath(id)))} />
+          <InviteTable invites={invites} withCompany={false} onRevoke={(id) => {
+              const v = invites.find((i) => i.id === id)
+              if (v) void revoke(v)
+            }} />
         )}
       </section>
     </>

@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import type { Me } from '@/api'
 import { t } from '@/i18n'
+import { EmptyState } from '@/ui/EmptyState'
 import { Link, type Go } from '@/ui/Link'
 import { CompanyHome } from '@/company/CompanyHome'
 import { CompanySettings } from '@/company/CompanySettings'
@@ -10,14 +11,10 @@ import { ManageProjects } from '@/company/ManageProjects'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
-    <main className="page" style={{ margin: '0 auto' }}>
-      <div className="empty">
-        <h2>{title}</h2>
-        <p className="muted" style={{ margin: '6px auto 0', maxWidth: '48ch' }}>
-          {body}
-        </p>
-        {children && <div style={{ marginTop: 16 }}>{children}</div>}
-      </div>
+    <main className="page mx-auto">
+      <EmptyState title={title} body={body}>
+        {children}
+      </EmptyState>
     </main>
   )
 }
@@ -41,16 +38,14 @@ export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: strin
   if (!match && !fallback) {
     return (
       <Centered title={t('noCompany.title')} body={t('noCompany.body')}>
-        <div className="row" style={{ justifyContent: 'center' }}>
-          {me.is_super_admin && (
-            <Link to="/admin/companies" go={go} className="btn primary">
-              {t('switcher.adminConsole')}
-            </Link>
-          )}
-          <button type="button" className="btn" onClick={onSignOut}>
-            {t('home.signOut')}
-          </button>
-        </div>
+        {me.is_super_admin && (
+          <Link to="/admin/companies" go={go} className="btn primary">
+            {t('switcher.adminConsole')}
+          </Link>
+        )}
+        <button type="button" className="btn" onClick={onSignOut}>
+          {t('home.signOut')}
+        </button>
       </Centered>
     )
   }

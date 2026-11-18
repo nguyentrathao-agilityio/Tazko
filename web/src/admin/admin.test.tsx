@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
+import { Toaster } from '@/ui/Toaster'
 
 type Call = { url: string; method: string; body?: unknown; csrf?: string }
 
@@ -94,7 +95,11 @@ afterEach(() => {
 
 function open(path: string) {
   window.history.pushState(null, '', path)
-  render(<App />)
+  render(
+    <Toaster>
+      <App />
+    </Toaster>,
+  )
 }
 
 describe('admin console', () => {
@@ -151,6 +156,26 @@ describe('admin console', () => {
     expect(await screen.findByText('jo.lee@gmail.com')).toBeTruthy()
     expect(screen.getByText('refused')).toBeTruthy()
     expect(screen.getAllByText('Root Admin').length).toBeGreaterThan(0)
+  })
+
+  it('confirms a role change and undoes it', async () => {
+    open('/admin/companies/acme')
+    fireEvent.change(await screen.findByLabelText('Role: Mai Tran'), { target: { value: 'member' } })
+    expect(await screen.findByText('Mai Tran is now member')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(2))
+    const [change, undo] = calls.filter((c) => c.method === 'PATCH')
+    expect(change.body).toEqual({ role: 'member' })
+    expect(undo.body).toEqual({ role: 'owner' })
+  })
+
+  it('re-invites when a revoke is undone', async () => {
+    open('/admin/companies/acme')
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+    expect(await screen.findByText('Invite for jo.lee@gmail.com revoked')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/invites'))).toBe(true))
+    expect(calls.find((c) => c.method === 'POST')!.body).toEqual({ email: 'jo.lee@gmail.com', role: 'member' })
   })
 
   it('keeps people who are not super admins out', async () => {

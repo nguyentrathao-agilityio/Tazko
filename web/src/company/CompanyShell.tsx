@@ -5,9 +5,11 @@ import { Icon } from '@/ui/Icon'
 import { Link, type Go } from '@/ui/Link'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
+import { useToast } from '@/ui/toast'
 
 function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
   const [open, setOpen] = useState(false)
+  const toast = useToast()
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,9 +29,10 @@ function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
     }
   }, [open])
 
-  const pick = (to: string) => {
+  const pick = (to: string, name?: string) => {
     setOpen(false)
     go(to)
+    if (name) toast(t('toast.switched', { company: name }))
   }
 
   return (
@@ -45,7 +48,7 @@ function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
       {open && (
         <div className="menu" role="menu">
           {me.companies.map((c) => (
-            <button key={c.slug} type="button" role="menuitem" className="item" onClick={() => pick(`/c/${c.slug}`)}>
+            <button key={c.slug} type="button" role="menuitem" className="item" onClick={() => pick(`/c/${c.slug}`, c.slug === company.slug ? undefined : c.name)}>
               <Avatar name={c.name} square />
               {c.name}
               {c.slug === company.slug && (
