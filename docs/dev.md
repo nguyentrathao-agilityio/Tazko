@@ -23,6 +23,25 @@ scripts/dev-env.sh versions
 
 `scripts/ci.sh` runs the same check and its tests on every run.
 
+## Checks
+
+`scripts/ci.sh` must pass before every commit. It runs:
+
+- repository checks: required files, no other product named, no secrets or settings files tracked, commit authorship and messages, the 200 KB JavaScript budget, and the tests for these checks;
+- the local tool check and its tests;
+- web: `pnpm install --frozen-lockfile`, lint, type check, unit tests, build, the JavaScript budget on the build, and dependency licences;
+- Rust: `cargo fmt --check`, `cargo clippy` with warnings as errors, `cargo test`, and `cargo deny check licenses bans sources`.
+
+Allowed licences are MIT, Apache-2.0, BSD and ISC. Exceptions are named one by one: in `deny.toml` for Rust crates, and in `BUILD_TOOL_EXCEPTIONS` in `scripts/checks.py` for web build tools that never ship.
+
+The commits check compares every commit with the owner's git identity. In a fresh clone, set it first, or pass it for one run:
+
+```bash
+git config user.name "Owner Name"
+git config user.email owner@example.com
+TAZKO_OWNER_NAME="Owner Name" TAZKO_OWNER_EMAIL=owner@example.com scripts/ci.sh
+```
+
 ## Settings
 
 Settings live in `.env.local` at the repository root. It is git-ignored and must stay that way (`git check-ignore .env.local` prints the file name).

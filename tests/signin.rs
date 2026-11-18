@@ -134,6 +134,11 @@ fn sign(claims: &Value, kid: &str, key: &Key) -> String {
     jsonwebtoken::encode(&header, claims, &EncodingKey::from_rsa_der(&key.der)).unwrap()
 }
 
+fn query_of(url: &str) -> HashMap<String, String> {
+    let q = url.split_once('?').map(|(_, q)| q).unwrap_or("");
+    form_urlencoded::parse(q.as_bytes()).into_owned().collect()
+}
+
 struct Started {
     oauth_cookie: String,
     query: HashMap<String, String>,
@@ -145,17 +150,14 @@ async fn start(h: &Harness, next: &str) -> Started {
         .get(&format!("/auth/google/start?next={next}"), None)
         .await;
     assert!(res.status().is_redirection());
-    let url = url::Url::parse(&location(&res)).unwrap();
+    let loc = location(&res);
     let cookie = set_cookies(&res)
         .into_iter()
         .find(|c| c.starts_with("tazko_oauth="))
         .unwrap();
     Started {
         oauth_cookie: cookie_pair(&cookie),
-        query: url
-            .query_pairs()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect(),
+        query: query_of(&loc),
     }
 }
 
@@ -224,9 +226,9 @@ async fn refusals(h: &Harness) -> Vec<(String, String)> {
 async fn start_sends_the_browser_to_google_with_state_nonce_and_pkce() {
     let h = harness().await;
     let res = h.app.get("/auth/google/start?next=/c/acme", None).await;
-    let url = url::Url::parse(&location(&res)).unwrap();
-    assert_eq!(url.host_str(), Some("accounts.example"));
-    let q: HashMap<_, _> = url.query_pairs().into_owned().collect();
+    let loc = location(&res);
+    assert!(loc.starts_with("https://accounts.example/o/auth?"), "{loc}");
+    let q = query_of(&loc);
     assert_eq!(q["client_id"], CLIENT_ID);
     assert_eq!(
         q["redirect_uri"],
@@ -609,12 +611,20 @@ fn only_local_paths_are_followed_after_sign_in() {
         "/x/..//evil.example",
         "/%2e//evil.example",
         "/%2E%2E//evil.example",
+        "/x/%2e%2e//evil.example",
+        "/x/..",
+        "/x/../auth",
         "relative",
         "",
     ] {
         assert_eq!(safe_next(Some(bad)), "/", "{bad:?}");
     }
     assert_eq!(safe_next(None), "/");
+    assert_eq!(
+        safe_next(Some("/c/acme/./boards/../settings")),
+        "/c/acme/settings"
+    );
+    assert_eq!(safe_next(Some("/c/acme/#top")), "/c/acme/");
 }
 
 #[test]

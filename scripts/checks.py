@@ -6,6 +6,8 @@ Usage: checks.py <check> [args]
   names               no other product is named in a tracked file
   secrets             no secret or settings file is tracked
   js-budget [dir]     shipped JavaScript is under the budget (default web/dist)
+  js-licenses <prod.json> <all.json>
+                      web dependencies use allowed licences (pnpm licenses list --json)
   commits             every commit is by the owner and carries no attribution lines
   commit-msg <file>   one commit message carries no attribution lines
 
@@ -21,6 +23,7 @@ import sys
 
 REQUIRED = [
     "CLAUDE.md",
+    "deny.toml",
     "plan.md",
     ".gitignore",
     ".claude/settings.json",
@@ -141,6 +144,57 @@ def check_js_budget(root="web/dist"):
     return fail([f"shipped JavaScript is {total} bytes gzip, over {JS_BUDGET_BYTES}"] if total > JS_BUDGET_BYTES else [])
 
 
+ALLOWED_LICENSES = {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC"}
+BUILD_TOOL_EXCEPTIONS = {
+    "lightningcss": "MPL-2.0",
+    "lru-cache": "BlueOak-1.0.0",
+    "graceful-fs": "BlueOak-1.0.0",
+}
+
+
+def licence_ok(expr, allowed):
+    expr = expr.strip()
+    while expr.startswith("(") and expr.endswith(")"):
+        expr = expr[1:-1].strip()
+    if " OR " in expr:
+        return any(licence_ok(part, allowed) for part in expr.split(" OR "))
+    if " AND " in expr:
+        return all(licence_ok(part, allowed) for part in expr.split(" AND "))
+    return expr in allowed
+
+
+def build_tool_exception(name):
+    for base, licence in BUILD_TOOL_EXCEPTIONS.items():
+        if name == base or name.startswith(base + "-"):
+            return licence
+    return None
+
+
+def load_licences(path):
+    import json
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return [(pkg["name"], licence) for licence, pkgs in data.items() for pkg in pkgs]
+
+
+def check_js_licenses(prod_path, all_path):
+    bad = []
+    prod = load_licences(prod_path)
+    for name, licence in prod:
+        if not licence_ok(licence, ALLOWED_LICENSES):
+            bad.append(f"{name} ships in the web app under {licence}")
+    shipped = {n for n, _ in prod}
+    for name, licence in load_licences(all_path):
+        if name in shipped or licence_ok(licence, ALLOWED_LICENSES):
+            continue
+        if build_tool_exception(name) == licence:
+            continue
+        bad.append(f"{name} ({licence}) is not an allowed licence or a listed build-tool exception")
+    print(f"  js-licenses: {len(prod)} shipped packages checked")
+    return fail(bad)
+
+
 GITHUB_MERGE_COMMITTER = ("GitHub", "noreply@github.com")
 
 
@@ -191,6 +245,7 @@ def main(argv):
         "names": check_names,
         "secrets": check_secrets,
         "js-budget": check_js_budget,
+        "js-licenses": check_js_licenses,
         "commits": check_commits,
         "commit-msg": check_commit_msg,
     }
