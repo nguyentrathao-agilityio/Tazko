@@ -50,7 +50,8 @@ beforeEach(() => {
       if (url === '/api/v1/me') return json(me)
       if (method !== 'GET') return json({ result: 'invited' }, 201)
       if (url === '/api/v1/c/acme/settings') return json(settings)
-      if (url === '/api/v1/c/acme/projects') return json({ projects: [] })
+      if (url === '/api/v1/c/acme/projects') return json({ projects: [], people: [] })
+      if (url.endsWith('/my-projects')) return json({ projects: [] })
       return json({ error: 'not found' }, 404)
     }),
   )
@@ -82,23 +83,23 @@ describe('App', () => {
 
   it('opens the first company on the company home', async () => {
     open('/')
-    expect(await screen.findByText('Acme Studio · you see the projects you were invited to')).toBeTruthy()
+    expect(await screen.findByText('Acme Studio · you see the projects you belong to')).toBeTruthy()
     expect(window.location.pathname).toBe('/c/acme')
-    expect(screen.getByRole('heading', { name: 'No projects yet' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'You are not in a project yet' })).toBeTruthy()
   })
 
   it('switches company from the switcher and remembers the choice', async () => {
     open('/c/acme')
     fireEvent.click(await screen.findByRole('button', { name: 'Switch company' }))
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Northwind Labs/ }))
-    expect(await screen.findByText('Northwind Labs · you see the projects you were invited to')).toBeTruthy()
+    expect(await screen.findByText('Northwind Labs · you see the projects you belong to')).toBeTruthy()
     expect(screen.getByRole('status').textContent).toContain('Switched to Northwind Labs')
     expect(window.location.pathname).toBe('/c/north')
     expect(screen.queryByRole('link', { name: 'Company settings' })).toBeNull()
     cleanup()
 
     open('/')
-    expect(await screen.findByText('Northwind Labs · you see the projects you were invited to')).toBeTruthy()
+    expect(await screen.findByText('Northwind Labs · you see the projects you belong to')).toBeTruthy()
   })
 
   it('shows owners their settings and keeps members out', async () => {
@@ -121,7 +122,7 @@ describe('App', () => {
   it('shows the manage projects page to owners', async () => {
     open('/c/acme/projects')
     expect(await screen.findByText(/No projects yet. Create the first one./)).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'New project' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'New project' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('says when a company is not available', async () => {

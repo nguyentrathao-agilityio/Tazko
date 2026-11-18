@@ -10,6 +10,7 @@ pub enum ApiError {
     NotFound,
     Forbidden,
     BadRequest(String),
+    Conflict(String),
     Internal(String),
 }
 
@@ -20,6 +21,7 @@ impl IntoResponse for ApiError {
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not allowed".to_string()),
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
+            ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::Internal(m) => {
                 eprintln!("tazko: internal error: {m}");
                 (
@@ -42,4 +44,12 @@ impl From<rusqlite::Error> for ApiError {
     fn from(e: rusqlite::Error) -> Self {
         ApiError::Internal(e.to_string())
     }
+}
+
+pub fn bad(message: &str) -> ApiError {
+    ApiError::BadRequest(message.to_string())
+}
+
+pub fn conflict(message: &str) -> ApiError {
+    ApiError::Conflict(message.to_string())
 }

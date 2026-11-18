@@ -152,3 +152,40 @@ pub async fn body_text(res: Response) -> String {
 pub async fn body_json(res: Response) -> serde_json::Value {
     serde_json::from_str(&body_text(res).await).unwrap()
 }
+
+pub struct Who {
+    pub id: i64,
+    pub cookie: String,
+    pub csrf: String,
+}
+
+pub async fn person(app: &TestApp, email: &str) -> Who {
+    let id = app.user(email).await;
+    let cookie = app.sign_in(id).await;
+    let csrf = body_json(app.get("/api/v1/me", Some(&cookie)).await).await["csrf_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    Who { id, cookie, csrf }
+}
+
+pub async fn call(
+    app: &TestApp,
+    who: &Who,
+    method: axum::http::Method,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> Response {
+    let r = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::COOKIE, &who.cookie)
+        .header(tazko::auth::CSRF_HEADER, &who.csrf);
+    let req = match body {
+        Some(b) => r
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(b.to_string())),
+        None => r.body(Body::empty()),
+    };
+    app.send(req.unwrap()).await
+}

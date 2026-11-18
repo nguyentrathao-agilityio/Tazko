@@ -3,11 +3,12 @@ import type { Me } from '@/api'
 import { t } from '@/i18n'
 import { EmptyState } from '@/ui/EmptyState'
 import { Link, type Go } from '@/ui/Link'
-import { CompanyHome } from '@/company/CompanyHome'
 import { CompanySettings } from '@/company/CompanySettings'
 import { CompanyShell } from '@/company/CompanyShell'
 import { lastCompany, rememberCompany } from '@/company/lastCompany'
 import { ManageProjects } from '@/company/ManageProjects'
+import { ProjectPage } from '@/projects/ProjectPage'
+import { YourProjects } from '@/projects/YourProjects'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
@@ -20,7 +21,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: string; go: Go; onSignOut: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const company = me.companies.find((c) => c.slug === slug)
   const fallback = me.companies.find((c) => c.slug === lastCompany()) ?? me.companies[0]
@@ -62,10 +63,13 @@ export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: strin
     )
   }
 
-  const section = match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'
+  const projectId = match[3] ? Number(match[3]) : null
+  const section = projectId ? 'home' : match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'
+  const tab = match[4] === '/members' ? 'members' : match[4] === '/settings' ? 'settings' : 'boards'
   return (
     <CompanyShell me={me} company={company} active={section} go={go} onSignOut={onSignOut}>
-      {section === 'home' && <CompanyHome key={company.slug} company={company} go={go} />}
+      {projectId && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
+      {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
       {section === 'settings' && <CompanySettings key={company.slug} company={company} />}
       {section === 'projects' && <ManageProjects key={company.slug} company={company} />}
     </CompanyShell>

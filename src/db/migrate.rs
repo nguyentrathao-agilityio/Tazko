@@ -24,20 +24,34 @@ impl Migrations {
 
 pub static CONTROL: Migrations = Migrations {
     folder: "migrations/control",
-    list: &[Migration {
-        version: 1,
-        name: "0001_initial.sql",
-        sql: include_str!("../../migrations/control/0001_initial.sql"),
-    }],
+    list: &[
+        Migration {
+            version: 1,
+            name: "0001_initial.sql",
+            sql: include_str!("../../migrations/control/0001_initial.sql"),
+        },
+        Migration {
+            version: 2,
+            name: "0002_project_invites.sql",
+            sql: include_str!("../../migrations/control/0002_project_invites.sql"),
+        },
+    ],
 };
 
 pub static TENANT: Migrations = Migrations {
     folder: "migrations/tenant",
-    list: &[Migration {
-        version: 1,
-        name: "0001_initial.sql",
-        sql: include_str!("../../migrations/tenant/0001_initial.sql"),
-    }],
+    list: &[
+        Migration {
+            version: 1,
+            name: "0001_initial.sql",
+            sql: include_str!("../../migrations/tenant/0001_initial.sql"),
+        },
+        Migration {
+            version: 2,
+            name: "0002_projects.sql",
+            sql: include_str!("../../migrations/tenant/0002_projects.sql"),
+        },
+    ],
 };
 
 pub fn open_connection(path: &Path) -> DbResult<Connection> {

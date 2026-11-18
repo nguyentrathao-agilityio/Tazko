@@ -11,6 +11,7 @@ const filters: [string, MessageKey][] = [
   ['all', 'audit.all'],
   ['refused', 'audit.refused'],
   ['company', 'audit.company'],
+  ['projects', 'audit.projects'],
   ['invites', 'audit.invites'],
   ['people', 'audit.people'],
 ]

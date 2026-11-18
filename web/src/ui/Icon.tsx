@@ -1,3 +1,4 @@
+import { extraIcons } from '@/ui/iconPaths'
 const paths = {
   back: <path d="M15 6l-6 6 6 6" />,
   building: <path d="M4 21V5l8-3 8 3v16M9 9h2M13 9h2M9 13h2M13 13h2M10 21v-4h4v4" />,
@@ -43,21 +44,19 @@ const paths = {
   ),
 }
 
-export type IconName = keyof typeof paths
+export type IconName = keyof typeof paths | keyof typeof extraIcons
 
 export function Icon({ name }: { name: IconName }) {
-  return (
-    <svg
-      className="ic"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {paths[name]}
-    </svg>
-  )
+  const props = {
+    className: 'ic',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: '1.7',
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  }
+  if (name in paths) return <svg {...props}>{paths[name as keyof typeof paths]}</svg>
+  return <svg {...props} dangerouslySetInnerHTML={{ __html: extraIcons[name as keyof typeof extraIcons] }} />
 }

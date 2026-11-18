@@ -54,7 +54,6 @@ impl CompanyOwner {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route(&format!("{COMPANY_PREFIX}/settings"), get(settings))
-        .route(&format!("{COMPANY_PREFIX}/projects"), get(projects))
         .route(&format!("{COMPANY_PREFIX}/invites"), post(invite))
         .route(&format!("{COMPANY_PREFIX}/invites/{{id}}"), delete(revoke))
         .route(
@@ -112,29 +111,6 @@ async fn settings(
         "storage_used": dir_size(&state.dbs.layout().orgs.join(&co.slug)),
         "storage_limit": limit,
     })))
-}
-
-async fn projects(CompanyOwner(co): CompanyOwner) -> Result<Json<Value>, ApiError> {
-    let list = co
-        .db
-        .read(|c| {
-            let exists: bool = c.query_row(
-                "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'projects')",
-                [],
-                |r| r.get(0),
-            )?;
-            if !exists {
-                return Ok(Vec::new());
-            }
-
-            let mut stmt = c.prepare("SELECT name FROM projects WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE")?;
-            let rows = stmt
-                .query_map([], |r| Ok(json!({ "name": r.get::<_, String>(0)? })))?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .await?;
-    Ok(Json(json!({ "projects": list })))
 }
 
 #[derive(Deserialize)]
@@ -310,5 +286,9 @@ async fn remove_member(
             Ok(Change::Done)
         })
         .await?;
+    if matches!(change, Change::Done) {
+        crate::projects::forget_member(&state, &owner.0.slug, org_id, user_id).await?;
+    }
+
     finish(change)
 }

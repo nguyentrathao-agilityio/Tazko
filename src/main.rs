@@ -131,6 +131,30 @@ async fn purge_trash_daily(state: AppState) {
             Ok(_) => {}
             Err(e) => eprintln!("tazko: trash clean-up failed: {e}"),
         }
+        purge_projects(&state, now).await;
+    }
+}
+
+async fn purge_projects(state: &AppState, now: i64) {
+    let slugs = state
+        .dbs
+        .control()
+        .read(|c| {
+            let mut stmt = c.prepare("SELECT slug FROM orgs WHERE status = 'active'")?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .await
+        .unwrap_or_default();
+    for slug in slugs {
+        let Ok(db) = state.dbs.tenant(&slug) else {
+            continue;
+        };
+        if let Err(e) = tazko::projects::purge(&db, now).await {
+            eprintln!("tazko: project clean-up failed for {slug}: {e:?}");
+        }
     }
 }
 

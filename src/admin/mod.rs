@@ -173,26 +173,33 @@ async fn tenant_summary(db: &Database) -> Result<TenantSummary, ApiError> {
             let mut projects = Vec::new();
             if table_exists(c, "projects")? && table_exists(c, "project_members")? {
                 let mut stmt = c.prepare(
-                    "SELECT p.name,
+                    "SELECT p.id, p.name,
                             (SELECT count(*) FROM project_members m WHERE m.project_id = p.id),
-                            (SELECT count(*) FROM boards b WHERE b.project_id = p.id),
-                            (SELECT group_concat(coalesce(nullif(pe.name, ''), 'Unnamed'), ', ')
+                            (SELECT group_concat(coalesce(nullif(pe.name, ''), nullif(pe.email, ''), 'Unnamed'), ', ')
                                FROM project_members m JOIN people pe ON pe.id = m.user_id
                               WHERE m.project_id = p.id AND m.role = 'owner')
                      FROM projects p WHERE p.deleted_at IS NULL ORDER BY p.name COLLATE NOCASE",
                 )?;
-                projects = stmt
+                let rows = stmt
                     .query_map([], |r| {
-                        Ok(json!({
-                            "name": r.get::<_, String>(0)?,
-                            "members": r.get::<_, i64>(1)?,
-                            "boards": r.get::<_, i64>(2)?,
-                            "owners": r.get::<_, Option<String>>(3)?
-                                .map(|s| s.split(", ").map(str::to_string).collect::<Vec<_>>())
-                                .unwrap_or_default(),
-                        }))
+                        Ok((
+                            r.get::<_, i64>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, i64>(2)?,
+                            r.get::<_, Option<String>>(3)?,
+                        ))
                     })?
-                    .collect::<Result<_, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
+                for (id, name, members, owners) in rows {
+                    projects.push(json!({
+                        "name": name,
+                        "members": members,
+                        "boards": crate::projects::board_count(c, id)?,
+                        "owners": owners
+                            .map(|s| s.split(", ").map(str::to_string).collect::<Vec<_>>())
+                            .unwrap_or_default(),
+                    }));
+                }
             }
             Ok(TenantSummary {
                 boards,
@@ -845,6 +852,7 @@ async fn remove_member(
     UrlPath((slug, user_id)): UrlPath<(String, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
+    let slug_for_projects = slug.clone();
     let outcome = state
         .dbs
         .control()
@@ -873,10 +881,11 @@ async fn remove_member(
                 json!({ "role": role }),
             )?;
             tx.commit()?;
-            Ok(Outcome::Done(()))
+            Ok(Outcome::Done(o.id))
         })
         .await?;
-    finish(outcome)?;
+    let org_id = finish(outcome)?;
+    crate::projects::forget_member(&state, &slug_for_projects, org_id, user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
