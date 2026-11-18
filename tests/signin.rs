@@ -594,14 +594,21 @@ async fn sign_out_needs_the_csrf_token_and_ends_the_session() {
 #[test]
 fn only_local_paths_are_followed_after_sign_in() {
     assert_eq!(safe_next(Some("/c/acme/boards")), "/c/acme/boards");
+    assert_eq!(safe_next(Some("/c/acme?view=table")), "/c/acme?view=table");
     for bad in [
         "https://evil.example",
         "//evil.example",
         "/\\evil.example",
+        "/\t/evil.example",
+        "/\n/evil.example",
+        "/\r//evil.example",
+        "/ /evil.example",
         "/auth/google/start",
+        "/x/../auth/signout",
         "relative",
+        "",
     ] {
-        assert_eq!(safe_next(Some(bad)), "/", "{bad}");
+        assert_eq!(safe_next(Some(bad)), "/", "{bad:?}");
     }
     assert_eq!(safe_next(None), "/");
 }

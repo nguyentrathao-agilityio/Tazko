@@ -53,17 +53,31 @@ pub fn redirect_uri(state: &AppState) -> String {
 }
 
 pub fn safe_next(next: Option<&str>) -> String {
-    match next {
-        Some(n)
-            if n.starts_with('/')
-                && !n.starts_with("//")
-                && !n.starts_with("/\\")
-                && !n.starts_with("/auth/") =>
-        {
-            n.to_string()
-        }
-        _ => "/".to_string(),
+    let Some(n) = next else {
+        return "/".to_string();
+    };
+    let plain = n
+        .chars()
+        .all(|c| !c.is_ascii_control() && !c.is_whitespace() && c != '\\');
+    if !plain || !n.starts_with('/') || n[1..].starts_with('/') {
+        return "/".to_string();
     }
+
+    let base = url::Url::parse("http://tazko.invalid/").expect("valid base");
+    let Ok(joined) = base.join(n) else {
+        return "/".to_string();
+    };
+    if joined.origin() != base.origin() || joined.path().starts_with("/auth/") {
+        return "/".to_string();
+    }
+
+    let mut out = joined.path().to_string();
+    if let Some(q) = joined.query() {
+        out.push('?');
+        out.push_str(q);
+    }
+
+    out
 }
 
 fn pkce_challenge(verifier: &str) -> String {
