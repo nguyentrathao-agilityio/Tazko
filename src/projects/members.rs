@@ -336,6 +336,10 @@ pub async fn remove(
                 "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2",
                 params![id, user],
             )?;
+            tx.execute(
+                "DELETE FROM board_access WHERE user_id = ?1 AND board_id IN (SELECT id FROM boards WHERE project_id = ?2)",
+                params![user, id],
+            )?;
             events::record(
                 &tx,
                 by,

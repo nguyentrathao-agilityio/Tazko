@@ -146,18 +146,8 @@ pub fn project_info(c: &Connection, id: i64) -> rusqlite::Result<Option<ProjectI
     .optional()
 }
 
-impl FromRequestParts<AppState> for Project {
-    type Rejection = ApiError;
-
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
-        let company = Company::from_request_parts(parts, state).await?;
-        let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, state)
-            .await
-            .map_err(|_| ApiError::NotFound)?;
-        let id = path_id(&params, "project")?;
+impl Project {
+    pub async fn load(company: Company, id: i64) -> Result<Project, ApiError> {
         let user_id = company.user.0.user_id;
         let found = company
             .db
@@ -183,6 +173,22 @@ impl FromRequestParts<AppState> for Project {
             role,
             info,
         })
+    }
+}
+
+impl FromRequestParts<AppState> for Project {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let company = Company::from_request_parts(parts, state).await?;
+        let Path(params) = Path::<HashMap<String, String>>::from_request_parts(parts, state)
+            .await
+            .map_err(|_| ApiError::NotFound)?;
+        let id = path_id(&params, "project")?;
+        Project::load(company, id).await
     }
 }
 
@@ -563,6 +569,10 @@ pub async fn forget_member(
             tx.execute(
                 "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2",
                 params![project, user_id],
+            )?;
+            tx.execute(
+                "DELETE FROM board_access WHERE user_id = ?1 AND board_id IN (SELECT id FROM boards WHERE project_id = ?2)",
+                params![user_id, project],
             )?;
             events::record(
                 &tx,
