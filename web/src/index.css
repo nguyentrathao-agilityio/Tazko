@@ -6,6 +6,7 @@
 @import './board/board.css';
 @import './card/card.css';
 @import './search/search.css';
+@import './zen/zen.css';
 
 body {
   margin: 0;

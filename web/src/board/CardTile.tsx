@@ -10,6 +10,7 @@ import type { BoardPerson, CardData, Label } from '@/board/types'
 
 export function CardTile({
   card,
+  selected = false,
   edit,
   labels,
   people,
@@ -18,6 +19,7 @@ export function CardTile({
   onToggleDone,
 }: {
   card: CardData
+  selected?: boolean
   edit: boolean
   labels: Label[]
   people: BoardPerson[]
@@ -38,17 +40,14 @@ export function CardTile({
     <article
       ref={setNodeRef}
       style={style}
-      className={`cd${isDragging ? ' dragging' : ''}${card.done ? ' done' : ''}`}
+      className={`cd${isDragging ? ' dragging' : ''}${card.done ? ' done' : ''}${selected ? ' kf' : ''}`}
       data-card={card.id}
       aria-label={card.title}
       {...attributes}
       {...listeners}
       tabIndex={0}
       onClick={() => onOpen(card)}
-      onKeyDown={(e) => {
-        listeners?.onKeyDown?.(e)
-        if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(card)
-      }}
+
     >
       {card.cover && <div className="cv" style={{ background: card.cover }} />}
       <div className="cb">

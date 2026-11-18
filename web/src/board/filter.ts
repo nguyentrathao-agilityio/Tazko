@@ -1,16 +1,17 @@
 import type { CardData, ListData } from '@/board/types'
 
-export type Filter = { q: string; members: string[]; labels: string[]; due: string[] }
+export type Filter = { q: string; members: string[]; labels: string[]; due: string[]; hideDone?: boolean }
 
 export const emptyFilter: Filter = { q: '', members: [], labels: [], due: [] }
 
 export function active(f: Filter): boolean {
-  return Boolean(f.q.trim() || f.members.length || f.labels.length || f.due.length)
+  return Boolean(f.q.trim() || f.members.length || f.labels.length || f.due.length || f.hideDone)
 }
 
 const DAY = 86_400
 
 export function matches(c: CardData, f: Filter, me: number, labelNames: Map<number, string>, now = Date.now() / 1000): boolean {
+  if (f.hideDone && c.done) return false
   if (f.q.trim()) {
     const hay = `${c.title} ${(c.labels ?? []).map((id) => labelNames.get(id) ?? '').join(' ')}`.toLowerCase()
     if (!f.q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w))) return false
