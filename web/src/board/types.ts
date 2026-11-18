@@ -49,4 +49,5 @@ export type BoardData = {
   lists: ListData[]
   labels: Label[]
   archived_lists: number
+  last_event?: number
 }

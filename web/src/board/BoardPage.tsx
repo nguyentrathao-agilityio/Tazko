@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
@@ -26,6 +26,8 @@ import { useBoardKeys } from '@/keys/useBoardKeys'
 import { Shortcuts } from '@/keys/Shortcuts'
 import { saveSettings, useSettings } from '@/settings/store'
 import { ZenStrip } from '@/zen/ZenStrip'
+import { useLive } from '@/live/useLive'
+import { LiveList, LivePill } from '@/live/LivePill'
 import { DatesPop, LabelsPop, MembersPop, MovePop } from '@/card/Pops'
 
 function useCollapsed(boardId: number) {
@@ -55,7 +57,7 @@ function useCollapsed(boardId: number) {
 
 type CardPop = 'quick' | 'k-members' | 'k-dates' | 'k-labels' | 'k-move'
 
-type Pop = { kind: 'access' | 'share' | 'members' | 'filter'; at: Anchor } | { kind: CardPop; at: Anchor; card: CardData } | null
+type Pop = { kind: 'access' | 'share' | 'members' | 'filter' | 'live'; at: Anchor } | { kind: CardPop; at: Anchor; card: CardData } | null
 
 export function BoardPage({ company, id, cardId, me, go }: { company: Company; id: number; cardId: number | null; me: number; go: Go }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
@@ -72,6 +74,15 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
   const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames) : []), [board, filter, me, labelNames])
 
   const settings = useSettings()
+  const [tick, setTick] = useState(0)
+  const pending = useRef<number | undefined>(undefined)
+  const live = useLive(company.slug, id, board ? (board.last_event ?? 0) : null, () => {
+    window.clearTimeout(pending.current)
+    pending.current = window.setTimeout(() => {
+      reload()
+      setTick((n) => n + 1)
+    }, 120)
+  })
   const zen = settings.zen
   const [help, setHelp] = useState(false)
 
@@ -269,6 +280,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           {board.restricted ? t('board.restricted') : t('board.wholeProject')}
         </button>
         <span className="sp" />
+        <LivePill status={live.status} viewers={live.viewers} onClick={(el) => setPop({ kind: 'live', at: anchorOf(el) })} />
         <button
           type="button"
           aria-label={t('board.members')}
@@ -418,6 +430,11 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
         </Popover>
       )}
       {help && <Shortcuts onClose={() => setHelp(false)} />}
+      {pop?.kind === 'live' && (
+        <Popover anchor={pop.at} title={t('live.title')} width={300} onClose={() => setPop(null)}>
+          <LiveList viewers={live.viewers} me={me} />
+        </Popover>
+      )}
       {pop?.kind === 'filter' && (
         <Popover anchor={pop.at} title={t('filter.title')} width={340} onClose={() => setPop(null)}>
           <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} />
@@ -458,6 +475,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           link={`${boardPath}/c/${cardId}`}
           onClose={() => go(boardPath)}
           onChanged={reload}
+          tick={tick}
           onOpenCard={(c) => go(`${boardPath}/c/${c}`)}
         />
       )}

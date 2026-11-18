@@ -8,6 +8,7 @@
 @import './search/search.css';
 @import './zen/zen.css';
 @import './settings/settings.css';
+@import './live/live.css';
 
 body {
   margin: 0;

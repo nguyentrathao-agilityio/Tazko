@@ -29,6 +29,7 @@ export function CardDialog({
   base,
   cardId,
   link,
+  tick = 0,
   onClose,
   onChanged,
   onOpenCard,
@@ -38,6 +39,7 @@ export function CardDialog({
   base: string
   cardId: number
   link: string
+  tick?: number
   onClose: () => void
   onChanged: () => void
   onOpenCard?: (id: number) => void
@@ -54,6 +56,10 @@ export function CardDialog({
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingDesc, setEditingDesc] = useState(false)
   const sheet = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (tick) reload()
+  }, [tick, reload])
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null

@@ -597,5 +597,10 @@
   "settings.zenLead1": "Hides the header so the board fills the window. Press",
   "settings.zenLead2": "on a board, and",
   "settings.zenLead3": "or",
-  "settings.zenLead4": "to come back. Move the pointer to the top edge for controls."
+  "settings.zenLead4": "to come back. Move the pointer to the top edge for controls.",
+  "live.title": "Live updates",
+  "live.here": "{n} here",
+  "live.reconnecting": "Reconnecting…",
+  "live.hint": "Changes by other people appear on the board within a second.",
+  "live.viewing": "Viewing"
 }
