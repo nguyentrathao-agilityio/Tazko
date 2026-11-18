@@ -8,11 +8,17 @@ import type { Go } from '@/ui/Link'
 import { PageHead } from '@/ui/PageHead'
 import { useLoad } from '@/ui/useLoad'
 import { Stack } from '@/projects/Stack'
+import { BoardTile } from '@/board/BoardTile'
+import type { BoardTileData } from '@/board/types'
 import type { MyProject } from '@/projects/types'
 
 export function YourProjects({ company, go }: { company: Company; go: Go }) {
   const path = `/api/v1/c/${company.slug}/my-projects`
   const { data, error } = useLoad(() => api<{ projects: MyProject[] }>('GET', path), path)
+  const starredPath = `/api/v1/c/${company.slug}/starred`
+  const starred = useLoad(() => api<{ boards: BoardTileData[] }>('GET', starredPath), starredPath)
+  const unstar = (id: number) =>
+    void api('PUT', `/api/v1/c/${company.slug}/boards/${id}/star`, { starred: false }).then(starred.reload, starred.reload)
 
   return (
     <>
@@ -39,6 +45,19 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
       )}
       {data && data.projects.length > 0 && (
         <>
+          {starred.data && starred.data.boards.length > 0 && (
+            <>
+              <div className="sechd">
+                <Icon name="star" />
+                {t('projects.starredBoards')}
+              </div>
+              <div className="pgrid">
+                {starred.data.boards.map((b) => (
+                  <BoardTile key={b.id} board={b} onOpen={() => go(`/c/${company.slug}/b/${b.id}`)} onStar={() => unstar(b.id)} />
+                ))}
+              </div>
+            </>
+          )}
           <div className="sechd">
             <Icon name="folder" />
             {t('projects.yours')}

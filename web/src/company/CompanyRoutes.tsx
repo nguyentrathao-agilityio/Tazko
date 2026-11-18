@@ -8,6 +8,7 @@ import { CompanyShell } from '@/company/CompanyShell'
 import { lastCompany, rememberCompany } from '@/company/lastCompany'
 import { ManageProjects } from '@/company/ManageProjects'
 import { ProjectPage } from '@/projects/ProjectPage'
+import { BoardPage } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
@@ -21,7 +22,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: string; go: Go; onSignOut: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings)?|\/b\/(\d+))?\/?$/.exec(path)
   const slug = match?.[1]
   const company = me.companies.find((c) => c.slug === slug)
   const fallback = me.companies.find((c) => c.slug === lastCompany()) ?? me.companies[0]
@@ -62,6 +63,8 @@ export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: strin
       </Centered>
     )
   }
+
+  if (match[5]) return <BoardPage key={`${company.slug}:b${match[5]}`} company={company} id={Number(match[5])} go={go} />
 
   const projectId = match[3] ? Number(match[3]) : null
   const section = projectId ? 'home' : match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'

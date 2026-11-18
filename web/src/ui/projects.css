@@ -241,15 +241,16 @@
     height: 32px;
     border-radius: 8px;
     border: 0;
-    background: none;
-    color: var(--muted);
+    background: transparent;
+    color: inherit;
     cursor: pointer;
+    position: relative;
+    flex: none;
     padding: 0;
   }
 
   .ibtn:hover {
-    background: var(--sunken);
-    color: var(--ink);
+    background: rgba(127, 127, 160, 0.22);
   }
 
   .ibtn.sm {
