@@ -605,6 +605,10 @@ fn only_local_paths_are_followed_after_sign_in() {
         "/ /evil.example",
         "/auth/google/start",
         "/x/../auth/signout",
+        "/.//evil.example",
+        "/x/..//evil.example",
+        "/%2e//evil.example",
+        "/%2E%2E//evil.example",
         "relative",
         "",
     ] {

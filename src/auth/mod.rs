@@ -71,7 +71,12 @@ pub fn safe_next(next: Option<&str>) -> String {
         return "/".to_string();
     }
 
-    let mut out = joined.path().to_string();
+    let path = joined.path();
+    if !path.starts_with('/') || path[1..].starts_with('/') || path.contains('\\') {
+        return "/".to_string();
+    }
+
+    let mut out = path.to_string();
     if let Some(q) = joined.query() {
         out.push('?');
         out.push_str(q);
