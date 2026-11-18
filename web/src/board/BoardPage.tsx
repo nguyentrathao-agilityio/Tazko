@@ -17,6 +17,7 @@ import { BoardMenu } from '@/board/BoardMenu'
 import { BoardLists } from '@/board/BoardLists'
 import type { ListActions } from '@/board/ListColumn'
 import type { BoardData, CardData, ListData } from '@/board/types'
+import { CardDialog } from '@/card/CardDialog'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -45,7 +46,7 @@ function useCollapsed(boardId: number) {
 
 type Pop = { kind: 'access' | 'share' | 'members'; at: Anchor } | { kind: 'quick'; at: Anchor; card: CardData } | null
 
-export function BoardPage({ company, id, go }: { company: Company; id: number; go: Go }) {
+export function BoardPage({ company, id, cardId, me, go }: { company: Company; id: number; cardId: number | null; me: number; go: Go }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
   const { data: board, error: loadError, reload } = useLoad(() => api<BoardData>('GET', base), base)
   const { error, run } = useRun(reload)
@@ -81,6 +82,7 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
     )
 
   const projectPath = `/c/${company.slug}/p/${board.project.id}`
+  const boardPath = `/c/${company.slug}/b/${board.id}`
   const edit = board.can.edit
   const visible = board.restricted ? board.people.filter((p) => p.access) : board.people
   const lists = board.lists
@@ -215,7 +217,10 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
         onAddCards={addCards}
         onMoveCard={(m) => void run(() => api('POST', `${base}/cards/${m.card}/move`, { list_id: m.list, after: m.after }))}
         onMoveList={(m) => void run(() => api('POST', `${base}/lists/${m.list}/move`, { after: m.after }))}
-        onOpenCard={() => undefined}
+        labels={board.labels}
+        people={board.people}
+        onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
+        onToggleDone={(c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done }))}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         after={
           edit &&
@@ -292,6 +297,19 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
         <Popover anchor={pop.at} title={t('board.shareTitle')} onClose={() => setPop(null)}>
           <Share company={company} board={board} onDone={() => setPop(null)} />
         </Popover>
+      )}
+      {cardId && (
+        <CardDialog
+          key={cardId}
+          me={me}
+          board={board}
+          base={base}
+          cardId={cardId}
+          link={`${boardPath}/c/${cardId}`}
+          onClose={() => go(boardPath)}
+          onChanged={reload}
+          onOpenCard={(c) => go(`${boardPath}/c/${c}`)}
+        />
       )}
       {menu && (
         <BoardMenu

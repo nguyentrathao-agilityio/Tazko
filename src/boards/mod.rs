@@ -264,6 +264,7 @@ async fn create(
         .write(move |c| {
             let tx = c.transaction()?;
             let id = insert_board(&tx, pid, &name, &bg, restricted, by)?;
+            crate::cards::detail::insert_default_labels(&tx, id)?;
             for (title, pos) in DEFAULT_LISTS.iter().zip(order::spread(DEFAULT_LISTS.len())) {
                 tx.execute(
                     "INSERT INTO lists (board_id, title, position) VALUES (?1, ?2, ?3)",
@@ -287,7 +288,7 @@ async fn create(
 async fn view(board: Board) -> Result<Json<Value>, ApiError> {
     let (id, pid, user) = (board.id, board.project.id, board.user_id());
     let restricted = board.info.restricted;
-    let (lists, people, starred, archived) = board
+    let (lists, people, starred, archived, labels) = board
         .project
         .db()
         .read(move |c| {
@@ -334,7 +335,8 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
                 [id],
                 |r| r.get(0),
             )?;
-            Ok((lists, people, starred, archived))
+            let labels = crate::cards::detail::labels_of_board(c, id)?;
+            Ok((lists, people, starred, archived, labels))
         })
         .await?;
     let i = &board.info;
@@ -353,6 +355,7 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
         "can": can,
         "people": people,
         "lists": lists,
+        "labels": labels,
         "archived_lists": archived,
     })))
 }
@@ -571,6 +574,7 @@ async fn copy(
                 )?;
             }
 
+            let labels = crate::cards::copy_labels(&tx, from, id)?;
             let lists: Vec<(i64, String, String)> = {
                 let mut stmt = tx.prepare(
                     "SELECT id, title, position FROM lists WHERE board_id = ?1 AND archived_at IS NULL ORDER BY position",
@@ -583,7 +587,7 @@ async fn copy(
                     "INSERT INTO lists (board_id, title, position) VALUES (?1, ?2, ?3)",
                     params![id, title, pos],
                 )?;
-                lists::copy_cards(&tx, list, tx.last_insert_rowid())?;
+                crate::cards::copy_cards(&tx, list, tx.last_insert_rowid(), Some(&labels))?;
             }
             events::record(&tx, by, "board_created", At::board(pid, id), json!({ "name": name, "copied_from": from }))?;
             tx.commit()?;

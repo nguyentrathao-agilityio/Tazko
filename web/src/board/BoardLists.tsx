@@ -16,7 +16,7 @@ import { t } from '@/i18n'
 import { CardTile } from '@/board/CardTile'
 import { Composer } from '@/board/Composer'
 import { ListColumn, type ListActions } from '@/board/ListColumn'
-import type { CardData, ListData } from '@/board/types'
+import type { BoardPerson, CardData, Label, ListData } from '@/board/types'
 
 export type CardMove = { card: number; list: number; after: number | null }
 export type ListMove = { list: number; after: number | null }
@@ -35,6 +35,8 @@ function SortableList({ list, edit, children }: { list: ListData; edit: boolean;
 
 export function BoardLists({
   lists: source,
+  labels,
+  people,
   edit,
   collapsed,
   onCollapse,
@@ -46,9 +48,12 @@ export function BoardLists({
   onMoveList,
   onOpenCard,
   onQuickEdit,
+  onToggleDone,
   after,
 }: {
   lists: ListData[]
+  labels: Label[]
+  people: BoardPerson[]
   edit: boolean
   collapsed: number[]
   onCollapse: (id: number, on: boolean) => void
@@ -60,6 +65,7 @@ export function BoardLists({
   onMoveList: (m: ListMove) => void
   onOpenCard: (card: CardData) => void
   onQuickEdit: (card: CardData, el: HTMLElement) => void
+  onToggleDone: (card: CardData) => void
   after?: ReactNode
 }) {
   const [local, setLocal] = useState<{ from: ListData[]; lists: ListData[] } | null>(null)
@@ -177,7 +183,7 @@ export function BoardLists({
                 >
                   <SortableContext items={l.cards.map((c) => `c:${c.id}`)} strategy={verticalListSortingStrategy}>
                     {l.cards.map((c) => (
-                      <CardTile key={c.id} card={c} edit={edit} onOpen={onOpenCard} onQuickEdit={onQuickEdit} />
+                      <CardTile key={c.id} card={c} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
                     ))}
                   </SortableContext>
                 </ListColumn>
