@@ -275,6 +275,16 @@ pub fn restore(from: &Path, snapshot: Option<&str>, to: &Path) -> io::Result<Str
         ));
     }
 
+    if fs::symlink_metadata(to).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "{} is a symbolic link; restore into a real folder",
+                to.display()
+            ),
+        ));
+    }
+
     if to.exists() && fs::read_dir(to)?.next().is_some() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
@@ -457,8 +467,20 @@ pub fn run_restore_test(from: &Path, scratch: &Path) -> Status {
         bytes: 0,
         problems: Vec::new(),
     };
-    let target = scratch.join(format!("tazko-restore-test-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&target);
+    let dir = match tempfile::Builder::new()
+        .prefix("tazko-restore-test-")
+        .tempdir_in(scratch)
+    {
+        Ok(d) => d,
+        Err(e) => {
+            status.problems.push(format!(
+                "cannot make a private scratch folder in {}: {e}",
+                scratch.display()
+            ));
+            return status;
+        }
+    };
+    let target = dir.path().join("data");
     match restore(from, None, &target) {
         Ok(name) => {
             status.snapshot = Some(name);
@@ -470,7 +492,12 @@ pub fn run_restore_test(from: &Path, scratch: &Path) -> Status {
         Err(e) => status.problems.push(e.to_string()),
     }
 
-    let _ = fs::remove_dir_all(&target);
+    if let Err(e) = dir.close() {
+        status
+            .problems
+            .push(format!("cannot remove the scratch copy: {e}"));
+    }
+
     status.ok = status.problems.is_empty();
     status
 }

@@ -208,6 +208,18 @@ async fn restore_refuses_a_folder_that_is_in_use_and_unknown_snapshots() {
     );
     assert!(backup::restore(&backups, Some("../data"), &dir.path().join("x")).is_err());
     assert!(backup::restore(&dir.path().join("none"), None, &dir.path().join("y")).is_err());
+    std::fs::create_dir_all(dir.path().join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(dir.path().join("elsewhere"), dir.path().join("link")).unwrap();
+    assert!(
+        backup::restore(&backups, None, &dir.path().join("link")).is_err(),
+        "never through a symbolic link"
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.path().join("elsewhere"))
+            .unwrap()
+            .count(),
+        0
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
