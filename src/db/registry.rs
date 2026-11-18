@@ -53,7 +53,11 @@ impl Databases {
         }
 
         let mut open = self.tenants.lock().unwrap();
-        if let Some(db) = open.get(slug) {
+        if create {
+            if let Some(old) = open.remove(slug) {
+                old.close();
+            }
+        } else if let Some(db) = open.get(slug) {
             return Ok(db.clone());
         }
 
@@ -68,6 +72,15 @@ impl Databases {
         let db = Database::open(&file, &TENANT)?;
         open.insert(slug.to_string(), db.clone());
         Ok(db)
+    }
+
+    pub fn retire<T>(&self, slug: &str, then: impl FnOnce() -> T) -> T {
+        let mut open = self.tenants.lock().unwrap();
+        if let Some(db) = open.remove(slug) {
+            db.close();
+        }
+
+        then()
     }
 
     pub fn is_open(&self, slug: &str) -> bool {

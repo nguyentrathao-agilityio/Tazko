@@ -658,8 +658,11 @@ async fn delete_company(
         })
         .await?;
 
-    state.dbs.forget(&o.slug);
-    if let Err(e) = trash::move_to_trash(state.dbs.layout(), &o.slug, at) {
+    let layout = state.dbs.layout().clone();
+    let moved = state
+        .dbs
+        .retire(&o.slug, || trash::move_to_trash(&layout, &o.slug, at));
+    if let Err(e) = moved {
         eprintln!(
             "tazko: company {} is deleted but its folder could not be moved to trash: {e}",
             o.slug
