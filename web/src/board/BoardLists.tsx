@@ -35,6 +35,7 @@ function SortableList({ list, edit, children }: { list: ListData; edit: boolean;
 
 export function BoardLists({
   lists: source,
+  totals,
   labels,
   people,
   edit,
@@ -52,6 +53,7 @@ export function BoardLists({
   after,
 }: {
   lists: ListData[]
+  totals: Map<number, number> | null
   labels: Label[]
   people: BoardPerson[]
   edit: boolean
@@ -160,6 +162,7 @@ export function BoardLists({
                   lists={lists}
                   index={i}
                   count={l.cards.length}
+                  total={totals?.get(l.id)}
                   edit={edit}
                   collapsed={collapsed.includes(l.id)}
                   onCollapse={(on) => onCollapse(l.id, on)}

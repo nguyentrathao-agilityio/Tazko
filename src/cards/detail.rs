@@ -268,6 +268,7 @@ async fn update(
                     html
                 };
                 changed.insert("description".into(), json!(true));
+                sets.push(("description_text", Sql::Text(sanitize::plain_text(&html))));
                 sets.push(("description", Sql::Text(html)));
             }
             "start_at" => {

@@ -30,6 +30,7 @@ export function ListColumn({
   lists,
   index,
   count,
+  total,
   edit,
   collapsed,
   onCollapse,
@@ -42,6 +43,7 @@ export function ListColumn({
   lists: ListData[]
   index: number
   count: number
+  total?: number
   edit: boolean
   collapsed: boolean
   onCollapse: (on: boolean) => void
@@ -57,7 +59,7 @@ export function ListColumn({
     return (
       <section className="ls collapsed" data-list={list.id} ref={sortable?.ref} style={sortable?.style}>
         <button type="button" onClick={() => onCollapse(false)} aria-label={t('list.expand', { title: list.title })}>
-          {list.title} · {count}
+          {list.title} · {total ?? count}
         </button>
       </section>
     )
@@ -102,7 +104,7 @@ export function ListColumn({
             </button>
           </h2>
         )}
-        <span className="cnt">{count}</span>
+        <span className="cnt">{total === undefined ? count : `${count}/${total}`}</span>
         <button type="button" className="ibtn sm" onClick={() => onCollapse(true)} aria-label={t('list.collapse')}>
           <Icon name="chev" />
         </button>
@@ -112,7 +114,7 @@ export function ListColumn({
           </button>
         )}
       </header>
-      <div className="cards">{count > 0 ? children : <div className="empty-l">{t('list.empty')}</div>}</div>
+      <div className="cards">{count > 0 ? children : <div className="empty-l">{total === undefined ? t('list.empty') : t('filter.noMatches')}</div>}</div>
       {footer}
       {menu && (
         <ListMenu
