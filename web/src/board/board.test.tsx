@@ -38,8 +38,8 @@ function board() {
       { id: 2, name: 'Jo Lee', email: 'jo@example.com', role: 'member', access: false },
     ],
     lists: [
-      { id: 11, title: 'To do', position: 'V' },
-      { id: 12, title: 'Doing', position: 'k' },
+      { id: 11, title: 'To do', position: 'V', cards: [{ id: 21, title: 'Write copy', position: 'V' }] },
+      { id: 12, title: 'Doing', position: 'k', cards: [] },
     ],
     archived_lists: 0,
   }
@@ -128,5 +128,32 @@ describe('board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Archived items' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Restore' }))
     await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/c/acme/boards/7/lists/13/restore')).toBe(true))
+  })
+  it('makes one card per pasted line', async () => {
+    open('/c/acme/b/7')
+    const doing = await screen.findByRole('region', { name: 'Doing' })
+    fireEvent.click(within(doing).getByRole('button', { name: 'Add a card' }))
+    fireEvent.change(within(doing).getByLabelText('Card title'), { target: { value: 'Buy milk\n\nCall Jo\nBook room' } })
+    expect(within(doing).getByText('3 lines: one card per line.')).toBeTruthy()
+    fireEvent.click(within(doing).getByRole('button', { name: 'Add 3 cards' }))
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/c/acme/boards/7/cards')).toBe(true))
+    expect(calls.find((c) => c.url === '/api/v1/c/acme/boards/7/cards')?.body).toEqual({ list_id: 12, titles: ['Buy milk', 'Call Jo', 'Book room'] })
+  })
+
+  it('renames a card from quick edit and sorts a list from its menu', async () => {
+    open('/c/acme/b/7')
+    const card = await screen.findByRole('button', { name: 'Write copy' })
+    fireEvent.click(within(card).getByRole('button', { name: 'Quick edit' }))
+    const box = screen.getByRole('dialog', { name: 'Quick edit' })
+    fireEvent.change(within(box).getByLabelText('Card title'), { target: { value: 'Write the copy' } })
+    fireEvent.click(within(box).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true))
+    expect(calls.find((c) => c.method === 'PATCH')).toMatchObject({ url: '/api/v1/c/acme/boards/7/cards/21', body: { title: 'Write the copy' } })
+
+    fireEvent.click(within(screen.getByRole('region', { name: 'To do' })).getByRole('button', { name: 'List actions' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Card name (A to Z)' }))
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/sort'))).toBe(true))
+    expect(calls.find((c) => c.url.endsWith('/sort'))?.body).toEqual({ by: 'name' })
   })
 })

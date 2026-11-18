@@ -14,7 +14,9 @@ export type BoardTileData = {
 
 export type BoardPerson = { id: number; name: string; email: string; role: ProjectRole; access: boolean }
 
-export type ListData = { id: number; title: string; position: string }
+export type CardData = { id: number; title: string; position: string }
+
+export type ListData = { id: number; title: string; position: string; cards: CardData[] }
 
 export type BoardData = {
   id: number

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type CSSProperties, type FormEvent, type HTMLAttributes, type ReactNode, type Ref } from 'react'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { anchorOf, type Anchor } from '@/ui/anchor'
@@ -10,37 +10,52 @@ export type ListActions = {
   copy: (list: ListData, title: string) => void
   moveTo: (list: ListData, index: number) => void
   archive: (list: ListData) => void
+  addCard: (list: ListData) => void
+  sort: (list: ListData, by: 'name' | 'new' | 'old') => void
+  moveAll: (list: ListData, to: ListData) => void
+  archiveAll: (list: ListData) => void
 }
+
+export type Sortable = {
+  ref: Ref<HTMLElement>
+  style: CSSProperties
+  handle: HTMLAttributes<HTMLElement>
+  dragging: boolean
+}
+
+type MenuPage = 'main' | 'move' | 'copy' | 'sort' | 'moveall'
 
 export function ListColumn({
   list,
+  lists,
   index,
-  total,
   count,
   edit,
   collapsed,
   onCollapse,
   actions,
+  sortable,
   children,
   footer,
 }: {
   list: ListData
+  lists: ListData[]
   index: number
-  total: number
   count: number
   edit: boolean
   collapsed: boolean
   onCollapse: (on: boolean) => void
   actions: ListActions
+  sortable?: Sortable
   children?: ReactNode
   footer?: ReactNode
 }) {
   const [renaming, setRenaming] = useState(false)
-  const [menu, setMenu] = useState<{ at: Anchor; page: 'main' | 'move' | 'copy' } | null>(null)
+  const [menu, setMenu] = useState<{ at: Anchor; page: MenuPage } | null>(null)
 
   if (collapsed)
     return (
-      <section className="ls collapsed" data-list={list.id}>
+      <section className="ls collapsed" data-list={list.id} ref={sortable?.ref} style={sortable?.style}>
         <button type="button" onClick={() => onCollapse(false)} aria-label={t('list.expand', { title: list.title })}>
           {list.title} · {count}
         </button>
@@ -55,8 +70,14 @@ export function ListColumn({
   }
 
   return (
-    <section className={`ls${count ? '' : ' el'}`} data-list={list.id} aria-label={list.title}>
-      <header className="lh">
+    <section
+      className={`ls${count ? '' : ' el'}${sortable?.dragging ? ' dragging' : ''}`}
+      data-list={list.id}
+      aria-label={list.title}
+      ref={sortable?.ref}
+      style={sortable?.style}
+    >
+      <header className="lh" {...(edit ? sortable?.handle : {})}>
         {renaming ? (
           <form onSubmit={saveTitle} style={{ flex: 1 }}>
             <input
@@ -91,13 +112,13 @@ export function ListColumn({
           </button>
         )}
       </header>
-      <div className="cards">{children ?? <div className="empty-l">{t('list.empty')}</div>}</div>
+      <div className="cards">{count > 0 ? children : <div className="empty-l">{t('list.empty')}</div>}</div>
       {footer}
       {menu && (
         <ListMenu
           list={list}
+          lists={lists}
           index={index}
-          total={total}
           anchor={menu.at}
           page={menu.page}
           setPage={(page) => setMenu({ ...menu, page })}
@@ -111,8 +132,8 @@ export function ListColumn({
 
 function ListMenu({
   list,
+  lists,
   index,
-  total,
   anchor,
   page,
   setPage,
@@ -120,14 +141,18 @@ function ListMenu({
   actions,
 }: {
   list: ListData
+  lists: ListData[]
   index: number
-  total: number
   anchor: Anchor
-  page: 'main' | 'move' | 'copy'
-  setPage: (p: 'main' | 'move' | 'copy') => void
+  page: MenuPage
+  setPage: (p: MenuPage) => void
   onClose: () => void
   actions: ListActions
 }) {
+  const done = (fn: () => void) => () => {
+    fn()
+    onClose()
+  }
   if (page === 'move')
     return (
       <Popover anchor={anchor} title={t('list.move')} onClose={onClose} onBack={() => setPage('main')}>
@@ -141,7 +166,7 @@ function ListMenu({
           <div className="field">
             <label htmlFor="lm-p">{t('list.position')}</label>
             <select id="lm-p" name="pos" defaultValue={index} style={{ width: '100%' }}>
-              {Array.from({ length: total }, (_, i) => (
+              {lists.map((_, i) => (
                 <option key={i} value={i}>
                   {i + 1}
                   {i === index ? ` ${t('list.current')}` : ''}
@@ -176,8 +201,39 @@ function ListMenu({
         </form>
       </Popover>
     )
+  if (page === 'sort')
+    return (
+      <Popover anchor={anchor} title={t('list.sortTitle')} onClose={onClose} onBack={() => setPage('main')}>
+        <button type="button" className="mi" onClick={done(() => actions.sort(list, 'new'))}>
+          {t('list.sortNew')}
+        </button>
+        <button type="button" className="mi" onClick={done(() => actions.sort(list, 'old'))}>
+          {t('list.sortOld')}
+        </button>
+        <button type="button" className="mi" onClick={done(() => actions.sort(list, 'name'))}>
+          {t('list.sortName')}
+        </button>
+      </Popover>
+    )
+  if (page === 'moveall') {
+    const others = lists.filter((l) => l.id !== list.id)
+    return (
+      <Popover anchor={anchor} title={t('list.moveAllTitle')} onClose={onClose} onBack={() => setPage('main')}>
+        {others.map((l) => (
+          <button key={l.id} type="button" className="mi" onClick={done(() => actions.moveAll(list, l))}>
+            {l.title}
+          </button>
+        ))}
+        {others.length === 0 && <p className="hint">{t('list.noOtherLists')}</p>}
+      </Popover>
+    )
+  }
   return (
     <Popover anchor={anchor} title={t('list.actions')} width={290} onClose={onClose}>
+      <button type="button" className="mi" onClick={done(() => actions.addCard(list))}>
+        <Icon name="plus" />
+        {t('list.addCard')}
+      </button>
       <button type="button" className="mi" onClick={() => setPage('copy')}>
         <Icon name="copy" />
         {t('list.copy')}
@@ -186,14 +242,19 @@ function ListMenu({
         <Icon name="move" />
         {t('list.move')}
       </button>
-      <button
-        type="button"
-        className="mi danger"
-        onClick={() => {
-          actions.archive(list)
-          onClose()
-        }}
-      >
+      <button type="button" className="mi" onClick={() => setPage('sort')}>
+        <Icon name="list" />
+        {t('list.sort')}
+      </button>
+      <button type="button" className="mi" onClick={() => setPage('moveall')}>
+        <Icon name="right" />
+        {t('list.moveAll')}
+      </button>
+      <button type="button" className="mi" onClick={done(() => actions.archiveAll(list))}>
+        <Icon name="archive" />
+        {t('list.archiveAll')}
+      </button>
+      <button type="button" className="mi danger" onClick={done(() => actions.archive(list))}>
         <Icon name="archive" />
         {t('list.archive')}
       </button>

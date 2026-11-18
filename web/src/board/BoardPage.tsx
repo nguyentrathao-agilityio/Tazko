@@ -14,8 +14,9 @@ import { Stack } from '@/projects/Stack'
 import { useRun } from '@/projects/useRun'
 import { Access } from '@/board/Access'
 import { BoardMenu } from '@/board/BoardMenu'
-import { ListColumn, type ListActions } from '@/board/ListColumn'
-import type { BoardData, ListData } from '@/board/types'
+import { BoardLists } from '@/board/BoardLists'
+import type { ListActions } from '@/board/ListColumn'
+import type { BoardData, CardData, ListData } from '@/board/types'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -42,7 +43,7 @@ function useCollapsed(boardId: number) {
   return { ids, set }
 }
 
-type Pop = { kind: 'access' | 'share' | 'members'; at: Anchor } | null
+type Pop = { kind: 'access' | 'share' | 'members'; at: Anchor } | { kind: 'quick'; at: Anchor; card: CardData } | null
 
 export function BoardPage({ company, id, go }: { company: Company; id: number; go: Go }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
@@ -53,6 +54,7 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [composing, setComposing] = useState<number | null>(null)
   const collapsed = useCollapsed(id)
 
   useEffect(() => {
@@ -95,7 +97,17 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
       const after = index === 0 ? null : others[Math.min(index, others.length) - 1].id
       void run(() => api('POST', `${base}/lists/${l.id}/move`, { after }))
     },
+    addCard: (l) => setComposing(l.id),
+    sort: (l, by) => void run(() => api('POST', `${base}/lists/${l.id}/sort`, { by })),
+    moveAll: (l, to) => void run(() => api('POST', `${base}/lists/${l.id}/move-cards`, { to: to.id })),
+    archiveAll: (l) =>
+      void run(() => api('POST', `${base}/lists/${l.id}/archive-cards`)).then((ok) => {
+        if (ok) toast(t('list.cardsArchived', { title: l.title }))
+      }),
   }
+
+  const addCards = (l: ListData, titles: string[]) =>
+    run(() => api('POST', `${base}/cards`, titles.length === 1 ? { list_id: l.id, title: titles[0] } : { list_id: l.id, titles }))
 
   const rename = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -192,21 +204,21 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
           {error}
         </div>
       )}
-      <div className="lists" id="lists">
-        {lists.map((l, i) => (
-          <ListColumn
-            key={l.id}
-            list={l}
-            index={i}
-            total={lists.length}
-            count={0}
-            edit={edit}
-            collapsed={collapsed.ids.includes(l.id)}
-            onCollapse={(on) => collapsed.set(l.id, on)}
-            actions={actions}
-          />
-        ))}
-        {edit &&
+      <BoardLists
+        lists={lists}
+        edit={edit}
+        collapsed={collapsed.ids}
+        onCollapse={collapsed.set}
+        actions={actions}
+        composing={composing}
+        setComposing={setComposing}
+        onAddCards={addCards}
+        onMoveCard={(m) => void run(() => api('POST', `${base}/cards/${m.card}/move`, { list_id: m.list, after: m.after }))}
+        onMoveList={(m) => void run(() => api('POST', `${base}/lists/${m.list}/move`, { after: m.after }))}
+        onOpenCard={() => undefined}
+        onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
+        after={
+          edit &&
           (adding ? (
             <form className="addl open" onSubmit={addList}>
               <input
@@ -234,8 +246,28 @@ export function BoardPage({ company, id, go }: { company: Company; id: number; g
               <Icon name="plus" />
               {t('list.addAnother')}
             </button>
-          ))}
-      </div>
+          ))
+        }
+      />
+      {pop?.kind === 'quick' && (
+        <Popover anchor={pop.at} title={t('card.quickEdit')} width={300} onClose={() => setPop(null)}>
+          <QuickEdit
+            card={pop.card}
+            lists={lists}
+            onSave={(title) => {
+              setPop(null)
+              if (title !== pop.card.title) void run(() => api('PATCH', `${base}/cards/${pop.card.id}`, { title }))
+            }}
+            onArchive={() => {
+              const card = pop.card
+              setPop(null)
+              void run(() => api('POST', `${base}/cards/${card.id}/archive`)).then((ok) => {
+                if (ok) toast(t('card.archived'), () => run(() => api('POST', `${base}/cards/${card.id}/restore`)))
+              })
+            }}
+          />
+        </Popover>
+      )}
       {pop?.kind === 'access' && (
         <Popover anchor={pop.at} title={t('boardMenu.access')} width={340} onClose={() => setPop(null)}>
           <Access board={board} base={base} run={run} />
@@ -322,6 +354,42 @@ function Share({ company, board, onDone }: { company: Company; board: BoardData;
       )}
       <button type="submit" className="btn primary sm">
         {t('project.inviteButton')}
+      </button>
+    </form>
+  )
+}
+
+function QuickEdit({ card, onSave, onArchive }: { card: CardData; lists: ListData[]; onSave: (title: string) => void; onArchive: () => void }) {
+  const [title, setTitle] = useState(card.title)
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (title.trim()) onSave(title.trim())
+      }}
+    >
+      <textarea
+        className="inl-i"
+        style={{ minHeight: 70, height: 'auto', padding: 8 }}
+        value={title}
+        aria-label={t('card.title')}
+        data-focus
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            if (title.trim()) onSave(title.trim())
+          }
+        }}
+      />
+      <div className="row" style={{ margin: '8px 0' }}>
+        <button type="submit" className="btn primary sm">
+          {t('boardMenu.save')}
+        </button>
+      </div>
+      <button type="button" className="mi danger" onClick={onArchive}>
+        <Icon name="archive" />
+        {t('card.archive')}
       </button>
     </form>
   )

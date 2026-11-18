@@ -153,10 +153,27 @@ function About({ board, base, run }: { board: BoardData; base: string; run: (fn:
 
 function Archived({ board, base, run }: { board: BoardData; base: string; run: (fn: () => Promise<unknown>) => Promise<boolean> }) {
   const path = `${base}/archive`
-  const { data, reload } = useLoad(() => api<{ lists: { id: number; title: string }[] }>('GET', path), `${path}:${board.lists.length}:${board.archived_lists}`)
+  const { data, reload } = useLoad(
+    () => api<{ lists: { id: number; title: string }[]; cards: { id: number; title: string; list: string }[] }>('GET', path),
+    `${path}:${board.lists.length}:${board.archived_lists}`,
+  )
   return (
     <>
-      <h4 style={{ marginTop: 0 }}>{t('boardMenu.archivedLists', { n: data?.lists.length ?? 0 })}</h4>
+      <h4 style={{ marginTop: 0 }}>{t('boardMenu.archivedCards', { n: data?.cards.length ?? 0 })}</h4>
+      {data && data.cards.length === 0 && <p className="hint">{t('boardMenu.nothingArchived')}</p>}
+      {data?.cards.map((c) => (
+        <div key={c.id} className="row" style={{ flexWrap: 'nowrap', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+          <span style={{ flex: 1 }}>
+            {c.title} <small className="muted">{c.list}</small>
+          </span>
+          {board.can.edit && (
+            <button type="button" className="btn sm" aria-label={t('boardMenu.restoreCard', { title: c.title })} onClick={() => void run(() => api('POST', `${base}/cards/${c.id}/restore`)).then(reload)}>
+              {t('manage.restore')}
+            </button>
+          )}
+        </div>
+      ))}
+      <h4>{t('boardMenu.archivedLists', { n: data?.lists.length ?? 0 })}</h4>
       {data && data.lists.length === 0 && <p className="hint">{t('boardMenu.nothingArchived')}</p>}
       {data?.lists.map((l) => (
         <div key={l.id} className="row" style={{ flexWrap: 'nowrap', padding: '6px 0', borderBottom: '1px solid var(--line)' }}>

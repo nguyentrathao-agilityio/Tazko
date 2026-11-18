@@ -215,6 +215,120 @@
     min-height: 10px;
   }
 
+  .cd {
+    position: relative;
+    background: var(--surface);
+    border-radius: 9px;
+    box-shadow: var(--lst-sh);
+    cursor: pointer;
+    border: 1px solid transparent;
+    overflow: hidden;
+    flex: none;
+    touch-action: manipulation;
+  }
+
+  .cd:hover,
+  .cd:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  .cd.dragging,
+  .ls.dragging {
+    opacity: 0.4;
+  }
+
+  .cb {
+    padding: 8px 10px;
+  }
+
+  .ct {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .ttl {
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+    flex: 1;
+  }
+
+  .qe {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    opacity: 0;
+    background: var(--surface);
+    color: var(--muted);
+    box-shadow: var(--lst-sh);
+  }
+
+  .cd:hover .qe,
+  .cd:focus-within .qe {
+    opacity: 1;
+  }
+
+  .lf {
+    display: flex;
+    align-items: center;
+    padding: 4px 6px 6px;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .ls:hover .lf,
+  .ls:focus-within .lf,
+  .ls.kl .lf,
+  .ls.el .lf {
+    opacity: 1;
+  }
+
+  .addc {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    font-weight: 500;
+  }
+
+  .addc:hover {
+    background: var(--sunken);
+    color: var(--ink);
+  }
+
+  .cmp {
+    padding: 6px 8px 8px;
+  }
+
+  .cmp textarea {
+    width: 100%;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    background: var(--surface);
+    color: var(--ink);
+    resize: none;
+    min-height: 60px;
+  }
+
+  .cmp .row {
+    margin-top: 8px;
+  }
+
+  .lh {
+    cursor: grab;
+  }
+
   .empty-l {
     padding: 14px 8px;
     text-align: center;
@@ -421,6 +535,13 @@
 
   .bh > * {
     flex: 0 0 auto;
+  }
+}
+
+@media (hover: none) {
+  .lf,
+  .qe {
+    opacity: 1;
   }
 }
 
