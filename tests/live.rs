@@ -313,3 +313,39 @@ async fn the_live_connection_follows_the_same_access_rules() {
     assert_eq!(closed["reason"], "no access");
     assert_eq!(next(&mut ws, "never").await["type"], "socket-closed");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn signing_out_or_a_suspended_company_closes_the_live_connection() {
+    let w = world().await;
+    let mut ws = w.connect(&w.member, None, &w.origin()).await.unwrap();
+    next(&mut ws, "hello").await;
+    let member = w.member.id;
+    w.app
+        .sql(move |c| c.execute("DELETE FROM sessions WHERE user_id = ?1", [member]))
+        .await;
+    w.add_card(&w.owner, "After sign-out").await;
+    assert_eq!(next(&mut ws, "closed").await["reason"], "signed out");
+
+    let mut observer = w.connect(&w.observer, None, &w.origin()).await.unwrap();
+    next(&mut observer, "hello").await;
+    w.app
+        .sql(|c| {
+            c.execute(
+                "UPDATE orgs SET status = 'suspended' WHERE slug = 'company-a'",
+                [],
+            )
+        })
+        .await;
+    w.app
+        .state
+        .dbs
+        .tenant("company-a")
+        .unwrap()
+        .write(|c| {
+            c.execute("UPDATE boards SET description = 'x'", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(next(&mut observer, "closed").await["reason"], "signed out");
+}

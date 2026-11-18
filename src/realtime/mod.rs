@@ -65,7 +65,10 @@ async fn live(
         return Err(ApiError::Forbidden);
     }
 
-    Ok(ws.on_upgrade(move |socket| run(state, board, q.after, socket)))
+    let session = crate::session::cookie_token(&headers)
+        .map(|t| crate::session::hash_token(&t))
+        .ok_or(ApiError::SignIn)?;
+    Ok(ws.on_upgrade(move |socket| run(state, board, session, q.after, socket)))
 }
 
 fn allowed(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
@@ -77,6 +80,18 @@ fn allowed(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
               WHERE b.id = ?1 AND p.deleted_at IS NULL AND p.archived_at IS NULL AND {VISIBLE})"
         ),
         params![board, user],
+        |r| r.get(0),
+    )
+}
+
+pub fn signed_in(c: &Connection, session: &str, org: i64, user: i64) -> rusqlite::Result<bool> {
+    c.query_row(
+        "SELECT EXISTS (SELECT 1 FROM sessions s
+           JOIN users u ON u.id = s.user_id
+           JOIN org_members m ON m.user_id = u.id AND m.org_id = ?2
+           JOIN orgs o ON o.id = m.org_id
+          WHERE s.id_hash = ?1 AND s.user_id = ?3 AND s.expires_at > ?4 AND u.disabled = 0 AND o.status = 'active')",
+        params![session, org, user, crate::session::now()],
         |r| r.get(0),
     )
 }
@@ -143,7 +158,13 @@ async fn fetch(db: &Database, board: i64, user: i64, after: i64) -> Option<Step>
     .ok()
 }
 
-async fn run(state: AppState, board: Board, after: Option<i64>, mut socket: WebSocket) {
+async fn run(
+    state: AppState,
+    board: Board,
+    session: String,
+    after: Option<i64>,
+    mut socket: WebSocket,
+) {
     let db = board.project.db().clone();
     let user = board.user_id();
     let (id, slug) = (board.id, board.project.company.slug.clone());
@@ -152,6 +173,17 @@ async fn run(state: AppState, board: Board, after: Option<i64>, mut socket: WebS
         id: user,
         name: me.name.clone(),
         email: me.email.clone(),
+    };
+    let org = board.project.company.org_id;
+    let control = state.dbs.control().clone();
+    let still_in = move || {
+        let (control, session) = (control.clone(), session.clone());
+        async move {
+            control
+                .read(move |c| Ok(signed_in(c, &session, org, user)?))
+                .await
+                .unwrap_or(false)
+        }
     };
     let mut changes = db.subscribe();
     let (conn, mut presence) = state.live.join(&slug, id, viewer);
@@ -190,6 +222,10 @@ async fn run(state: AppState, board: Board, after: Option<i64>, mut socket: WebS
             tokio::select! {
                 changed = changes.changed() => {
                     if changed.is_err() {
+                        break;
+                    }
+                    if !still_in().await {
+                        let _ = send(&mut socket, json!({ "type": "closed", "reason": "signed out" })).await;
                         break;
                     }
                     match fetch(&db, id, user, last).await {
@@ -232,6 +268,10 @@ async fn run(state: AppState, board: Board, after: Option<i64>, mut socket: WebS
                     }
                 }
                 _ = ping.tick() => {
+                if !still_in().await {
+                    let _ = send(&mut socket, json!({ "type": "closed", "reason": "signed out" })).await;
+                    break;
+                }
                     if socket.send(Message::Ping(Default::default())).await.is_err() {
                         break;
                     }
