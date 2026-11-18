@@ -141,6 +141,9 @@ def check_js_budget(root="web/dist"):
     return fail([f"shipped JavaScript is {total} bytes gzip, over {JS_BUDGET_BYTES}"] if total > JS_BUDGET_BYTES else [])
 
 
+GITHUB_MERGE_COMMITTER = ("GitHub", "noreply@github.com")
+
+
 def message_problems(msg):
     bad = [f"attribution line matching /{p.pattern}/" for p in ATTRIBUTION if p.search(msg)]
     if hits(msg, TOOL_HASHES | PRODUCT_HASHES):
@@ -162,11 +165,14 @@ def check_commits():
         return 0
     owner_name = os.environ.get("TAZKO_OWNER_NAME") or git("config", "user.name").strip()
     owner_email = os.environ.get("TAZKO_OWNER_EMAIL") or git("config", "user.email").strip()
-    log = git("log", "--format=%H%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e")
+    log = git("log", "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e")
     bad = []
     for rec in filter(str.strip, log.split("\x1e")):
-        sha, an, ae, cn, ce, body = rec.strip("\n").split("\x1f", 5)
+        sha, parents, an, ae, cn, ce, body = rec.strip("\n").split("\x1f", 6)
         short = sha[:8]
+        if len(parents.split()) > 1 and (cn, ce.lower()) == GITHUB_MERGE_COMMITTER:
+            bad += [f"{short}: {p}" for p in message_problems(body)]
+            continue
         if (an, ae.lower()) != (owner_name, owner_email.lower()):
             bad.append(f"{short}: author {an} <{ae}> is not the owner {owner_name} <{owner_email}>")
         if (cn, ce.lower()) != (owner_name, owner_email.lower()):

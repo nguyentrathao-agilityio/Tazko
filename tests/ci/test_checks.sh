@@ -47,6 +47,28 @@ expect fail "tool named in message" "$PY" "$CHECKS" commits
 new_repo author; printf 'Seed\n' | commit --author "Someone Else <else@example.com>"
 expect fail "author is not the owner" "$PY" "$CHECKS" commits
 
+gh_merge() { # gh_merge "message": merge branch topic into main as the hosting service does
+  GIT_AUTHOR_NAME="Owner Web" GIT_AUTHOR_EMAIL="123+owner@users.noreply.github.com" \
+  GIT_COMMITTER_NAME="GitHub" GIT_COMMITTER_EMAIL="noreply@github.com" \
+  git merge -q --no-ff topic -m "$1"
+}
+new_repo ghmerge; printf 'Seed\n' | commit; git switch -q -c topic; printf 'Add step\n' | commit
+git switch -q main; gh_merge "Merge pull request #1 from owner/topic"
+expect pass "merge commit made by GitHub" "$PY" "$CHECKS" commits
+
+new_repo ghmergemsg; printf 'Seed\n' | commit; git switch -q -c topic; printf 'Add step\n' | commit
+git switch -q main; gh_merge "$(printf 'Merge pull request #1\n\nCo-Authored-By: %s <bot@example.com>' "$tool_word")"
+expect fail "GitHub merge commit with attribution" "$PY" "$CHECKS" commits
+
+new_repo ghsquash; printf 'Seed\n' | commit
+printf 'Squashed step\n' | GIT_COMMITTER_NAME="GitHub" GIT_COMMITTER_EMAIL="noreply@github.com" commit
+expect fail "non-merge commit by GitHub" "$PY" "$CHECKS" commits
+
+new_repo othermerge; printf 'Seed\n' | commit; git switch -q -c topic; printf 'Add step\n' | commit
+git switch -q main
+GIT_COMMITTER_NAME="Someone Else" GIT_COMMITTER_EMAIL="else@example.com" git merge -q --no-ff topic -m "Merge topic"
+expect fail "merge commit by someone else" "$PY" "$CHECKS" commits
+
 new_repo empty
 expect pass "no commits yet" "$PY" "$CHECKS" commits
 
