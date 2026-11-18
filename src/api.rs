@@ -71,7 +71,13 @@ async fn me(
         })
         .await?;
 
+    let settings = state
+        .dbs
+        .control()
+        .read(move |c| Ok(crate::settings::load(c, user_id)?))
+        .await?;
     Ok(Json(json!({
+        "settings": settings,
         "id": user.user_id,
         "email": user.email,
         "name": user.name,

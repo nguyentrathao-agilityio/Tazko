@@ -16,6 +16,7 @@ pub mod projects;
 pub mod sanitize;
 pub mod search;
 pub mod session;
+pub mod settings;
 pub mod state;
 pub mod tenant;
 pub mod web;
