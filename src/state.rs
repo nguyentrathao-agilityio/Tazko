@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::auth::google::{Endpoints, Google};
 use crate::config::{Secret, Settings};
@@ -10,6 +11,7 @@ pub struct AppState {
     pub dbs: Arc<Databases>,
     pub secret: Arc<Secret>,
     pub google: Arc<Google>,
+    pub started: Instant,
 }
 
 impl AppState {
@@ -28,6 +30,7 @@ impl AppState {
             dbs: Arc::new(dbs),
             secret: Arc::new(secret),
             google: Arc::new(Google::new(endpoints)),
+            started: Instant::now(),
         }
     }
 }

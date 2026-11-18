@@ -55,7 +55,7 @@ async fn a_member_of_company_a_gets_not_found_for_every_company_b_address() {
     }
 
     assert!(
-        !app.dir.path().join("data/orgs/company-b").exists(),
+        !app.state.dbs.is_open("company-b"),
         "company B's file was opened"
     );
 }

@@ -73,15 +73,23 @@ impl TestApp {
     }
 
     pub async fn company(&self, slug: &str, status: &str) -> i64 {
+        let slug_owned = slug.to_string();
         let (slug, status) = (slug.to_string(), status.to_string());
-        self.sql(move |c| {
-            c.execute(
-                "INSERT INTO orgs (slug, name, status) VALUES (?1, upper(?1), ?2)",
-                params![slug, status],
-            )?;
-            Ok(c.last_insert_rowid())
-        })
-        .await
+        let status_now = status.clone();
+        let id = self
+            .sql(move |c| {
+                c.execute(
+                    "INSERT INTO orgs (slug, name, status) VALUES (?1, upper(?1), ?2)",
+                    params![slug, status],
+                )?;
+                Ok(c.last_insert_rowid())
+            })
+            .await;
+        if status_now != "deleted" {
+            self.state.dbs.create_tenant(&slug_owned).unwrap();
+            self.state.dbs.forget(&slug_owned);
+        }
+        id
     }
 
     pub async fn member(&self, org: i64, user: i64, role: &str) {

@@ -168,6 +168,18 @@ fn company_names_in_paths_are_checked() {
     let dir = tempfile::tempdir().unwrap();
     let dbs = Databases::open(layout(dir.path())).unwrap();
     assert!(matches!(dbs.tenant("../escape"), Err(DbError::BadSlug(_))));
+    assert!(matches!(
+        dbs.create_tenant("../escape"),
+        Err(DbError::BadSlug(_))
+    ));
+    assert!(matches!(
+        dbs.tenant("not-created"),
+        Err(DbError::Missing(_))
+    ));
+    assert!(
+        !dir.path().join("data/orgs/not-created").exists(),
+        "opening must not create a company folder"
+    );
     assert!(!dir.path().join("escape").exists());
     dbs.close();
 }
@@ -176,7 +188,7 @@ fn company_names_in_paths_are_checked() {
 async fn each_company_gets_its_own_migrated_file() {
     let dir = tempfile::tempdir().unwrap();
     let dbs = Databases::open(layout(dir.path())).unwrap();
-    let a = dbs.tenant("acme").unwrap();
+    let a = dbs.create_tenant("acme").unwrap();
     assert_eq!(a.path(), dir.path().join("data/orgs/acme/tazko.db"));
     assert!(dir.path().join("data/orgs/acme/files").is_dir());
     let version = a.read(schema_version).await.unwrap();
@@ -192,8 +204,8 @@ async fn each_company_gets_its_own_migrated_file() {
 async fn a_slow_write_in_company_a_does_not_block_company_b() {
     let dir = tempfile::tempdir().unwrap();
     let dbs = Databases::open(layout(dir.path())).unwrap();
-    let a = dbs.tenant("company-a").unwrap();
-    let b = dbs.tenant("company-b").unwrap();
+    let a = dbs.create_tenant("company-a").unwrap();
+    let b = dbs.create_tenant("company-b").unwrap();
 
     let slow = tokio::spawn({
         let a = a.clone();
@@ -245,7 +257,7 @@ async fn a_slow_write_in_company_a_does_not_block_company_b() {
 async fn writes_to_one_company_are_serialised_without_busy_errors() {
     let dir = tempfile::tempdir().unwrap();
     let dbs = Databases::open(layout(dir.path())).unwrap();
-    let a = dbs.tenant("acme").unwrap();
+    let a = dbs.create_tenant("acme").unwrap();
     let jobs: Vec<_> = (0..50)
         .map(|i| {
             let a = a.clone();
@@ -272,7 +284,7 @@ async fn writes_to_one_company_are_serialised_without_busy_errors() {
 async fn readers_cannot_write() {
     let dir = tempfile::tempdir().unwrap();
     let dbs = Databases::open(layout(dir.path())).unwrap();
-    let a = dbs.tenant("acme").unwrap();
+    let a = dbs.create_tenant("acme").unwrap();
     let res = a
         .read(|c| Ok(c.execute("INSERT INTO events (type) VALUES ('x')", [])?))
         .await;
@@ -284,8 +296,51 @@ async fn readers_cannot_write() {
 async fn writes_after_close_report_closed() {
     let dir = tempfile::tempdir().unwrap();
     let dbs = Databases::open(layout(dir.path())).unwrap();
-    let a = dbs.tenant("acme").unwrap();
+    let a = dbs.create_tenant("acme").unwrap();
     dbs.forget("acme");
     assert!(matches!(a.write(|_| Ok(())).await, Err(DbError::Closed)));
+    dbs.close();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn retiring_a_company_drops_its_handle_and_a_new_one_starts_fresh() {
+    let dir = tempfile::tempdir().unwrap();
+    let dbs = Databases::open(layout(dir.path())).unwrap();
+    let old = dbs.create_tenant("acme").unwrap();
+    old.write(|c| Ok(c.execute("INSERT INTO events (type) VALUES ('old')", [])?))
+        .await
+        .unwrap();
+
+    let moved = dbs.retire("acme", || {
+        std::fs::rename(
+            dir.path().join("data/orgs/acme"),
+            dir.path().join("data/trash/acme.1"),
+        )
+    });
+    moved.unwrap();
+    assert!(!dbs.is_open("acme"));
+    assert!(matches!(dbs.tenant("acme"), Err(DbError::Missing(_))));
+    assert!(matches!(old.write(|_| Ok(())).await, Err(DbError::Closed)));
+
+    let fresh = dbs.create_tenant("acme").unwrap();
+    let n: i64 = fresh
+        .read(|c| Ok(c.query_row("SELECT count(*) FROM events", [], |r| r.get(0))?))
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "a new company must not see the old one's data");
+    dbs.close();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn creating_a_company_never_reuses_a_cached_handle() {
+    let dir = tempfile::tempdir().unwrap();
+    let dbs = Databases::open(layout(dir.path())).unwrap();
+    let first = dbs.create_tenant("acme").unwrap();
+    let again = dbs.create_tenant("acme").unwrap();
+    assert!(matches!(
+        first.write(|_| Ok(())).await,
+        Err(DbError::Closed)
+    ));
+    again.write(|_| Ok(())).await.unwrap();
     dbs.close();
 }

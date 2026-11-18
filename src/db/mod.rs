@@ -16,6 +16,7 @@ pub enum DbError {
     Io(std::io::Error),
     TooNew { found: i64, known: i64 },
     BadSlug(String),
+    Missing(String),
     Closed,
 }
 
@@ -29,6 +30,7 @@ impl fmt::Display for DbError {
                 "the database is at schema version {found}, newer than this program knows ({known}); install a newer release"
             ),
             DbError::BadSlug(s) => write!(f, "{s:?} is not a valid company name in a path"),
+            DbError::Missing(s) => write!(f, "the folder for company {s:?} does not exist"),
             DbError::Closed => write!(f, "the database writer has stopped"),
         }
     }

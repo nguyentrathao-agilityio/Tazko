@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getMe, signOut, SignInNeeded, type Me } from '@/api'
+import { AdminConsole } from '@/admin/AdminConsole'
 import { Refused } from '@/auth/Refused'
 import { SignIn } from '@/auth/SignIn'
 import { Home } from '@/Home'
+import { t } from '@/i18n'
 
 function current() {
   return { path: window.location.pathname, search: window.location.search }
 }
 
+type Session = { kind: 'loading' } | { kind: 'down' } | { kind: 'in'; me: Me }
+
 export function App() {
   const [loc, setLoc] = useState(current)
+  const [session, setSession] = useState<Session>({ kind: 'loading' })
+  const publicPage = loc.path === '/signin' || loc.path === '/signin/refused'
 
   useEffect(() => {
     const onPop = () => setLoc(current())
@@ -20,9 +27,39 @@ export function App() {
   const go = useCallback((to: string) => {
     window.history.pushState(null, '', to)
     setLoc(current())
+    window.scrollTo?.(0, 0)
   }, [])
+
+  useEffect(() => {
+    if (publicPage || session.kind === 'in') return
+    const ctrl = new AbortController()
+    getMe(ctrl.signal)
+      .then((me) => setSession({ kind: 'in', me }))
+      .catch((e: unknown) => {
+        if (ctrl.signal.aborted) return
+        if (e instanceof SignInNeeded) {
+          const here = window.location.pathname + window.location.search
+          go(here === '/' ? '/signin' : `/signin?next=${encodeURIComponent(here)}`)
+          return
+        }
+
+        setSession({ kind: 'down' })
+      })
+
+    return () => ctrl.abort()
+  }, [publicPage, session.kind, go])
+
+  const onSignOut = useCallback(async () => {
+    if (session.kind === 'in') await signOut(session.me.csrf_token).catch(() => undefined)
+    setSession({ kind: 'loading' })
+    go('/signin')
+  }, [session, go])
 
   if (loc.path === '/signin') return <SignIn search={loc.search} />
   if (loc.path === '/signin/refused') return <Refused />
-  return <Home go={go} />
+  if (session.kind === 'down') return <p className="p-8 text-center text-muted">{t('app.status.down')}</p>
+  if (session.kind === 'loading') return <p role="status" className="p-8 text-center text-muted">{t('app.status.checking')}</p>
+  if (loc.path === '/admin' || loc.path.startsWith('/admin/'))
+    return <AdminConsole me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} />
+  return <Home me={session.me} go={go} onSignOut={() => void onSignOut()} />
 }

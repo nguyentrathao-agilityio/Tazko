@@ -40,20 +40,51 @@ impl Databases {
     }
 
     pub fn tenant(&self, slug: &str) -> DbResult<Database> {
+        self.open_tenant(slug, false)
+    }
+
+    pub fn create_tenant(&self, slug: &str) -> DbResult<Database> {
+        self.open_tenant(slug, true)
+    }
+
+    fn open_tenant(&self, slug: &str, create: bool) -> DbResult<Database> {
         if !valid_slug(slug) {
             return Err(DbError::BadSlug(slug.to_string()));
         }
 
         let mut open = self.tenants.lock().unwrap();
-        if let Some(db) = open.get(slug) {
+        if create {
+            if let Some(old) = open.remove(slug) {
+                old.close();
+            }
+        } else if let Some(db) = open.get(slug) {
             return Ok(db.clone());
         }
 
         let dir = self.layout.orgs.join(slug);
-        std::fs::create_dir_all(dir.join("files"))?;
-        let db = Database::open(&dir.join("tazko.db"), &TENANT)?;
+        let file = dir.join("tazko.db");
+        if create {
+            std::fs::create_dir_all(dir.join("files"))?;
+        } else if !file.is_file() {
+            return Err(DbError::Missing(slug.to_string()));
+        }
+
+        let db = Database::open(&file, &TENANT)?;
         open.insert(slug.to_string(), db.clone());
         Ok(db)
+    }
+
+    pub fn retire<T>(&self, slug: &str, then: impl FnOnce() -> T) -> T {
+        let mut open = self.tenants.lock().unwrap();
+        if let Some(db) = open.remove(slug) {
+            db.close();
+        }
+
+        then()
+    }
+
+    pub fn is_open(&self, slug: &str) -> bool {
+        self.tenants.lock().unwrap().contains_key(slug)
     }
 
     pub fn forget(&self, slug: &str) {
