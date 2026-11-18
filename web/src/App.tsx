@@ -5,6 +5,7 @@ import { Refused } from '@/auth/Refused'
 import { SignIn } from '@/auth/SignIn'
 import { CompanyRoutes } from '@/company/CompanyRoutes'
 import { t } from '@/i18n'
+import { useApplySettings } from '@/settings/apply'
 
 function current() {
   return { path: window.location.pathname, search: window.location.search }
@@ -15,6 +16,7 @@ type Session = { kind: 'loading' } | { kind: 'down' } | { kind: 'in'; me: Me }
 export function App() {
   const [loc, setLoc] = useState(current)
   const [session, setSession] = useState<Session>({ kind: 'loading' })
+  useApplySettings()
   const publicPage = loc.path === '/signin' || loc.path === '/signin/refused'
 
   useEffect(() => {
@@ -62,5 +64,5 @@ export function App() {
   if (session.kind === 'loading') return <p role="status" className="p-8 text-center text-muted">{t('app.status.checking')}</p>
   if (loc.path === '/admin' || loc.path.startsWith('/admin/'))
     return <AdminConsole me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} />
-  return <CompanyRoutes me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} />
+  return <CompanyRoutes me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} onProfile={() => setSession({ kind: 'loading' })} />
 }

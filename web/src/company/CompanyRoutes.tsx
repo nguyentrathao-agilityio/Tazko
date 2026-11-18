@@ -11,6 +11,7 @@ import { ProjectPage } from '@/projects/ProjectPage'
 import { BoardPage } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
 import { SearchHost } from '@/search/Search'
+import { SettingsPage } from '@/settings/SettingsPage'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
@@ -22,8 +23,8 @@ function Centered({ title, body, children }: { title: string; body: string; chil
   )
 }
 
-export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: string; go: Go; onSignOut: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings)?|\/b\/(\d+)(?:\/c\/(\d+))?)?\/?$/.exec(path)
+export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
+  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings)?|\/b\/(\d+)(?:\/c\/(\d+))?|\/me(\/appearance|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const company = me.companies.find((c) => c.slug === slug)
   const fallback = me.companies.find((c) => c.slug === lastCompany()) ?? me.companies[0]
@@ -74,12 +75,16 @@ export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: strin
     )
 
   const projectId = match[3] ? Number(match[3]) : null
-  const section = projectId ? 'home' : match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'
+  const mine = match[2]?.startsWith('/me') ?? false
+  const section = mine ? 'me' : projectId ? 'home' : match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'
   const tab = match[4] === '/members' ? 'members' : match[4] === '/settings' ? 'settings' : 'boards'
   return (
     <CompanyShell me={me} company={company} active={section} go={go} onSignOut={onSignOut}>
       {projectId && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
+      {section === 'me' && (
+        <SettingsPage me={me} company={company} tab={match[7] === '/appearance' ? 'appearance' : match[7] === '/sessions' ? 'sessions' : 'profile'} go={go} onProfile={onProfile} />
+      )}
       {section === 'settings' && <CompanySettings key={company.slug} company={company} />}
       {section === 'projects' && <ManageProjects key={company.slug} company={company} />}
       <SearchHost company={company} go={go} />
