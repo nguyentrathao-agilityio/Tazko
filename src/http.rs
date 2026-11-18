@@ -9,8 +9,6 @@ use crate::web::{self, Asset};
 
 const RESERVED: [&str; 4] = ["/api/", "/auth/", "/cli/", "/ws"];
 
-/// Builds the HTTP router: `/health`, then the embedded web app with a
-/// single-page fallback for every other GET.
 pub fn router() -> Router {
     Router::new()
         .route("/health", get(health))

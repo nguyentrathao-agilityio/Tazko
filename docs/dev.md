@@ -42,6 +42,17 @@ This copies `.env.example` to `.env.local` with owner-only permissions and never
 
 Secrets go only into `.env.local`. Never paste them into the repository, a commit, a test fixture, a log or a chat.
 
+How `tazko serve` finds its settings, first match wins:
+
+1. `--env-file <path>`
+2. the file named by `TAZKO_ENV_FILE`
+3. `.env.local` in the current folder
+4. `/etc/tazko/tazko.env`
+
+`TAZKO_*` variables already set in the environment override the file. `TAZKO_PUBLIC_URL`, `TAZKO_DATA_DIR`, `TAZKO_GOOGLE_CLIENT_ID` and `TAZKO_GOOGLE_CLIENT_SECRET` are required; the server refuses to start and lists every missing or invalid value. Email is optional, but `TAZKO_SMTP_HOST` and `TAZKO_MAIL_FROM` are both needed once any email value is set. `TAZKO_SECRET`, when set, must be at least 32 characters.
+
+On start the server creates, when missing, the data folder (owner-only), `control.db`, `orgs/` and `trash/`, and the `secret` file with mode 600. An existing `secret` file readable by anyone else stops the start with a message to `chmod 600` it. Secret values are never printed; the start-up line shows only the address, public URL, data folder, settings file and whether email is on.
+
 ## Google sign-in for localhost
 
 Use a separate OAuth client for local work, never the one for the shared server.
