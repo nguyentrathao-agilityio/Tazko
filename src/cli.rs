@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
@@ -15,23 +15,22 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Run the web server
+    #[command(about = "Run the web server")]
     Serve {
-        /// Address to listen on
-        #[arg(long, default_value = "127.0.0.1")]
-        host: IpAddr,
-        /// Port to listen on
-        #[arg(long, default_value_t = 8791)]
-        port: u16,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Settings file (default: TAZKO_ENV_FILE, then .env.local, then /etc/tazko/tazko.env)"
+        )]
+        env_file: Option<PathBuf>,
     },
-    /// Manage super admins
+    #[command(about = "Manage super admins")]
     Admin {
-        /// Email of the person to make a super admin
-        #[arg(long)]
+        #[arg(long, help = "Email of the person to make a super admin")]
         email: Option<String>,
     },
-    /// Back up or restore the data folder
+    #[command(about = "Back up or restore the data folder")]
     Backup,
-    /// Check every database and file
+    #[command(about = "Check every database and file")]
     Check,
 }
