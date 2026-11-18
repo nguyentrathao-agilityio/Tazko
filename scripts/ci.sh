@@ -15,6 +15,8 @@ step "secrets";              run "$PY" scripts/checks.py secrets
 step "commits";              run "$PY" scripts/checks.py commits
 step "javascript budget";    run "$PY" scripts/checks.py js-budget web/dist
 step "tests for the checks"; run bash tests/ci/test_checks.sh
+step "local dev target";     run bash scripts/dev-env.sh check
+step "tests for dev-env";    run bash tests/ci/test_dev_env.sh
 
 if [ -f Cargo.toml ]; then
   step "rust"
