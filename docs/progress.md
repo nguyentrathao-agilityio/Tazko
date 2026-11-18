@@ -26,6 +26,7 @@ One entry per step: what was built, how its checks were verified, and anything l
 | 2.6 | 18 Nov 2026 | Search and filter: `cards_fts` (FTS5, accents ignored, Vietnamese đ folded) kept in step by triggers on card titles and description text; `GET /search` with words (prefix match), `@member`, `@me`, `#label`, `is:overdue`, `is:open`, `is:done`, `is:archived`, `has:attachments`; search dialog on / and the Search button with arrow keys and Enter. Board filter: keyword, members (none, me, each), labels, due date; filter bar with the match count and per-list counts; Q toggles "only my cards". | `search_never_returns_cards_from_boards_the_person_cannot_see`: restricted boards, projects the person is not in, company owners outside a project and another company never appear, for words, operators, archive and board-name results; operator test; web tests for /, Q and the filter. | `has:attachments` matches nothing until attachments exist (M3). |
 | 2.7 | 18 Nov 2026 | Keyboard, selection and zen: ` or ? shortcut list; J K H L select cards and lists (arrows once a card is selected, and in zen); Enter opens; E quick edit; Space done; A D T M members, dates, labels, move; X archive with Undo; 1 to 8 toggle labels; N new card in the selected list; F filter; / search; Q my cards; Z zen; with a card open J K H L go to the next card; Esc closes one layer, then clears the selection, then leaves zen. Zen hides the board bars, shows a strip at the top edge (Just mine, Hide done, density comfortable, compact or minimal, search, Exit), and opens cards as a 520 px side panel. Zen and density are remembered per person (`/api/v1/me/settings`). | Web tests for every shortcut, one test that none fires while typing in a field and one while a popover is open; settings test for remembering zen. Checked in the browser. | V (vote) waits for voting in M5. |
 | 2.8 | 18 Nov 2026 | Personal settings: Profile (display name, job title, photo choice, language, your companies), Appearance (theme, zoom 80 to 150 % of the whole app including dialogs, card density, labels as bars, zen defaults, time zone with Detect, date format, 12 or 24 hours, first day of the week, reduce motion) and Sessions (sign out one device or all others). Stored per person in `control.db` with an allow-list of keys and values; applied at once in the browser; dates on cards follow the time zone and formats. | `settings_and_profile_are_the_same_in_every_company`: one person in two companies sees the same settings and the same name in both; bad values refused. Sessions test (cannot end the current one or someone else's). Web tests for theme, zoom, date format and both companies. Dark theme checked in the browser. | Vietnamese interface, notifications, tokens and command line tabs are later. The time zone starts as UTC until the person picks one or presses Detect. |
+| 2.11 | 18 Nov 2026 | M2 acceptance on localhost (below): the checks Claude can run. Steps 2.9 (import and export) and 2.10 (undo, card numbers, phone layout) were proposed and not built. The owner runs a real sprint board and accepts M2. | `scripts/ci.sh` on `dev` at `db0a575` (PRs #14 to #23 merged): `ci: ok`, JS 126.3 KB. Server start to `/health` in 0.36 s; board ready in under 0.1 s in a fresh browser; card dialog geometry measured at 1440×900 and 1280×720. | Owner: real sprint board; import/export (2.9) not built. |
 
 ## M1 acceptance on localhost
 
@@ -44,3 +45,29 @@ Checked on 18 Nov 2026 against the M1 "Done when" list in `plan.md`, on `dev` at
 | The local target runs end to end with `tazko dev seed` | Not built | The local target runs end to end (serve, admin, Google sign-in). `tazko dev seed` does not exist yet, although `docs/dev.md` describes it; the prototype's sample data needs the M2 boards, lists and cards, so it is built with M2. |
 
 Deferred to later: step 1.11 on a test VM (setup, release and rollback, timers), the tunnel and the shared machine, and `tazko dev seed` (with M2).
+
+## M2 acceptance on localhost
+
+Checked on 18 Nov 2026 against the M2 "Done when" list in `plan.md` and the step 2.11 checks, on `dev` at `db0a575`, release build, `127.0.0.1:8791`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| A team runs a real sprint board end to end | Owner | Needs real people and a real sprint; everything it uses is built and tested below. |
+| An observer cannot edit or comment | Pass | `observers_cannot_change_anything`, `observers_cannot_change_boards_or_lists`, `cards_stay_on_their_board_and_observers_cannot_change_them`, `observers_cannot_edit_or_comment_and_people_edit_only_their_own_comments`; web tests hide edit controls and the comment box. |
+| A company member not in a project cannot see it; a company owner can archive, delete and add owners but cannot open its boards until added | Pass | `every_role_gets_exactly_the_access_the_plan_gives_it` (6 roles × 12 actions), `a_company_owner_enters_a_project_only_by_adding_themselves_and_it_is_logged`. |
+| A company member who is not an owner is refused when creating a project | Pass | `a_company_member_cannot_create_a_project_or_see_one_they_are_not_in`. |
+| Inviting a new email to a project lets them sign in, join the company and see only that project | Pass | `someone_invited_to_one_project_joins_the_company_and_sees_only_that_project`. |
+| A restricted board is hidden from project members who were not added | Pass | `people_not_on_a_restricted_board_cannot_see_it_even_by_address`; search too: `search_never_returns_cards_from_boards_the_person_cannot_see`. |
+| Moving 200 cards creates no rank collisions | Pass | `moving_200_cards_makes_no_ordering_collisions`. |
+| Importing an export file of 124 cards and exporting again | Not built | Import and export are step 2.9, which was proposed and not agreed. |
+| Description HTML is sanitised on the server | Pass | `sanitize::tests::strips_scripts_and_event_handlers` (21 inputs), `rich_text_is_cleaned_on_the_server`. |
+| Theme, zoom or time zone apply at once and stay set on another device | Pass | Web settings tests; `settings_and_profile_are_the_same_in_every_company`, `zen_choices_are_remembered_for_the_person`. |
+| With the card open the comment box is visible without scrolling, the columns scroll separately, Card menu and Close never cover comments | Pass | Measured in a browser at 1440×900 and 1280×720: comment box inside the window, both columns `overflow-y: auto`, neither button overlaps the comments section. |
+| Z hides the header, board header and filter bar; Z or Esc restores them | Pass on the board | `keys.test.tsx` zen test. Table and dashboard views are M4. |
+| Every shortcut works and none fires while editing | Pass | `keys.test.tsx` (one test per shortcut, 20 keys while typing, keys with a popover open), `search.test.tsx` for / and Q. V waits for voting (M5). |
+| Each change writes one event | Pass | `each_change_writes_exactly_one_event_in_its_transaction` (56 changes). |
+| Cold start under a second | Pass | Release binary from start to a healthy `/health` in 0.36 s; a board with cards ready 0.1 s after navigation in a fresh browser. |
+| Screens match Prototype v2 | Pass | Side by side at 1440×900, light and dark (PR #23); tokens and widths identical. Font stays the system stack (open question 1). |
+
+Waiting for the owner: run a real sprint board with the team, then accept M2. Not built: import and export (2.9), undo, card numbers and phone layout (2.10).
+
