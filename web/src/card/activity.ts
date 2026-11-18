@@ -74,7 +74,51 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'edited a comment'
     case 'comment_deleted':
       return 'deleted a comment'
+    case 'cards_created':
+      return `added ${Array.isArray(p.cards) ? p.cards.length : 'several'} cards to ${list(p.list)}`
+    case 'cards_moved':
+      return `moved all cards from ${list(p.from_list)} to ${list(p.to_list)}`
+    case 'cards_archived':
+      return `archived all cards in ${list(p.list)}`
+    case 'board_created':
+      return p.copied_from ? 'created this board as a copy' : 'created this board'
+    case 'board_updated':
+      return 'changed the board'
+    case 'board_closed':
+      return 'closed this board'
+    case 'board_reopened':
+      return 'reopened this board'
+    case 'board_access_changed':
+      return p.restricted ? 'restricted this board to chosen people' : 'opened this board to the whole project'
+    case 'list_created':
+      return `added the list ${str(p.title)}`
+    case 'list_renamed':
+      return `renamed the list ${str(p.from)} to ${str(p.to)}`
+    case 'list_moved':
+      return `moved the list ${list(p.list)}`
+    case 'list_copied':
+      return `copied a list as ${str(p.title)}`
+    case 'list_archived':
+      return `archived the list ${str(p.title)}`
+    case 'list_restored':
+      return `restored the list ${str(p.title)}`
+    case 'list_sorted':
+      return `sorted the list ${list(p.list)}`
+    case 'label_created':
+      return `created the label ${str(p.name)}`
+    case 'label_changed':
+      return 'changed a label'
+    case 'label_deleted':
+      return 'deleted a label'
     default:
       return e.type.replace(/_/g, ' ')
   }
+}
+
+export type BoardEntry = ActivityEntry & { card: { id: number; title: string | null } | null }
+
+export function describeBoard(e: BoardEntry, ctx: Ctx): string {
+  const text = describe(e, ctx)
+  const title = e.card?.title
+  return title ? text.replace('this card', `“${title}”`) : text
 }

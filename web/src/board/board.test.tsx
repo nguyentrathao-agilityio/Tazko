@@ -57,6 +57,13 @@ beforeEach(() => {
       if (url === '/api/v1/me') return json(me)
       if (method !== 'GET') return method === 'POST' ? json({ id: 9 }, 201) : new Response(null, { status: 204 })
       if (url === '/api/v1/c/acme/boards/7') return json(board())
+      if (url === '/api/v1/c/acme/boards/7/activity')
+        return json({
+          entries: [
+            { id: 9, type: 'card_moved', actor: { id: 2, name: 'Jo Lee', email: 'jo@example.com' }, payload: { from_list: 11, to_list: 12 }, created_at: 1_700_000_000, card: { id: 21, title: 'Write copy' } },
+            { id: 8, type: 'list_created', actor: null, payload: { title: 'Doing' }, created_at: 1_699_000_000, card: null },
+          ],
+        })
       if (url === '/api/v1/c/acme/boards/7/archive') return json({ lists: [{ id: 13, title: 'Old' }], cards: [] })
       return json({ error: 'not found' }, 404)
     }),
@@ -156,5 +163,12 @@ describe('board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Card name (A to Z)' }))
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/sort'))).toBe(true))
     expect(calls.find((c) => c.url.endsWith('/sort'))?.body).toEqual({ by: 'name' })
+  })
+  it('shows board activity from the board menu', async () => {
+    open('/c/acme/b/7')
+    fireEvent.click(await screen.findByRole('button', { name: 'Board menu' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }))
+    expect(await screen.findByText(/moved “Write copy” from To do to Doing/)).toBeTruthy()
+    expect(screen.getByText(/added the list Doing/)).toBeTruthy()
   })
 })

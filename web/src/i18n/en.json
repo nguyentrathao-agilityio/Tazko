@@ -460,5 +460,7 @@
   "editor.apply": "Apply",
   "editor.markdownLabel": "Description in Markdown",
   "editor.markdownHint": "Write Markdown: **bold**, _italic_, - lists, [links](https://…). It replaces the description when saved.",
-  "editor.saveHint": "Ctrl+Enter to save"
+  "editor.saveHint": "Ctrl+Enter to save",
+  "boardMenu.activity": "Activity",
+  "boardMenu.noActivity": "No activity yet."
 }

@@ -5,9 +5,13 @@ import { Icon, type IconName } from '@/ui/Icon'
 import { useLoad } from '@/ui/useLoad'
 import { background, backgroundNames } from '@/projects/look'
 import { Access } from '@/board/Access'
+import { describeBoard, type BoardEntry } from '@/card/activity'
+import { ago } from '@/card/look'
+import { displayName } from '@/ui/names'
+import { Avatar } from '@/ui/people'
 import type { BoardData } from '@/board/types'
 
-type Page = 'main' | 'about' | 'bg' | 'arch' | 'access' | 'copy'
+type Page = 'main' | 'about' | 'bg' | 'arch' | 'access' | 'copy' | 'activity'
 
 export function BoardMenu({
   board,
@@ -42,6 +46,7 @@ export function BoardMenu({
     arch: t('boardMenu.archived'),
     access: t('boardMenu.access'),
     copy: t('boardMenu.copy'),
+    activity: t('boardMenu.activity'),
   }
   const item = (to: Page, icon: IconName, label: string) => (
     <button type="button" className="mi" onClick={() => setPage(to)}>
@@ -71,6 +76,7 @@ export function BoardMenu({
             {item('about', 'info', t('boardMenu.about'))}
             {board.can.edit && item('bg', 'palette', t('boardMenu.background'))}
             {item('arch', 'archive', t('boardMenu.archived'))}
+            {item('activity', 'act', t('boardMenu.activity'))}
             {board.can.manage && item('access', 'lock', t('boardMenu.access'))}
             {board.can.create_board && (
               <>
@@ -112,6 +118,7 @@ export function BoardMenu({
         )}
         {page === 'arch' && <Archived board={board} base={base} run={run} />}
         {page === 'access' && <Access board={board} base={base} run={run} />}
+        {page === 'activity' && <Activity board={board} base={base} />}
         {page === 'copy' && (
           <form
             onSubmit={(e) => {
@@ -185,6 +192,47 @@ function Archived({ board, base, run }: { board: BoardData; base: string; run: (
           )}
         </div>
       ))}
+    </>
+  )
+}
+
+function Activity({ board, base }: { board: BoardData; base: string }) {
+  const [older, setOlder] = useState<BoardEntry[]>([])
+  const [done, setDone] = useState(false)
+  const path = `${base}/activity`
+  const { data } = useLoad(() => api<{ entries: BoardEntry[] }>('GET', path), path)
+  const entries = [...(data?.entries ?? []), ...older]
+  const ctx = { lists: board.lists, labels: board.labels, people: board.people }
+  const more = () => {
+    const last = entries[entries.length - 1]
+    if (!last) return
+    void api<{ entries: BoardEntry[] }>('GET', `${path}?before=${last.id}`).then((r) => {
+      setOlder((o) => [...o, ...r.entries])
+      if (r.entries.length < 50) setDone(true)
+    })
+  }
+
+  return (
+    <>
+      {data && entries.length === 0 && <p className="hint">{t('boardMenu.noActivity')}</p>}
+      {entries.map((e) => {
+        const who = e.actor ? displayName(e.actor.name, e.actor.email) : t('card.someone')
+        return (
+          <div key={e.id} className="actl">
+            <Avatar name={who} />
+            <div>
+              <b style={{ color: 'var(--ink)' }}>{who}</b> {describeBoard(e, ctx)}
+              <br />
+              <small>{ago(e.created_at)}</small>
+            </div>
+          </div>
+        )
+      })}
+      {data && data.entries.length === 50 && !done && (
+        <button type="button" className="more" onClick={more}>
+          {t('common.loadMore')}
+        </button>
+      )}
     </>
   )
 }
