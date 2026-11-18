@@ -37,10 +37,13 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if let Err(e) = config::server_secret(&settings, &layout) {
-        eprintln!("tazko: cannot load the server secret: {e}");
-        return ExitCode::FAILURE;
-    }
+    let secret = match config::server_secret(&settings, &layout) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("tazko: cannot load the server secret: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let dbs = match Databases::open(layout) {
         Ok(d) => d,
@@ -52,7 +55,7 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
 
     let addr = SocketAddr::new(settings.host, settings.port);
     let banner = config::startup_message(&settings);
-    let state = AppState::new(settings, dbs);
+    let state = AppState::new(settings, dbs, secret);
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
