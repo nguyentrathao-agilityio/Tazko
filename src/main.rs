@@ -6,6 +6,7 @@ use clap::Parser;
 use tazko::cli::{Cli, Command};
 use tazko::config::{self, DataLayout};
 use tazko::db::Databases;
+use tazko::state::AppState;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -50,6 +51,8 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
     };
 
     let addr = SocketAddr::new(settings.host, settings.port);
+    let banner = config::startup_message(&settings);
+    let state = AppState::new(settings, dbs);
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
@@ -57,17 +60,17 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("{}", config::startup_message(&settings));
-    if let Err(e) = axum::serve(listener, tazko::http::router())
+    println!("{banner}");
+    if let Err(e) = axum::serve(listener, tazko::http::router(state.clone()))
         .with_graceful_shutdown(shutdown())
         .await
     {
         eprintln!("tazko: server error: {e}");
-        dbs.close();
+        state.dbs.close();
         return ExitCode::FAILURE;
     }
 
-    dbs.close();
+    state.dbs.close();
     ExitCode::SUCCESS
 }
 

@@ -5,14 +5,17 @@ use axum::response::{IntoResponse, Json, Response};
 use axum::routing::get;
 use serde_json::json;
 
+use crate::state::AppState;
 use crate::web::{self, Asset};
 
 const RESERVED: [&str; 4] = ["/api/", "/auth/", "/cli/", "/ws"];
 
-pub fn router() -> Router {
+pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .merge(crate::api::routes())
         .fallback(static_file)
+        .with_state(state)
 }
 
 async fn health() -> Json<serde_json::Value> {

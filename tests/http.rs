@@ -1,18 +1,23 @@
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use common::TestApp;
 use http_body_util::BodyExt;
-use tazko::{http::router, web};
+use tazko::web;
 use tower::ServiceExt;
+
+async fn send(req: Request<Body>) -> axum::response::Response {
+    let app = TestApp::new();
+    app.router().oneshot(req).await.unwrap()
+}
 
 async fn get(path: &str, accept_br: bool) -> axum::response::Response {
     let mut req = Request::get(path);
     if accept_br {
         req = req.header(header::ACCEPT_ENCODING, "gzip, deflate, br");
     }
-    router()
-        .oneshot(req.body(Body::empty()).unwrap())
-        .await
-        .unwrap()
+    send(req.body(Body::empty()).unwrap()).await
 }
 
 async fn text(res: axum::response::Response) -> String {
@@ -97,6 +102,6 @@ async fn hashed_assets_are_cached_for_a_year() {
 #[tokio::test]
 async fn non_get_requests_to_the_app_are_refused() {
     let req = Request::post("/").body(Body::empty()).unwrap();
-    let res = router().oneshot(req).await.unwrap();
+    let res = send(req).await;
     assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
