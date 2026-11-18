@@ -73,7 +73,7 @@ async fn a_member_reaches_their_own_company_file() {
     let body = body_json(res).await;
     assert_eq!(body["slug"], "company-a");
     assert_eq!(body["role"], "member");
-    assert_eq!(body["schema_version"], 1);
+    assert_eq!(body["schema_version"], tazko::db::TENANT.latest());
     assert!(
         app.dir
             .path()

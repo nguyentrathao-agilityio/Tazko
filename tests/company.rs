@@ -279,10 +279,7 @@ async fn a_person_in_two_companies_only_sees_the_chosen_ones_data() {
 
     let a_db = w.app.state.dbs.tenant("company-a").unwrap();
     a_db.write(|c| {
-        c.execute_batch(
-            "CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT NOT NULL, deleted_at INTEGER);
-             INSERT INTO projects (name) VALUES ('Only in A');",
-        )?;
+        c.execute_batch("INSERT INTO projects (name) VALUES ('Only in A');")?;
         Ok(())
     })
     .await
@@ -358,7 +355,8 @@ async fn a_person_in_two_companies_only_sees_the_chosen_ones_data() {
         .await,
     )
     .await;
-    assert_eq!(pa["projects"], json!([{ "name": "Only in A" }]));
+    assert_eq!(pa["projects"][0]["name"], "Only in A");
+    assert_eq!(pa["projects"].as_array().unwrap().len(), 1);
     assert_eq!(pb["projects"], json!([]));
 }
 
