@@ -280,6 +280,19 @@ pub async fn delete(
             Ok(Ok(name))
         })
         .await??;
+    let org_id = co.org_id;
+    state
+        .dbs
+        .control()
+        .write(move |c| {
+            c.execute(
+                "UPDATE invites SET revoked_at = ?3
+                 WHERE org_id = ?1 AND project_id = ?2 AND revoked_at IS NULL AND project_applied_at IS NULL",
+                params![org_id, id, now()],
+            )?;
+            Ok(())
+        })
+        .await?;
     audit_project(
         &state,
         by,

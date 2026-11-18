@@ -527,6 +527,58 @@ async fn update(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+pub async fn forget_member(
+    state: &AppState,
+    slug: &str,
+    org_id: i64,
+    user_id: i64,
+) -> Result<(), ApiError> {
+    state
+        .dbs
+        .control()
+        .write(move |c| {
+            c.execute(
+                "UPDATE invites SET revoked_at = ?3
+                 WHERE org_id = ?1 AND project_id IS NOT NULL AND revoked_at IS NULL AND project_applied_at IS NULL
+                   AND email = (SELECT email FROM users WHERE id = ?2)",
+                params![org_id, user_id, now()],
+            )?;
+            Ok(())
+        })
+        .await?;
+    let db = match state.dbs.tenant(slug) {
+        Ok(db) => db,
+        Err(crate::db::DbError::Missing(_)) => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    db.write(move |c| {
+        let tx = c.transaction()?;
+        let projects: Vec<(i64, String)> = {
+            let mut stmt =
+                tx.prepare("SELECT project_id, role FROM project_members WHERE user_id = ?1")?;
+            stmt.query_map([user_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?
+        };
+        for (project, role) in projects {
+            tx.execute(
+                "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2",
+                params![project, user_id],
+            )?;
+            events::record(
+                &tx,
+                user_id,
+                "member_removed",
+                At::project(project),
+                json!({ "user": user_id, "role": role, "reason": "left the company" }),
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    })
+    .await?;
+    Ok(())
+}
+
 pub async fn purge(db: &Database, now: i64) -> Result<usize, ApiError> {
     Ok(db
         .write(move |c| {

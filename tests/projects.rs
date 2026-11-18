@@ -682,3 +682,124 @@ async fn project_changes_need_the_csrf_token() {
         .await;
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn leaving_the_company_ends_project_access_even_after_coming_back() {
+    let w = world().await;
+    let p = w.project;
+    let res = call(
+        &w.app,
+        &w.company_owner,
+        Method::DELETE,
+        &format!("{C}/members/{}", w.member.id),
+        None,
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let a: i64 = w
+        .app
+        .sql(|c| {
+            c.query_row("SELECT id FROM orgs WHERE slug = 'company-a'", [], |r| {
+                r.get(0)
+            })
+        })
+        .await;
+    w.app.member(a, w.member.id, "member").await;
+    assert_eq!(
+        w.call(R::Member, Method::GET, &format!("{C}/projects/{p}"), None)
+            .await,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn deleting_a_project_revokes_its_open_invites() {
+    let w = world().await;
+    let p = w.project;
+    w.call(
+        R::Owner,
+        Method::POST,
+        &format!("{C}/projects/{p}/invites"),
+        Some(json!({ "email": "later@example.com", "role": "owner" })),
+    )
+    .await;
+    w.call(
+        R::CompanyOwner,
+        Method::DELETE,
+        &format!("{C}/projects/{p}"),
+        Some(json!({ "confirm": "Website relaunch" })),
+    )
+    .await;
+    let open: i64 = w
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT count(*) FROM invites WHERE email = 'later@example.com' AND revoked_at IS NULL",
+                [],
+                |r| r.get(0),
+            )
+        })
+        .await;
+    assert_eq!(open, 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn members_who_may_invite_only_revoke_their_own_non_owner_invites() {
+    let w = world().await;
+    let p = w.project;
+    w.call(
+        R::Owner,
+        Method::PATCH,
+        &format!("{C}/projects/{p}"),
+        Some(json!({ "members_invite": true })),
+    )
+    .await;
+    let path = format!("{C}/projects/{p}/invites");
+    w.call(
+        R::Owner,
+        Method::POST,
+        &path,
+        Some(json!({ "email": "boss2@example.com", "role": "owner" })),
+    )
+    .await;
+    w.call(
+        R::Member,
+        Method::POST,
+        &path,
+        Some(json!({ "email": "mine@example.com", "role": "member" })),
+    )
+    .await;
+    let ids: Vec<(i64, String)> = w
+        .app
+        .sql(|c| {
+            let mut s = c.prepare(
+                "SELECT id, email FROM invites WHERE project_id IS NOT NULL ORDER BY id",
+            )?;
+            let r = s
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(r)
+        })
+        .await;
+    let id_of = |e: &str| ids.iter().find(|(_, m)| m == e).unwrap().0;
+    assert_eq!(
+        w.call(
+            R::Member,
+            Method::DELETE,
+            &format!("{path}/{}", id_of("boss2@example.com")),
+            None
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        w.call(
+            R::Member,
+            Method::DELETE,
+            &format!("{path}/{}", id_of("mine@example.com")),
+            None
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+}

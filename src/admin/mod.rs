@@ -852,6 +852,7 @@ async fn remove_member(
     UrlPath((slug, user_id)): UrlPath<(String, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
+    let slug_for_projects = slug.clone();
     let outcome = state
         .dbs
         .control()
@@ -880,10 +881,11 @@ async fn remove_member(
                 json!({ "role": role }),
             )?;
             tx.commit()?;
-            Ok(Outcome::Done(()))
+            Ok(Outcome::Done(o.id))
         })
         .await?;
-    finish(outcome)?;
+    let org_id = finish(outcome)?;
+    crate::projects::forget_member(&state, &slug_for_projects, org_id, user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -286,5 +286,9 @@ async fn remove_member(
             Ok(Change::Done)
         })
         .await?;
+    if matches!(change, Change::Done) {
+        crate::projects::forget_member(&state, &owner.0.slug, org_id, user_id).await?;
+    }
+
     finish(change)
 }

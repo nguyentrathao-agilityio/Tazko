@@ -207,22 +207,27 @@ pub async fn revoke(
     let invite = path_id(&params, "invite")?;
     let org_id = project.company.org_id;
     let id = project.id;
+    let manager = project.can(Act::Manage);
     let done = state
         .dbs
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let email: Option<String> = tx
+            let found: Option<(String, String, Option<i64>)> = tx
                 .query_row(
-                    "SELECT email FROM invites WHERE id = ?1 AND org_id = ?2 AND project_id = ?3
+                    "SELECT email, project_role, created_by FROM invites WHERE id = ?1 AND org_id = ?2 AND project_id = ?3
                      AND accepted_at IS NULL AND revoked_at IS NULL",
                     params![invite, org_id, id],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
                 .optional()?;
-            let Some(email) = email else {
-                return Ok(false);
+            let Some((email, role, created_by)) = found else {
+                return Ok(Err(ApiError::NotFound));
             };
+            if !manager && (role == "owner" || created_by != Some(by)) {
+                return Ok(Err(ApiError::Forbidden));
+            }
+
             tx.execute(
                 "UPDATE invites SET revoked_at = ?2 WHERE id = ?1",
                 params![invite, now()],
@@ -236,14 +241,11 @@ pub async fn revoke(
                 json!({ "invite": invite, "project": id }),
             )?;
             tx.commit()?;
-            Ok(true)
+            Ok(Ok(()))
         })
         .await?;
-    if done {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err(ApiError::NotFound)
-    }
+    done?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn owners(c: &Connection, project: i64) -> rusqlite::Result<i64> {
