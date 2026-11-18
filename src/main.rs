@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use tazko::cli::{Cli, Command};
 use tazko::config::{self, DataLayout};
+use tazko::db::Databases;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -40,6 +41,14 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    let dbs = match Databases::open(layout) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("tazko: cannot open control.db: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
     let addr = SocketAddr::new(settings.host, settings.port);
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
@@ -54,9 +63,11 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
         .await
     {
         eprintln!("tazko: server error: {e}");
+        dbs.close();
         return ExitCode::FAILURE;
     }
 
+    dbs.close();
     ExitCode::SUCCESS
 }
 
