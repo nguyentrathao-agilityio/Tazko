@@ -4,7 +4,7 @@ use axum::extract::{FromRequestParts, Path};
 use axum::http::request::Parts;
 use rusqlite::{OptionalExtension, params};
 
-use crate::db::{Database, valid_slug};
+use crate::db::{Database, DbError, valid_slug};
 use crate::error::ApiError;
 use crate::session::{self, SessionUser};
 use crate::state::AppState;
@@ -103,7 +103,11 @@ impl FromRequestParts<AppState> for Company {
         } else {
             CompanyRole::Member
         };
-        let db = state.dbs.tenant(&slug)?;
+        let db = match state.dbs.tenant(&slug) {
+            Ok(db) => db,
+            Err(DbError::Missing(_)) => return Err(ApiError::NotFound),
+            Err(e) => return Err(e.into()),
+        };
 
         Ok(Company {
             org_id,

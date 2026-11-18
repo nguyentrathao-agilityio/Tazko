@@ -548,6 +548,7 @@ async fn trash_is_emptied_after_thirty_days() {
         "the short name is free again"
     );
     assert_eq!(trash::deleted_at("acme.1700000000"), Some(1_700_000_000));
+    assert_eq!(trash::deleted_at("acme.1700000000.1"), Some(1_700_000_000));
     assert_eq!(trash::deleted_at("noise"), None);
 }
 
@@ -733,4 +734,71 @@ fn the_command_line_makes_the_first_super_admin() {
         )
         .unwrap();
     assert_eq!((sup, audits), (true, 1));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_left_over_folder_blocks_its_short_name_and_is_never_reused() {
+    let a = admin().await;
+    std::fs::create_dir_all(a.app.dir.path().join("data/orgs/stale/files")).unwrap();
+    std::fs::write(
+        a.app.dir.path().join("data/orgs/stale/tazko.db"),
+        b"old data",
+    )
+    .unwrap();
+    let res = a
+        .call(
+            Method::POST,
+            "/api/v1/admin/companies",
+            Some(json!({ "name": "Stale", "owner_email": "o@stale.example" })),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+    let orgs: i64 = a
+        .app
+        .sql(|c| c.query_row("SELECT count(*) FROM orgs", [], |r| r.get(0)))
+        .await;
+    assert_eq!(orgs, 0);
+    assert_eq!(
+        std::fs::read(a.app.dir.path().join("data/orgs/stale/tazko.db")).unwrap(),
+        b"old data"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_deleted_company_is_refused_before_its_folder_moves() {
+    let a = admin().await;
+    ok(a.call(
+        Method::POST,
+        "/api/v1/admin/companies",
+        Some(json!({ "name": "Acme", "owner_email": "o@acme.example" })),
+    )
+    .await)
+    .await;
+    let member = a.app.user("m@acme.example").await;
+    let org: i64 = a
+        .app
+        .sql(|c| c.query_row("SELECT id FROM orgs", [], |r| r.get(0)))
+        .await;
+    a.app.member(org, member, "member").await;
+    let cookie = a.app.sign_in(member).await;
+    ok(a.call(
+        Method::DELETE,
+        "/api/v1/admin/companies/acme",
+        Some(json!({ "confirm": "acme" })),
+    )
+    .await)
+    .await;
+
+    for _ in 0..3 {
+        assert_eq!(
+            a.app.get("/api/v1/c/acme", Some(&cookie)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+    assert!(!a.app.dir.path().join("data/orgs/acme").exists());
+    assert!(matches!(
+        a.app.state.dbs.tenant("acme"),
+        Err(tazko::db::DbError::Missing(_))
+    ));
+    assert!(!a.app.dir.path().join("data/orgs/acme").exists());
 }

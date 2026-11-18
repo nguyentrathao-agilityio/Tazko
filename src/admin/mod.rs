@@ -237,8 +237,14 @@ async fn list_companies(
 
     let mut out = Vec::new();
     for (o, members) in orgs {
-        let db = state.dbs.tenant(&o.slug)?;
-        let summary = tenant_summary(&db).await?;
+        let summary = match state.dbs.tenant(&o.slug) {
+            Ok(db) => tenant_summary(&db).await?,
+            Err(_) => TenantSummary {
+                boards: 0,
+                last_event: None,
+                projects: Vec::new(),
+            },
+        };
         out.push(json!({
             "slug": o.slug,
             "name": o.name,
@@ -340,6 +346,11 @@ async fn create_company(
         .ok_or_else(|| bad("enter a valid email address for the first owner"))?;
     let gb = validate::storage_gb(body.storage_gb)
         .ok_or_else(|| bad("the storage limit must be between 1 and 10000 GB"))?;
+    if state.dbs.layout().orgs.join(&slug).exists() {
+        return Ok(conflict(
+            "a folder for that short name is already on disk; move it away or choose another short name",
+        ));
+    }
 
     let created = state
         .dbs
@@ -382,7 +393,7 @@ async fn create_company(
         ));
     };
 
-    state.dbs.tenant(&o.slug)?;
+    state.dbs.create_tenant(&o.slug)?;
     Ok((
         StatusCode::CREATED,
         Json(json!({ "slug": o.slug, "name": o.name })),
@@ -427,7 +438,14 @@ async fn company_detail(
         })
         .await?;
     let (o, members, invites) = found.ok_or(ApiError::NotFound)?;
-    let summary = tenant_summary(&state.dbs.tenant(&o.slug)?).await?;
+    let summary = match state.dbs.tenant(&o.slug) {
+        Ok(db) => tenant_summary(&db).await?,
+        Err(_) => TenantSummary {
+            boards: 0,
+            last_event: None,
+            projects: Vec::new(),
+        },
+    };
 
     Ok(Json(json!({
         "slug": o.slug,
@@ -611,10 +629,7 @@ async fn delete_company(
     }
 
     let at = now();
-    state.dbs.forget(&o.slug);
-    let moved = trash::move_to_trash(state.dbs.layout(), &o.slug, at)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-    let result = state
+    state
         .dbs
         .control()
         .write({
@@ -641,12 +656,15 @@ async fn delete_company(
                 Ok(())
             }
         })
-        .await;
-    if let Err(e) = result {
-        if let Some(from) = moved {
-            let _ = std::fs::rename(from, state.dbs.layout().orgs.join(&o.slug));
-        }
-        return Err(e.into());
+        .await?;
+
+    state.dbs.forget(&o.slug);
+    if let Err(e) = trash::move_to_trash(state.dbs.layout(), &o.slug, at) {
+        eprintln!(
+            "tazko: company {} is deleted but its folder could not be moved to trash: {e}",
+            o.slug
+        );
+        return Err(ApiError::Internal(e.to_string()));
     }
 
     Ok(StatusCode::NO_CONTENT)

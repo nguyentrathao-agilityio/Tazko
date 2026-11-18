@@ -8,25 +8,43 @@ use crate::db::{Database, DbResult};
 
 pub const KEEP_SECS: i64 = 30 * 24 * 60 * 60;
 
-pub fn move_to_trash(layout: &DataLayout, slug: &str, at: i64) -> io::Result<Option<PathBuf>> {
+pub fn move_to_trash(layout: &DataLayout, slug: &str, at: i64) -> io::Result<Vec<PathBuf>> {
+    std::fs::create_dir_all(&layout.trash)?;
     let from = layout.orgs.join(slug);
-    if !from.exists() {
-        return Ok(None);
+    let mut moved = Vec::new();
+    for n in 0..3 {
+        if !from.exists() {
+            break;
+        }
+
+        let name = if n == 0 {
+            format!("{slug}.{at}")
+        } else {
+            format!("{slug}.{at}.{n}")
+        };
+        let to = layout.trash.join(name);
+        std::fs::rename(&from, &to)?;
+        moved.push(to);
     }
 
-    std::fs::create_dir_all(&layout.trash)?;
-    let to = layout.trash.join(format!("{slug}.{at}"));
-    std::fs::rename(&from, &to)?;
-    Ok(Some(to))
+    if from.exists() {
+        return Err(io::Error::other(format!(
+            "{} keeps reappearing",
+            from.display()
+        )));
+    }
+
+    Ok(moved)
 }
 
 pub fn deleted_at(name: &str) -> Option<i64> {
-    let (slug, at) = name.rsplit_once('.')?;
+    let mut parts = name.split('.');
+    let slug = parts.next()?;
     if slug.is_empty() {
         return None;
     }
 
-    at.parse().ok()
+    parts.next()?.parse().ok()
 }
 
 pub async fn purge(layout: &DataLayout, control: &Database, now: i64) -> DbResult<Vec<String>> {
