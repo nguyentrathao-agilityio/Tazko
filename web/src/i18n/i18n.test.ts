@@ -7,10 +7,10 @@ describe('t', () => {
   })
 
   it('fills in variables', () => {
-    expect(t('app.status.ok', { version: '1.2.3' })).toBe('Server is running, version 1.2.3.')
+    expect(t('home.signedInAs', { email: 'a@example.com' })).toBe('Signed in as a@example.com')
   })
 
   it('leaves unknown variables in place', () => {
-    expect(t('app.status.ok')).toContain('{version}')
+    expect(t('home.signedInAs')).toContain('{email}')
   })
 })

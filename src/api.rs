@@ -47,6 +47,7 @@ async fn me(
         "email": user.email,
         "name": user.name,
         "is_super_admin": user.is_super_admin,
+        "csrf_token": user.csrf_token,
         "companies": companies,
     })))
 }

@@ -19,6 +19,10 @@ pub struct TestApp {
 
 impl TestApp {
     pub fn new() -> Self {
+        Self::with_google(tazko::auth::google::Endpoints::default())
+    }
+
+    pub fn with_google(endpoints: tazko::auth::google::Endpoints) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("data");
         let map = config::parse_env(&format!(
@@ -31,7 +35,12 @@ impl TestApp {
         let dbs = Databases::open(layout).unwrap();
         Self {
             dir,
-            state: AppState::new(settings, dbs),
+            state: AppState::with_google(
+                settings,
+                dbs,
+                config::Secret::new("t".repeat(64)),
+                endpoints,
+            ),
         }
     }
 
@@ -103,6 +112,29 @@ impl TestApp {
             .await
             .unwrap()
     }
+
+    pub async fn send(&self, req: Request<Body>) -> Response {
+        self.router().oneshot(req).await.unwrap()
+    }
+}
+
+pub fn set_cookies(res: &Response) -> Vec<String> {
+    res.headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().to_string())
+        .collect()
+}
+
+pub fn cookie_pair(set_cookie: &str) -> String {
+    set_cookie.split(';').next().unwrap().to_string()
+}
+
+pub fn location(res: &Response) -> String {
+    res.headers()[header::LOCATION]
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 pub async fn body_text(res: Response) -> String {
