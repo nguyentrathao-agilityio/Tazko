@@ -164,7 +164,8 @@ fn tile(r: &rusqlite::Row) -> rusqlite::Result<Value> {
 const TILE: &str = "SELECT b.id, b.name, b.background, b.restricted, b.closed_at IS NOT NULL,
         EXISTS (SELECT 1 FROM board_stars s WHERE s.board_id = b.id AND s.user_id = ?2),
         (SELECT count(*) FROM lists l WHERE l.board_id = b.id AND l.archived_at IS NULL),
-        0,
+        (SELECT count(*) FROM cards k JOIN lists l ON l.id = k.list_id
+          WHERE k.board_id = b.id AND k.archived_at IS NULL AND l.archived_at IS NULL),
         b.project_id
     FROM boards b";
 
@@ -293,12 +294,15 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
             let mut stmt = c.prepare(
                 "SELECT id, title, position FROM lists WHERE board_id = ?1 AND archived_at IS NULL ORDER BY position",
             )?;
+            let mut cards = crate::cards::summaries(c, id)?;
             let lists = stmt
                 .query_map([id], |r| {
+                    let list: i64 = r.get(0)?;
                     Ok(json!({
-                        "id": r.get::<_, i64>(0)?,
+                        "id": list,
                         "title": r.get::<_, String>(1)?,
                         "position": r.get::<_, String>(2)?,
+                        "cards": cards.remove(&list).unwrap_or_default(),
                     }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -591,7 +595,7 @@ async fn copy(
 
 async fn archived(board: Board) -> Result<Json<Value>, ApiError> {
     let id = board.id;
-    let lists = board
+    let (lists, cards) = board
         .project
         .db()
         .read(move |c| {
@@ -607,8 +611,22 @@ async fn archived(board: Board) -> Result<Json<Value>, ApiError> {
                     }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
+            let mut stmt = c.prepare(
+                "SELECT k.id, k.title, k.archived_at, l.title FROM cards k JOIN lists l ON l.id = k.list_id
+                 WHERE k.board_id = ?1 AND k.archived_at IS NOT NULL ORDER BY k.archived_at DESC LIMIT 500",
+            )?;
+            let cards = stmt
+                .query_map([id], |r| {
+                    Ok(json!({
+                        "id": r.get::<_, i64>(0)?,
+                        "title": r.get::<_, String>(1)?,
+                        "archived_at": r.get::<_, i64>(2)?,
+                        "list": r.get::<_, String>(3)?,
+                    }))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((rows, cards))
         })
         .await?;
-    Ok(Json(json!({ "lists": lists, "cards": [] })))
+    Ok(Json(json!({ "lists": lists, "cards": cards })))
 }

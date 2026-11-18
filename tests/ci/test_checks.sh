@@ -108,6 +108,10 @@ printf '{"MIT":[{"name":"vite"}],"MPL-2.0":[{"name":"new-tool"}]}' > all2.json
 expect fail "an unlisted build tool" "$PY" "$CHECKS" js-licenses prod.json all2.json
 printf '{"MIT":[{"name":"vite"}],"GPL-3.0":[{"name":"lightningcss"}]}' > all3.json
 expect fail "a listed tool under another licence" "$PY" "$CHECKS" js-licenses prod.json all3.json
+printf '{"MIT":[{"name":"react"}],"0BSD":[{"name":"tslib"}]}' > prod5.json
+expect pass "a listed dependency that is never bundled" "$PY" "$CHECKS" js-licenses prod5.json all.json
+printf '{"MIT":[{"name":"react"}],"0BSD":[{"name":"other"}]}' > prod6.json
+expect fail "an unlisted 0BSD package" "$PY" "$CHECKS" js-licenses prod6.json all.json
 printf '{"MIT AND GPL-3.0":[{"name":"mixed"}]}' > prod4.json
 expect fail "an AND with a disallowed licence" "$PY" "$CHECKS" js-licenses prod4.json all.json
 new_repo envfile; echo "X=1" > tazko.env; git add -f tazko.env

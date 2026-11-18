@@ -150,6 +150,9 @@ BUILD_TOOL_EXCEPTIONS = {
     "lru-cache": "BlueOak-1.0.0",
     "graceful-fs": "BlueOak-1.0.0",
 }
+UNBUNDLED_EXCEPTIONS = {
+    "tslib": "0BSD",
+}
 
 
 def licence_ok(expr, allowed):
@@ -182,6 +185,8 @@ def check_js_licenses(prod_path, all_path):
     bad = []
     prod = load_licences(prod_path)
     for name, licence in prod:
+        if UNBUNDLED_EXCEPTIONS.get(name) == licence:
+            continue
         if not licence_ok(licence, ALLOWED_LICENSES):
             bad.append(f"{name} ships in the web app under {licence}")
     shipped = {n for n, _ in prod}

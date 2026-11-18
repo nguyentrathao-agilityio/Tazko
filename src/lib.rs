@@ -3,6 +3,7 @@ pub mod api;
 pub mod auth;
 pub mod backup;
 pub mod boards;
+pub mod cards;
 pub mod cli;
 pub mod company;
 pub mod config;

@@ -30,8 +30,8 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/lists/{list}/copy"), post(copy))
 }
 
-pub fn copy_cards(_tx: &Connection, _from: i64, _to: i64) -> rusqlite::Result<()> {
-    Ok(())
+pub fn copy_cards(tx: &Connection, from: i64, to: i64) -> rusqlite::Result<()> {
+    crate::cards::copy_cards(tx, from, to)
 }
 
 fn title(raw: &str) -> Result<String, ApiError> {
