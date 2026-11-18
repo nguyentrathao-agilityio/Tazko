@@ -8,7 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::admin::{self, Invited, audit, dir_size, validate};
+use crate::admin::{self, audit, dir_size, validate};
 use crate::api::COMPANY_PREFIX;
 use crate::auth::check_csrf;
 use crate::db::DbError;
@@ -160,7 +160,7 @@ async fn invite(
         .write(move |c| {
             let tx = c.transaction()?;
             let o = admin::org(&tx, &slug)?.ok_or(DbError::Closed)?;
-            let res = admin::invite_or_add(&tx, &o, &email, role, by)?;
+            let res = admin::invite_or_add(&tx, &o, &email, role, by, false)?;
             if res.is_ok() {
                 tx.commit()?;
             }
@@ -169,12 +169,7 @@ async fn invite(
         })
         .await?;
     Ok(match outcome {
-        Ok(Invited::Added) => {
-            (StatusCode::CREATED, Json(json!({ "result": "added" }))).into_response()
-        }
-        Ok(Invited::Invited) => {
-            (StatusCode::CREATED, Json(json!({ "result": "invited" }))).into_response()
-        }
+        Ok(_) => (StatusCode::CREATED, Json(json!({ "result": "invited" }))).into_response(),
         Err(msg) => admin::conflict(msg),
     })
 }

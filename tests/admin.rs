@@ -802,3 +802,38 @@ async fn a_deleted_company_is_refused_before_its_folder_moves() {
     ));
     assert!(!a.app.dir.path().join("data/orgs/acme").exists());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_turned_off_person_is_invited_but_never_added_at_once() {
+    let a = admin().await;
+    ok(a.call(
+        Method::POST,
+        "/api/v1/admin/companies",
+        Some(json!({ "name": "Acme", "owner_email": "o@acme.example" })),
+    )
+    .await)
+    .await;
+    let off = a.app.user("off@example.com").await;
+    a.app
+        .sql(move |c| c.execute("UPDATE users SET disabled = 1 WHERE id = ?1", [off]))
+        .await;
+    let res = a
+        .call(
+            Method::POST,
+            "/api/v1/admin/companies/acme/invites",
+            Some(json!({ "email": "off@example.com", "role": "member" })),
+        )
+        .await;
+    assert_eq!(body_json(res).await["result"], "invited");
+    let members: i64 = a
+        .app
+        .sql(move |c| {
+            c.query_row(
+                "SELECT count(*) FROM org_members WHERE user_id = ?1",
+                [off],
+                |r| r.get(0),
+            )
+        })
+        .await;
+    assert_eq!(members, 0);
+}

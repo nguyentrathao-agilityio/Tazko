@@ -279,12 +279,19 @@ pub(crate) fn invite_or_add(
     email: &str,
     role: &str,
     by: i64,
+    add_existing: bool,
 ) -> Result<Result<Invited, &'static str>, DbError> {
-    let user: Option<i64> = tx
-        .query_row("SELECT id FROM users WHERE email = ?1", [email], |r| {
-            r.get(0)
-        })
+    let found: Option<(i64, bool)> = tx
+        .query_row(
+            "SELECT id, disabled FROM users WHERE email = ?1",
+            [email],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .optional()?;
+    let user = found.map(|(id, _)| id);
+    let addable = found
+        .filter(|(_, disabled)| add_existing && !disabled)
+        .map(|(id, _)| id);
     if let Some(user_id) = user {
         let member: bool = tx.query_row(
             "SELECT EXISTS (SELECT 1 FROM org_members WHERE org_id = ?1 AND user_id = ?2)",
@@ -305,7 +312,7 @@ pub(crate) fn invite_or_add(
         return Ok(Err("this email address already has a pending invite"));
     }
 
-    let accepted = user.map(|_| now());
+    let accepted = addable.map(|_| now());
     tx.execute(
         "INSERT INTO invites (org_id, email, company_role, created_by, accepted_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![org.id, email, role, by, accepted],
@@ -319,7 +326,7 @@ pub(crate) fn invite_or_add(
         email,
         json!({ "role": role, "company": org.slug, "invite": invite_id }),
     )?;
-    if let Some(user_id) = user {
+    if let Some(user_id) = addable {
         tx.execute(
             "INSERT INTO org_members (org_id, user_id, role) VALUES (?1, ?2, ?3)",
             params![org.id, user_id, role],
@@ -381,7 +388,7 @@ async fn create_company(
                     &name,
                     json!({ "slug": slug, "storage_gb": gb }),
                 )?;
-                let _ = invite_or_add(&tx, &o, &email, "owner", by)?;
+                let _ = invite_or_add(&tx, &o, &email, "owner", by, true)?;
                 tx.commit()?;
                 Ok(Some(o))
             }
@@ -705,7 +712,7 @@ async fn invite(
             let Some(o) = org(&tx, &slug)? else {
                 return refuse(ApiError::NotFound);
             };
-            match invite_or_add(&tx, &o, &email, role, by)? {
+            match invite_or_add(&tx, &o, &email, role, by, true)? {
                 Ok(done) => {
                     tx.commit()?;
                     Ok(Outcome::Done(Ok(done)))

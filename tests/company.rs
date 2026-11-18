@@ -361,3 +361,68 @@ async fn a_person_in_two_companies_only_sees_the_chosen_ones_data() {
     assert_eq!(pa["projects"], json!([{ "name": "Only in A" }]));
     assert_eq!(pb["projects"], json!([]));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_owner_cannot_tell_whether_an_address_already_has_an_account() {
+    let w = world().await;
+    let existing = person(&w.app, "existing@elsewhere.example").await;
+    let off = w.app.user("off@elsewhere.example").await;
+    w.app
+        .sql(move |c| c.execute("UPDATE users SET disabled = 1 WHERE id = ?1", [off]))
+        .await;
+
+    for email in [
+        "existing@elsewhere.example",
+        "off@elsewhere.example",
+        "nobody@elsewhere.example",
+    ] {
+        let res = call(
+            &w.app,
+            &w.owner,
+            Method::POST,
+            "/api/v1/c/company-a/invites",
+            Some(json!({ "email": email, "role": "member" })),
+        )
+        .await;
+        assert_eq!(res.status(), StatusCode::CREATED, "{email}");
+        assert_eq!(
+            body_json(res).await,
+            json!({ "result": "invited" }),
+            "{email}"
+        );
+    }
+
+    let a = w.a;
+    let app = &w.app;
+    let members_of_a = async |id: i64| -> i64 {
+        app.sql(move |c| {
+            c.query_row(
+                "SELECT count(*) FROM org_members WHERE org_id = ?1 AND user_id = ?2",
+                params![a, id],
+                |r| r.get(0),
+            )
+        })
+        .await
+    };
+    assert_eq!(
+        members_of_a(existing.id).await,
+        0,
+        "not added behind their back"
+    );
+    assert_eq!(members_of_a(off).await, 0);
+
+    let me = body_json(w.app.get("/api/v1/me", Some(&existing.cookie)).await).await;
+    let slugs: Vec<&str> = me["companies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["slug"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        slugs,
+        vec!["company-a"],
+        "they join on their next page load"
+    );
+    assert_eq!(members_of_a(existing.id).await, 1);
+    assert_eq!(members_of_a(off).await, 0);
+}
