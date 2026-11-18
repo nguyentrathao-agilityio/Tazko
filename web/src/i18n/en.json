@@ -1,0 +1,7 @@
+{
+  "app.name": "Tazko",
+  "app.tagline": "Boards for the work your companies share.",
+  "app.status.checking": "Checking the server…",
+  "app.status.ok": "Server is running, version {version}.",
+  "app.status.down": "The server cannot be reached."
+}

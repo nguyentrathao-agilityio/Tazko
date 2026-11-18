@@ -18,22 +18,23 @@ step "tests for the checks"; run bash tests/ci/test_checks.sh
 step "local dev target";     run bash scripts/dev-env.sh check
 step "tests for dev-env";    run bash tests/ci/test_dev_env.sh
 
+if [ -f web/package.json ]; then
+  step "web"
+  (cd web && pnpm install --frozen-lockfile && pnpm run lint && pnpm test && pnpm run build) || failed=1
+  run "$PY" scripts/checks.py js-budget web/dist
+else
+  printf '== web: skip, no web/package.json yet\n'
+fi
+
 if [ -f Cargo.toml ]; then
   step "rust"
+  export TAZKO_SKIP_WEB_BUILD=1
   run cargo fmt --check
   run cargo clippy --all-targets -- -D warnings
   run cargo test
   # Licence check (MIT, Apache-2.0, BSD, ISC only) is added with the Cargo project in M1.
 else
   printf '\n== rust: skip, no Cargo.toml yet\n'
-fi
-
-if [ -f web/package.json ]; then
-  step "web"
-  (cd web && npm ci && npm run lint && npm test && npm run build) || failed=1
-  run "$PY" scripts/checks.py js-budget web/dist
-else
-  printf '== web: skip, no web/package.json yet\n'
 fi
 
 if [ "$failed" -ne 0 ]; then
