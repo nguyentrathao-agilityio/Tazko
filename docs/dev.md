@@ -56,13 +56,37 @@ Open the app at `http://localhost:8791`, not `http://127.0.0.1:8791`, so that th
 
 ## Run
 
-These commands arrive with the Rust and web projects in M1; until then `scripts/ci.sh` skips those stages.
-
 ```bash
 cargo run -- serve
 ```
 
-The server listens on `127.0.0.1:8791`. The web app runs with hot reload from `web/`.
+The server listens on `127.0.0.1:8791` and serves the web app built into the binary; `http://localhost:8791/health` returns the version. `cargo build` runs `pnpm install` (first time only) and `pnpm run build` in `web/`, then embeds `web/dist` brotli-compressed. Set `TAZKO_SKIP_WEB_BUILD=1` to embed the current `web/dist` without rebuilding it.
+
+For hot reload while working on the web app, keep the server running and start Vite in a second terminal:
+
+```bash
+cd web && pnpm dev
+```
+
+Open `http://localhost:5173`; `/health`, `/api` and `/auth` are passed through to the server.
+
+Web app commands, from `web/`:
+
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Vite with hot reload |
+| `pnpm run lint` | Lint with warnings as errors |
+| `pnpm run typecheck` | TypeScript check |
+| `pnpm test` | Unit tests |
+| `pnpm run build` | Build `web/dist` |
+
+A release build is one file with the web app inside:
+
+```bash
+cargo build --release
+```
+
+The binary is `target/release/tazko`; copy it anywhere and run `tazko serve`.
 
 ## Sign in locally
 
