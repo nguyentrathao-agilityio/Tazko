@@ -4,6 +4,7 @@
 @import './ui/console.css';
 @import './ui/projects.css';
 @import './board/board.css';
+@import './card/card.css';
 
 body {
   margin: 0;

@@ -14,7 +14,23 @@ export type BoardTileData = {
 
 export type BoardPerson = { id: number; name: string; email: string; role: ProjectRole; access: boolean }
 
-export type CardData = { id: number; title: string; position: string }
+export type CardData = {
+  id: number
+  title: string
+  position: string
+  has_description?: boolean
+  start_at?: number | null
+  due_at?: number | null
+  done?: boolean
+  cover?: string | null
+  comments?: number
+  items?: number
+  items_done?: number
+  labels?: number[]
+  members?: number[]
+}
+
+export type Label = { id: number; name: string; color: number }
 
 export type ListData = { id: number; title: string; position: string; cards: CardData[] }
 
@@ -31,5 +47,6 @@ export type BoardData = {
   can: Can
   people: BoardPerson[]
   lists: ListData[]
+  labels: Label[]
   archived_lists: number
 }

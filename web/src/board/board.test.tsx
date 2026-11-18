@@ -41,6 +41,7 @@ function board() {
       { id: 11, title: 'To do', position: 'V', cards: [{ id: 21, title: 'Write copy', position: 'V' }] },
       { id: 12, title: 'Doing', position: 'k', cards: [] },
     ],
+    labels: [{ id: 31, name: 'Bug', color: 3 }],
     archived_lists: 0,
   }
 }
