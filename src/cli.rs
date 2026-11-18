@@ -41,8 +41,86 @@ pub enum Command {
         )]
         env_file: Option<PathBuf>,
     },
-    #[command(about = "Back up or restore the data folder")]
-    Backup,
-    #[command(about = "Check every database and file")]
-    Check,
+    #[command(about = "Back up the data folder into a dated snapshot, then check it")]
+    Backup {
+        #[command(subcommand)]
+        action: Option<BackupAction>,
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = "Data folder (default: TAZKO_DATA_DIR from the settings file)"
+        )]
+        data: Option<PathBuf>,
+        #[arg(long, value_name = "DIR", help = "Folder that holds the snapshots")]
+        to: Option<PathBuf>,
+        #[arg(
+            long,
+            default_value_t = 30,
+            help = "Remove snapshots older than this many days"
+        )]
+        keep_days: i64,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Settings file, used when --data is not given"
+        )]
+        env_file: Option<PathBuf>,
+    },
+    #[command(about = "Check every database and stored file in a data folder")]
+    Check {
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = "Data folder (default: TAZKO_DATA_DIR from the settings file)"
+        )]
+        data: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Settings file, used when --data is not given"
+        )]
+        env_file: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum BackupAction {
+    #[command(about = "Restore a snapshot into a new, empty folder and check it")]
+    Restore {
+        #[arg(long, value_name = "DIR", help = "Folder that holds the snapshots")]
+        from: PathBuf,
+        #[arg(
+            long,
+            value_name = "NAME",
+            help = "Snapshot to restore (default: the newest)"
+        )]
+        snapshot: Option<String>,
+        #[arg(long, value_name = "DIR", help = "New data folder to restore into")]
+        to: PathBuf,
+    },
+    #[command(
+        about = "Restore the newest snapshot into a scratch folder, check it and record the result"
+    )]
+    Verify {
+        #[arg(long, value_name = "DIR", help = "Folder that holds the snapshots")]
+        from: PathBuf,
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = "Live data folder where the result is recorded"
+        )]
+        data: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = "Scratch folder (default: the system temporary folder)"
+        )]
+        scratch: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Settings file, used when --data is not given"
+        )]
+        env_file: Option<PathBuf>,
+    },
 }

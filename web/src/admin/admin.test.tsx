@@ -71,6 +71,17 @@ function respond(url: string, method: string): Response {
         { id: 1, at: 1_700_000_000, action: 'company_created', kind: 'company', target: 'Acme Studio', detail: {}, actor: 'Root Admin', company: 'Acme Studio' },
       ],
     })
+  if (url === '/api/v1/admin/server')
+    return json({
+      version: '0.1.0',
+      uptime_secs: 3700,
+      data_bytes: 2 * 1024 ** 2,
+      companies: 1,
+      public_url: 'http://localhost:8791',
+      email: 'off',
+      last_backup: { at: 1_700_000_000, ok: true, snapshot: '20231114-221320', databases: 3, files: 1, bytes: 1024 ** 2, problems: [] },
+      last_restore_test: { at: 1_700_000_000, ok: false, snapshot: '20231114-221320', databases: 3, files: 1, bytes: 0, problems: ['orgs/acme/tazko.db: integrity check says corrupt'] },
+    })
   return json({ error: 'not found' }, 404)
 }
 
@@ -176,6 +187,14 @@ describe('admin console', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/invites'))).toBe(true))
     expect(calls.find((c) => c.method === 'POST')!.body).toEqual({ email: 'jo.lee@gmail.com', role: 'member' })
+  })
+
+  it('shows the last backup and a failed restore test with its problem', async () => {
+    open('/admin/server')
+    expect(await screen.findByText(/^OK · /)).toBeTruthy()
+    expect(screen.getByText('Passed')).toBeTruthy()
+    expect(screen.getByText('Failed')).toBeTruthy()
+    expect(screen.getByText(/integrity check says corrupt/)).toBeTruthy()
   })
 
   it('keeps people who are not super admins out', async () => {

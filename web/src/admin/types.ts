@@ -63,6 +63,16 @@ export type AuditEntry = {
   company: string | null
 }
 
+export type RunStatus = {
+  at: number
+  ok: boolean
+  snapshot: string | null
+  databases: number
+  files: number
+  bytes: number
+  problems: string[]
+}
+
 export type ServerInfo = {
   version: string
   uptime_secs: number
@@ -70,5 +80,6 @@ export type ServerInfo = {
   companies: number
   public_url: string
   email: 'on' | 'off'
-  last_backup: number | null
+  last_backup: RunStatus | null
+  last_restore_test: RunStatus | null
 }

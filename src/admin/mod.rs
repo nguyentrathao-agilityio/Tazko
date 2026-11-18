@@ -1076,7 +1076,7 @@ async fn server(
         "companies": companies,
         "public_url": state.settings.public_url,
         "email": if state.settings.smtp.is_some() { "on" } else { "off" },
-        "last_backup": null,
-        "last_restore_test": null,
+        "last_backup": crate::backup::read_status(&state.dbs.layout().root, "backup"),
+        "last_restore_test": crate::backup::read_status(&state.dbs.layout().root, "restore-test"),
     })))
 }
