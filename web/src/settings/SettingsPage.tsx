@@ -10,6 +10,7 @@ import { Avatar } from '@/ui/people'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import { useRun } from '@/projects/useRun'
+import { Tools } from '@/ui/Tools'
 import { saveSettings, useSettings, type Settings } from '@/settings/store'
 
 export type SettingsTab = 'profile' | 'appearance' | 'sessions'
@@ -86,6 +87,8 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
           <h1>{t('settings.title')}</h1>
           <p className="muted">{t('settings.lead', { name: displayName(me.name, me.email) })}</p>
         </div>
+        <span className="sp" />
+        <Tools />
       </div>
       <div className="tabs2" role="tablist">
         {tabs.map(([k, label]) => (
@@ -293,7 +296,8 @@ function Appearance() {
       <section className="box">
         <h2>{t('settings.zen')}</h2>
         <p className="muted" style={{ margin: '0 0 12px' }}>
-          {t('settings.zenLead')}
+          {t('settings.zenLead1')} <span className="kbd">Z</span> {t('settings.zenLead2')} <span className="kbd">Z</span> {t('settings.zenLead3')}{' '}
+          <span className="kbd">Esc</span> {t('settings.zenLead4')}
         </p>
         <Switch name="zen" label={t('settings.zenOn')} hint={t('settings.zenOnHint')} />
         <div className="field">

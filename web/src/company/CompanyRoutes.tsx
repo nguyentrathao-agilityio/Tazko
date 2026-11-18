@@ -12,6 +12,7 @@ import { BoardPage } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
 import { SearchHost } from '@/search/Search'
 import { SettingsPage } from '@/settings/SettingsPage'
+import { MeContext } from '@/ui/meContext'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
@@ -68,10 +69,10 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
 
   if (match[5])
     return (
-      <>
+      <MeContext.Provider value={me}>
         <BoardPage key={`${company.slug}:b${match[5]}`} company={company} id={Number(match[5])} cardId={match[6] ? Number(match[6]) : null} me={me.id} go={go} />
         <SearchHost company={company} go={go} />
-      </>
+      </MeContext.Provider>
     )
 
   const projectId = match[3] ? Number(match[3]) : null
@@ -79,6 +80,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
   const section = mine ? 'me' : projectId ? 'home' : match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'
   const tab = match[4] === '/members' ? 'members' : match[4] === '/settings' ? 'settings' : 'boards'
   return (
+    <MeContext.Provider value={me}>
     <CompanyShell me={me} company={company} active={section} go={go} onSignOut={onSignOut}>
       {projectId && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
@@ -89,5 +91,6 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
       {section === 'projects' && <ManageProjects key={company.slug} company={company} />}
       <SearchHost company={company} go={go} />
     </CompanyShell>
+    </MeContext.Provider>
   )
 }
