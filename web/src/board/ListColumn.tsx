@@ -31,6 +31,7 @@ export function ListColumn({
   index,
   count,
   total,
+  holdsSelection = false,
   edit,
   collapsed,
   onCollapse,
@@ -44,6 +45,7 @@ export function ListColumn({
   index: number
   count: number
   total?: number
+  holdsSelection?: boolean
   edit: boolean
   collapsed: boolean
   onCollapse: (on: boolean) => void
@@ -73,7 +75,7 @@ export function ListColumn({
 
   return (
     <section
-      className={`ls${count ? '' : ' el'}${sortable?.dragging ? ' dragging' : ''}`}
+      className={`ls${count ? '' : ' el'}${holdsSelection ? ' kl' : ''}${sortable?.dragging ? ' dragging' : ''}`}
       data-list={list.id}
       aria-label={list.title}
       ref={sortable?.ref}

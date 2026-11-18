@@ -21,7 +21,12 @@ import { CardDialog } from '@/card/CardDialog'
 import { active, applyFilter, emptyFilter, toggleMine, type Filter } from '@/board/filter'
 import { FilterPop } from '@/board/FilterPop'
 import { SearchButton } from '@/search/Search'
-import { isTyping, popoverOpen } from '@/ui/typing'
+import { isTyping, openSearchEvent, popoverOpen } from '@/ui/typing'
+import { useBoardKeys } from '@/keys/useBoardKeys'
+import { Shortcuts } from '@/keys/Shortcuts'
+import { saveSettings, useSettings } from '@/settings/store'
+import { ZenStrip } from '@/zen/ZenStrip'
+import { DatesPop, LabelsPop, MembersPop, MovePop } from '@/card/Pops'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -48,7 +53,9 @@ function useCollapsed(boardId: number) {
   return { ids, set }
 }
 
-type Pop = { kind: 'access' | 'share' | 'members' | 'filter'; at: Anchor } | { kind: 'quick'; at: Anchor; card: CardData } | null
+type CardPop = 'quick' | 'k-members' | 'k-dates' | 'k-labels' | 'k-move'
+
+type Pop = { kind: 'access' | 'share' | 'members' | 'filter'; at: Anchor } | { kind: CardPop; at: Anchor; card: CardData } | null
 
 export function BoardPage({ company, id, cardId, me, go }: { company: Company; id: number; cardId: number | null; me: number; go: Go }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
@@ -64,6 +71,10 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
   const labelNames = useMemo(() => new Map((board?.labels ?? []).map((l) => [l.id, l.name])), [board])
   const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames) : []), [board, filter, me, labelNames])
 
+  const settings = useSettings()
+  const zen = settings.zen
+  const [help, setHelp] = useState(false)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== 'q' || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || popoverOpen()) return
@@ -74,6 +85,51 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
 
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  const setZen = (on: boolean) => {
+    void saveSettings({ zen: on }).catch(() => undefined)
+    toast(on ? t('zen.on') : t('zen.off'))
+  }
+
+  const anchorFor = (card: CardData) => {
+    const el = document.querySelector(`[data-card="${card.id}"]`)
+    return el ? anchorOf(el) : { left: 200, top: 120, bottom: 120, width: 0 }
+  }
+
+  const boardBase = `/c/${company.slug}/b/${id}`
+  const keys = useBoardKeys({
+    lists: shownLists,
+    edit: Boolean(board?.can.edit),
+    cardOpen: cardId,
+    zen,
+    actions: {
+      open: (c) => go(`${boardBase}/c/${c.id}`),
+      goToCard: (c) => go(`${boardBase}/c/${c.id}`, true),
+      quick: (c) => setPop({ kind: 'quick', at: anchorFor(c), card: c }),
+      done: (c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done })),
+      pop: (kind, c) => setPop({ kind: `k-${kind}`, at: anchorFor(c), card: c }),
+      archive: (c) =>
+        void run(() => api('POST', `${base}/cards/${c.id}/archive`)).then((ok) => {
+          if (ok) toast(t('card.archived'), () => run(() => api('POST', `${base}/cards/${c.id}/restore`)))
+        }),
+      label: (c, index) => {
+        const label = board?.labels[index]
+        if (label) void run(() => api('PUT', `${base}/cards/${c.id}/labels/${label.id}`, { on: !(c.labels ?? []).includes(label.id) }))
+      },
+      compose: (list) => setComposing(list),
+      filter: () => {
+        const el = document.querySelector('[data-filter]')
+        if (el) setPop({ kind: 'filter', at: anchorOf(el) })
+      },
+      zen: () => setZen(!zen),
+      help: () => setHelp((h) => !h),
+      leaveZen: () => {
+        if (!zen) return false
+        setZen(false)
+        return true
+      },
+    },
+  })
   const collapsed = useCollapsed(id)
 
   useEffect(() => {
@@ -145,7 +201,20 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
   }
 
   return (
-    <div className="bd" style={{ background: background(board.background), backgroundSize: 'cover' }}>
+    <div className={`bd${zen ? ` zen zd-${settings.zen_density}` : ''}`} style={{ background: background(board.background), backgroundSize: 'cover' }}>
+      {zen && (
+        <ZenStrip
+          name={board.name}
+          mine={filter.members.includes('me')}
+          hideDone={Boolean(filter.hideDone)}
+          density={settings.zen_density}
+          onMine={() => setFilter((f) => toggleMine(f))}
+          onHideDone={() => setFilter((f) => ({ ...f, hideDone: !f.hideDone }))}
+          onDensity={(d) => void saveSettings({ zen_density: d }).catch(() => undefined)}
+          onSearch={() => window.dispatchEvent(new Event(openSearchEvent))}
+          onExit={() => setZen(false)}
+        />
+      )}
       <div className="bt">
         <Link to={projectPath} go={go} className="ibtn">
           <Icon name="back" />
@@ -216,7 +285,11 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
             {t('board.share')}
           </button>
         )}
-        <button type="button" className="btn sm" aria-label={t('filter.button')} onClick={(e) => setPop({ kind: 'filter', at: anchorOf(e.currentTarget) })}>
+        <button type="button" className="btn sm" title={t('zen.toggleHint')} onClick={() => setZen(true)}>
+          <Icon name="zen" />
+          {t('zen.button')}
+        </button>
+        <button type="button" className="btn sm" data-filter aria-label={t('filter.button')} onClick={(e) => setPop({ kind: 'filter', at: anchorOf(e.currentTarget) })}>
           <Icon name="filter" />
           {t('filter.button')}
           {active(filter) ? ' •' : ''}
@@ -258,6 +331,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
         onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
         onToggleDone={(c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done }))}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
+        selected={keys.selected}
         after={
           edit &&
           (adding ? (
@@ -309,6 +383,43 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           />
         </Popover>
       )}
+      {pop && pop.kind.startsWith('k-') && 'card' in pop && (
+        <Popover anchor={pop.at} title={t(pop.kind === 'k-members' ? 'card.members' : pop.kind === 'k-dates' ? 'card.dates' : pop.kind === 'k-labels' ? 'card.labels' : 'card.moveTitle')} onClose={() => setPop(null)}>
+          {pop.kind === 'k-members' && (
+            <MembersPop people={board.people} chosen={pop.card.members ?? []} onToggle={(uid, on) => void run(() => api('PUT', `${base}/cards/${pop.card.id}/members/${uid}`, { on }))} />
+          )}
+          {pop.kind === 'k-labels' && (
+            <LabelsPop
+              labels={board.labels}
+              chosen={pop.card.labels ?? []}
+              edit={edit}
+              onToggle={(lid, on) => void run(() => api('PUT', `${base}/cards/${pop.card.id}/labels/${lid}`, { on }))}
+              onSave={(l) => void run(() => (l.id === null ? api('POST', `${base}/labels`, { name: l.name, color: l.color }) : api('PATCH', `${base}/labels/${l.id}`, { name: l.name, color: l.color })))}
+              onDelete={(lid) => void run(() => api('DELETE', `${base}/labels/${lid}`))}
+            />
+          )}
+          {pop.kind === 'k-dates' && (
+            <DatesPop
+              start={pop.card.start_at ?? null}
+              due={pop.card.due_at ?? null}
+              onSave={(v) => void run(() => api('PATCH', `${base}/cards/${pop.card.id}`, v)).then(() => setPop(null))}
+            />
+          )}
+          {pop.kind === 'k-move' && (
+            <MovePop
+              lists={lists}
+              current={lists.find((l) => l.cards.some((c) => c.id === pop.card.id))?.id ?? lists[0].id}
+              label={t('list.moveButton')}
+              onMove={(list, top) => {
+                const others = (lists.find((l) => l.id === list)?.cards ?? []).filter((c) => c.id !== pop.card.id)
+                const after = top || others.length === 0 ? null : others[others.length - 1].id
+                void run(() => api('POST', `${base}/cards/${pop.card.id}/move`, { list_id: list, after })).then(() => setPop(null))
+              }}
+            />
+          )}
+        </Popover>
+      )}
+      {help && <Shortcuts onClose={() => setHelp(false)} />}
       {pop?.kind === 'filter' && (
         <Popover anchor={pop.at} title={t('filter.title')} width={340} onClose={() => setPop(null)}>
           <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} />

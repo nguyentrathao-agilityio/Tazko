@@ -1,4 +1,5 @@
 import { setCsrf } from '@/http'
+import { initSettings } from '@/settings/store'
 
 export type Company = { slug: string; name: string; role: 'owner' | 'member' }
 
@@ -9,6 +10,7 @@ export type Me = {
   is_super_admin: boolean
   csrf_token: string
   companies: Company[]
+  settings?: Record<string, unknown>
 }
 
 export class SignInNeeded extends Error {}
@@ -19,6 +21,7 @@ export async function getMe(signal?: AbortSignal): Promise<Me> {
   if (!res.ok) throw new Error(`me ${res.status}`)
   const me = (await res.json()) as Me
   setCsrf(me.csrf_token)
+  initSettings(me.settings)
   return me
 }
 

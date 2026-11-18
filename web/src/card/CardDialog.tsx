@@ -427,7 +427,7 @@ function Shell({
 }) {
   return (
     <div
-      className="ov"
+      className="ov cmov"
       role="dialog"
       aria-modal="true"
       aria-label={t('card.dialog')}

@@ -50,6 +50,7 @@ export function BoardLists({
   onOpenCard,
   onQuickEdit,
   onToggleDone,
+  selected,
   after,
 }: {
   lists: ListData[]
@@ -68,6 +69,7 @@ export function BoardLists({
   onOpenCard: (card: CardData) => void
   onQuickEdit: (card: CardData, el: HTMLElement) => void
   onToggleDone: (card: CardData) => void
+  selected?: number | null
   after?: ReactNode
 }) {
   const [local, setLocal] = useState<{ from: ListData[]; lists: ListData[] } | null>(null)
@@ -162,6 +164,7 @@ export function BoardLists({
                   lists={lists}
                   index={i}
                   count={l.cards.length}
+                  holdsSelection={l.cards.some((c) => c.id === selected)}
                   total={totals?.get(l.id)}
                   edit={edit}
                   collapsed={collapsed.includes(l.id)}
@@ -186,7 +189,7 @@ export function BoardLists({
                 >
                   <SortableContext items={l.cards.map((c) => `c:${c.id}`)} strategy={verticalListSortingStrategy}>
                     {l.cards.map((c) => (
-                      <CardTile key={c.id} card={c} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
+                      <CardTile key={c.id} card={c} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
                     ))}
                   </SortableContext>
                 </ListColumn>
