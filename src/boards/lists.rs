@@ -31,7 +31,7 @@ pub fn routes() -> Router<AppState> {
 }
 
 pub fn copy_cards(tx: &Connection, from: i64, to: i64) -> rusqlite::Result<()> {
-    crate::cards::copy_cards(tx, from, to)
+    crate::cards::copy_cards(tx, from, to, None)
 }
 
 fn title(raw: &str) -> Result<String, ApiError> {

@@ -14,6 +14,7 @@ form_urlencoded = "1"
 getrandom = "0.3"
 hmac = "0.13.0"
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 rusqlite = { version = "0.37", features = ["bundled", "backup"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }

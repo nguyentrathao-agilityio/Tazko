@@ -1,10 +1,12 @@
+pub mod detail;
+
 use std::collections::HashMap;
 
 use axum::Router;
 use axum::extract::Path;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Json;
-use axum::routing::{patch, post};
+use axum::routing::post;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -25,7 +27,6 @@ pub fn routes() -> Router<AppState> {
     let p = |s: &str| format!("{COMPANY_PREFIX}/boards/{{board}}{s}");
     Router::new()
         .route(&p("/cards"), post(create))
-        .route(&p("/cards/{card}"), patch(rename))
         .route(&p("/cards/{card}/move"), post(move_card))
         .route(&p("/cards/{card}/archive"), post(archive))
         .route(&p("/cards/{card}/restore"), post(restore))
@@ -33,6 +34,7 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/lists/{list}/sort"), post(sort))
         .route(&p("/lists/{list}/move-cards"), post(move_all))
         .route(&p("/lists/{list}/archive-cards"), post(archive_all))
+        .merge(detail::routes())
 }
 
 pub fn title(raw: &str) -> Result<String, ApiError> {
@@ -124,28 +126,60 @@ pub fn after_card(
 }
 
 pub fn summaries(c: &Connection, board: i64) -> rusqlite::Result<HashMap<i64, Vec<Value>>> {
+    let ids = |sql: &str| -> rusqlite::Result<HashMap<i64, Vec<i64>>> {
+        let mut stmt = c.prepare(sql)?;
+        let mut out: HashMap<i64, Vec<i64>> = HashMap::new();
+        for row in stmt.query_map([board], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))? {
+            let (card, v) = row?;
+            out.entry(card).or_default().push(v);
+        }
+        Ok(out)
+    };
+    let mut labels = ids(
+        "SELECT cl.card_id, cl.label_id FROM card_labels cl JOIN cards k ON k.id = cl.card_id
+         JOIN labels l ON l.id = cl.label_id WHERE k.board_id = ?1 ORDER BY l.position, l.id",
+    )?;
+    let mut members = ids(
+        "SELECT cm.card_id, cm.user_id FROM card_members cm JOIN cards k ON k.id = cm.card_id WHERE k.board_id = ?1",
+    )?;
     let mut stmt = c.prepare(
-        "SELECT id, list_id, title, position FROM cards
-         WHERE board_id = ?1 AND archived_at IS NULL ORDER BY list_id, position",
+        "SELECT k.id, k.list_id, k.title, k.position, k.description != '', k.start_at, k.due_at, k.done, k.cover,
+                (SELECT count(*) FROM comments m WHERE m.card_id = k.id),
+                (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id),
+                (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id AND i.done = 1)
+         FROM cards k WHERE k.board_id = ?1 AND k.archived_at IS NULL ORDER BY k.list_id, k.position",
     )?;
     let mut out: HashMap<i64, Vec<Value>> = HashMap::new();
     let rows = stmt.query_map([board], |r| {
+        let id: i64 = r.get(0)?;
         Ok((
             r.get::<_, i64>(1)?,
+            id,
             json!({
-                "id": r.get::<_, i64>(0)?,
+                "id": id,
                 "title": r.get::<_, String>(2)?,
                 "position": r.get::<_, String>(3)?,
+                "has_description": r.get::<_, bool>(4)?,
+                "start_at": r.get::<_, Option<i64>>(5)?,
+                "due_at": r.get::<_, Option<i64>>(6)?,
+                "done": r.get::<_, bool>(7)?,
+                "cover": r.get::<_, Option<String>>(8)?,
+                "comments": r.get::<_, i64>(9)?,
+                "items": r.get::<_, i64>(10)?,
+                "items_done": r.get::<_, i64>(11)?,
             }),
         ))
     })?;
     for row in rows {
-        let (list, card) = row?;
+        let (list, id, mut card) = row?;
+        card["labels"] = json!(labels.remove(&id).unwrap_or_default());
+        card["members"] = json!(members.remove(&id).unwrap_or_default());
         out.entry(list).or_default().push(card);
     }
     Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn copy_card(
     c: &Connection,
     card: i64,
@@ -154,16 +188,62 @@ pub fn copy_card(
     title: &str,
     position: &str,
     by: Option<i64>,
+    labels: Option<&HashMap<i64, i64>>,
 ) -> rusqlite::Result<i64> {
-    let _ = card;
     c.execute(
-        "INSERT INTO cards (board_id, list_id, title, position, created_by) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![board, list, title, position, by],
+        "INSERT INTO cards (board_id, list_id, title, position, created_by, description, start_at, due_at, done, cover)
+         SELECT ?2, ?3, ?4, ?5, ?6, description, start_at, due_at, done, cover FROM cards WHERE id = ?1",
+        params![card, board, list, title, position, by],
     )?;
-    Ok(c.last_insert_rowid())
+    let new = c.last_insert_rowid();
+    let old_labels: Vec<i64> = {
+        let mut stmt = c.prepare("SELECT label_id FROM card_labels WHERE card_id = ?1")?;
+        stmt.query_map([card], |r| r.get(0))?
+            .collect::<Result<_, _>>()?
+    };
+    for l in old_labels {
+        let mapped = match labels {
+            Some(m) => m.get(&l).copied(),
+            None => Some(l),
+        };
+        if let Some(l) = mapped {
+            c.execute(
+                "INSERT INTO card_labels (card_id, label_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+                params![new, l],
+            )?;
+        }
+    }
+    c.execute(
+        "INSERT INTO card_members (card_id, user_id) SELECT ?2, user_id FROM card_members WHERE card_id = ?1",
+        params![card, new],
+    )?;
+    let lists: Vec<(i64, String, String)> = {
+        let mut stmt =
+            c.prepare("SELECT id, title, position FROM checklists WHERE card_id = ?1")?;
+        stmt.query_map([card], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<Result<_, _>>()?
+    };
+    for (old, t, pos) in lists {
+        c.execute(
+            "INSERT INTO checklists (card_id, title, position) VALUES (?1, ?2, ?3)",
+            params![new, t, pos],
+        )?;
+        let id = c.last_insert_rowid();
+        c.execute(
+            "INSERT INTO checklist_items (checklist_id, text, done, position)
+             SELECT ?2, text, done, position FROM checklist_items WHERE checklist_id = ?1",
+            params![old, id],
+        )?;
+    }
+    Ok(new)
 }
 
-pub fn copy_cards(c: &Connection, from: i64, to: i64) -> rusqlite::Result<()> {
+pub fn copy_cards(
+    c: &Connection,
+    from: i64,
+    to: i64,
+    labels: Option<&HashMap<i64, i64>>,
+) -> rusqlite::Result<()> {
     let board: i64 = c.query_row("SELECT board_id FROM lists WHERE id = ?1", [to], |r| {
         r.get(0)
     })?;
@@ -175,9 +255,27 @@ pub fn copy_cards(c: &Connection, from: i64, to: i64) -> rusqlite::Result<()> {
             .collect::<Result<_, _>>()?
     };
     for (id, title, pos, by) in cards {
-        copy_card(c, id, to, board, &title, &pos, by)?;
+        copy_card(c, id, to, board, &title, &pos, by, labels)?;
     }
     Ok(())
+}
+
+pub fn copy_labels(c: &Connection, from: i64, to: i64) -> rusqlite::Result<HashMap<i64, i64>> {
+    let rows: Vec<(i64, String, i64, i64)> = {
+        let mut stmt =
+            c.prepare("SELECT id, name, color, position FROM labels WHERE board_id = ?1")?;
+        stmt.query_map([from], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+            .collect::<Result<_, _>>()?
+    };
+    let mut map = HashMap::new();
+    for (id, name, color, pos) in rows {
+        c.execute(
+            "INSERT INTO labels (board_id, name, color, position) VALUES (?1, ?2, ?3, ?4)",
+            params![to, name, color, pos],
+        )?;
+        map.insert(id, c.last_insert_rowid());
+    }
+    Ok(map)
 }
 
 fn card_param(params: &HashMap<String, String>) -> Result<i64, ApiError> {
@@ -266,47 +364,6 @@ async fn create(
         })
         .await??;
     Ok((StatusCode::CREATED, Json(json!({ "cards": cards }))))
-}
-
-#[derive(Deserialize)]
-struct Rename {
-    title: String,
-}
-
-async fn rename(
-    board: Board,
-    headers: HeaderMap,
-    Path(params): Path<HashMap<String, String>>,
-    Json(body): Json<Rename>,
-) -> Result<StatusCode, ApiError> {
-    let by = board.writing(&headers, Act::Edit)?;
-    let card = card_param(&params)?;
-    let t = title(&body.title)?;
-    let (id, pid) = (board.id, board.project.id);
-    board
-        .project
-        .db()
-        .write(move |c| {
-            let tx = c.transaction()?;
-            let Some(old) = card_in_board(&tx, id, card, false)? else {
-                return Ok(Err(ApiError::NotFound));
-            };
-            tx.execute(
-                "UPDATE cards SET title = ?2, updated_at = ?3 WHERE id = ?1",
-                params![card, t, now()],
-            )?;
-            events::record(
-                &tx,
-                by,
-                "card_renamed",
-                At::card(pid, id, card),
-                json!({ "from": old.title, "to": t }),
-            )?;
-            tx.commit()?;
-            Ok(Ok(()))
-        })
-        .await??;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]
@@ -464,7 +521,7 @@ async fn copy(
             }
 
             let pos = end_of_list(&tx, list)?;
-            let new = copy_card(&tx, card, list, id, &t, &pos, Some(by))?;
+            let new = copy_card(&tx, card, list, id, &t, &pos, Some(by), None)?;
             events::record(
                 &tx,
                 by,
