@@ -289,7 +289,7 @@ async fn create(
 async fn view(board: Board) -> Result<Json<Value>, ApiError> {
     let (id, pid, user) = (board.id, board.project.id, board.user_id());
     let restricted = board.info.restricted;
-    let (lists, people, starred, archived, labels) = board
+    let (lists, people, starred, archived, labels, last_event) = board
         .project
         .db()
         .read(move |c| {
@@ -337,7 +337,8 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
                 |r| r.get(0),
             )?;
             let labels = crate::cards::detail::labels_of_board(c, id)?;
-            Ok((lists, people, starred, archived, labels))
+            let last_event = crate::realtime::last_event(c)?;
+            Ok((lists, people, starred, archived, labels, last_event))
         })
         .await?;
     let i = &board.info;
@@ -358,6 +359,7 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
         "lists": lists,
         "labels": labels,
         "archived_lists": archived,
+        "last_event": last_event,
     })))
 }
 

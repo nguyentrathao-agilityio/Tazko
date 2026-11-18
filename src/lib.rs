@@ -13,6 +13,7 @@ pub mod events;
 pub mod http;
 pub mod order;
 pub mod projects;
+pub mod realtime;
 pub mod sanitize;
 pub mod search;
 pub mod session;

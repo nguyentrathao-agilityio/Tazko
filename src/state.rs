@@ -4,6 +4,7 @@ use std::time::Instant;
 use crate::auth::google::{Endpoints, Google};
 use crate::config::{Secret, Settings};
 use crate::db::Databases;
+use crate::realtime::hub::Hub;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -12,6 +13,7 @@ pub struct AppState {
     pub secret: Arc<Secret>,
     pub google: Arc<Google>,
     pub started: Instant,
+    pub live: Arc<Hub>,
 }
 
 impl AppState {
@@ -31,6 +33,7 @@ impl AppState {
             secret: Arc::new(secret),
             google: Arc::new(Google::new(endpoints)),
             started: Instant::now(),
+            live: Arc::new(Hub::default()),
         }
     }
 }
