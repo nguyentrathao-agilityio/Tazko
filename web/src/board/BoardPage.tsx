@@ -20,7 +20,7 @@ import type { BoardData, CardData, ListData } from '@/board/types'
 import { CardDialog } from '@/card/CardDialog'
 import { active, applyFilter, emptyFilter, toggleMine, type Filter } from '@/board/filter'
 import { FilterPop } from '@/board/FilterPop'
-import { SearchButton } from '@/search/Search'
+import { Tools } from '@/ui/Tools'
 import { isTyping, openSearchEvent, popoverOpen } from '@/ui/typing'
 import { useBoardKeys } from '@/keys/useBoardKeys'
 import { Shortcuts } from '@/keys/Shortcuts'
@@ -230,9 +230,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           </Link>
         </div>
         <span className="sp" />
-        <div className="tools">
-          <SearchButton />
-        </div>
+        <Tools />
       </div>
       <div className="bh">
         {renaming ? (

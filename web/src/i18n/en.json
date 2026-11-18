@@ -564,7 +564,6 @@
   "settings.labelBars": "Show labels as small bars",
   "settings.labelBarsHint": "Hides label names on cards.",
   "settings.zen": "Zen mode",
-  "settings.zenLead": "Hides the header so the board fills the window. Press Z on a board, and Z or Esc to come back. Move the pointer to the top edge for controls.",
   "settings.zenOn": "Zen mode",
   "settings.zenOnHint": "Stays on across boards until you turn it off.",
   "settings.zenDensity": "Card density in zen mode",
@@ -594,5 +593,9 @@
   "settings.lastActive": "Last active {when}",
   "settings.ended": "Signed out {device}",
   "settings.unknownDevice": "Unknown device",
-  "settings.browser": "Browser"
+  "settings.browser": "Browser",
+  "settings.zenLead1": "Hides the header so the board fills the window. Press",
+  "settings.zenLead2": "on a board, and",
+  "settings.zenLead3": "or",
+  "settings.zenLead4": "to come back. Move the pointer to the top edge for controls."
 }

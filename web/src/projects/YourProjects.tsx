@@ -10,7 +10,7 @@ import { useLoad } from '@/ui/useLoad'
 import { Stack } from '@/projects/Stack'
 import { BoardTile } from '@/board/BoardTile'
 import type { BoardTileData } from '@/board/types'
-import { SearchButton } from '@/search/Search'
+import { Tools } from '@/ui/Tools'
 import type { MyProject } from '@/projects/types'
 
 export function YourProjects({ company, go }: { company: Company; go: Go }) {
@@ -24,13 +24,13 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
   return (
     <>
       <PageHead title={t('nav.projects')} lead={t('projects.lead', { company: company.name })}>
-        <SearchButton />
         {company.role === 'owner' && (
           <button type="button" className="btn" onClick={() => go(`/c/${company.slug}/projects`)}>
             <Icon name="building" />
             {t('nav.manageProjects')}
           </button>
         )}
+        <Tools />
       </PageHead>
       {error && (
         <p className="error" role="alert">
@@ -78,7 +78,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
                   <Stack people={p.members} />
                   <span>{t('projects.boardCount', { n: p.boards })}</span>
                   <span className={`pill${p.role === 'owner' ? ' accent' : ''}`} style={{ marginLeft: 'auto' }}>
-                    {t(`projectRole.${p.role}`)}
+                    {t(`projectRole.${p.role}`).toLowerCase()}
                   </span>
                 </div>
               </button>

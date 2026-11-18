@@ -5,6 +5,7 @@ import { Link, type Go } from '@/ui/Link'
 import { initials } from '@/ui/names'
 import { EmptyState } from '@/ui/EmptyState'
 import { useLoad } from '@/ui/useLoad'
+import { Tools } from '@/ui/Tools'
 import { ProjectBoards } from '@/projects/ProjectBoards'
 import { ProjectMembers } from '@/projects/ProjectMembers'
 import { ProjectSettings } from '@/projects/ProjectSettings'
@@ -58,6 +59,8 @@ export function ProjectPage({ company, id, tab, go }: { company: Company; id: nu
           </div>
         </div>
         <RoleChip role={data.role} />
+        <span className="sp" />
+        <Tools />
       </div>
       <div className="tabs2" role="tablist">
         <button type="button" role="tab" aria-selected={shown === 'boards'} className={shown === 'boards' ? 'on' : ''} onClick={() => go(base)}>

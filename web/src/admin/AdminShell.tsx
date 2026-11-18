@@ -45,13 +45,25 @@ export function AdminShell({
           ))}
         </nav>
         <div className="grow" />
-        <div className="nav me">
-          <Avatar name={name} />
-          <div>
-            <b>{name}</b>
-            <small>{t('rail.superAdmin')}</small>
+        {me.companies[0] ? (
+          <Link to={`/c/${me.companies[0].slug}/me`} go={go} className="nav me">
+            <Avatar name={name} />
+            <div>
+              <b>{name}</b>
+              <small>
+                {t('rail.superAdmin')} · {t('settings.title')}
+              </small>
+            </div>
+          </Link>
+        ) : (
+          <div className="nav me">
+            <Avatar name={name} />
+            <div>
+              <b>{name}</b>
+              <small>{t('rail.superAdmin')}</small>
+            </div>
           </div>
-        </div>
+        )}
         <button type="button" className="nav" onClick={onSignOut}>
           <Icon name="out" />
           {t('home.signOut')}
