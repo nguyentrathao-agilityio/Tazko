@@ -109,7 +109,7 @@ fn person(c: &Connection, id: Option<i64>) -> rusqlite::Result<Value> {
 pub fn card_activity(c: &Connection, card: i64, limit: i64) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = c.prepare(
         "SELECT e.id, e.type, e.actor_id, e.payload, e.created_at FROM events e
-         WHERE e.card_id = ?1 ORDER BY e.id DESC LIMIT ?2",
+         WHERE e.card_id = ?1 AND e.type NOT IN ('board_starred', 'board_unstarred') ORDER BY e.id DESC LIMIT ?2",
     )?;
     let rows: Vec<(i64, String, Option<i64>, String, i64)> = stmt
         .query_map(params![card, limit], |r| {

@@ -144,6 +144,7 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/boards/{board}/access"), put(access))
         .route(&p("/boards/{board}/copy"), post(copy))
         .route(&p("/boards/{board}/archive"), get(archived))
+        .route(&p("/boards/{board}/activity"), get(activity))
         .merge(lists::routes())
 }
 
@@ -633,4 +634,22 @@ async fn archived(board: Board) -> Result<Json<Value>, ApiError> {
         })
         .await?;
     Ok(Json(json!({ "lists": lists, "cards": cards })))
+}
+
+#[derive(Deserialize)]
+struct Page {
+    before: Option<i64>,
+}
+
+async fn activity(
+    board: Board,
+    axum::extract::Query(page): axum::extract::Query<Page>,
+) -> Result<Json<Value>, ApiError> {
+    let id = board.id;
+    let entries = board
+        .project
+        .db()
+        .read(move |c| Ok(events::board_activity(c, id, page.before, 50)?))
+        .await?;
+    Ok(Json(json!({ "entries": entries })))
 }
