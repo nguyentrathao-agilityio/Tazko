@@ -1,10 +1,11 @@
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
 use tazko::admin::cli::Granted;
-use tazko::cli::{Cli, Command};
+use tazko::backup;
+use tazko::cli::{BackupAction, Cli, Command};
 use tazko::config::{self, DataLayout};
 use tazko::db::Databases;
 use tazko::state::AppState;
@@ -19,8 +20,14 @@ async fn main() -> ExitCode {
             data,
             env_file,
         } => admin(&email, data.as_deref(), env_file.as_deref()).await,
-        Command::Backup => not_yet("backup"),
-        Command::Check => not_yet("check"),
+        Command::Backup {
+            action,
+            data,
+            to,
+            keep_days,
+            env_file,
+        } => run_backup(action, data, to, keep_days, env_file),
+        Command::Check { data, env_file } => run_check(data, env_file),
     }
 }
 
@@ -146,7 +153,120 @@ async fn shutdown() {
     }
 }
 
-fn not_yet(name: &str) -> ExitCode {
-    eprintln!("tazko {name}: not available in this version yet");
+fn data_dir(data: Option<PathBuf>, env_file: Option<&Path>) -> Result<PathBuf, ExitCode> {
+    if let Some(d) = data {
+        return Ok(d);
+    }
+
+    match config::load(env_file) {
+        Ok(s) => Ok(s.data_dir),
+        Err(e) => {
+            eprintln!("tazko: {e}");
+            eprintln!("tazko: or pass --data <folder>");
+            Err(ExitCode::FAILURE)
+        }
+    }
+}
+
+fn report(kind: &str, s: &backup::Status) -> ExitCode {
+    let name = s.snapshot.as_deref().unwrap_or("-");
+    if s.ok {
+        println!(
+            "{kind} ok: {name}, {} databases, {} files, {} bytes",
+            s.databases, s.files, s.bytes
+        );
+        return ExitCode::SUCCESS;
+    }
+
+    eprintln!("{kind} FAILED: {name}");
+    for p in &s.problems {
+        eprintln!("  - {p}");
+    }
+
+    ExitCode::FAILURE
+}
+
+fn run_backup(
+    action: Option<BackupAction>,
+    data: Option<PathBuf>,
+    to: Option<PathBuf>,
+    keep_days: i64,
+    env_file: Option<PathBuf>,
+) -> ExitCode {
+    match action {
+        Some(BackupAction::Restore { from, snapshot, to }) => {
+            match backup::restore(&from, snapshot.as_deref(), &to) {
+                Ok(name) => {
+                    let checked = backup::check(&to);
+                    let status = backup::Status {
+                        at: tazko::session::now(),
+                        ok: checked.ok(),
+                        snapshot: Some(name),
+                        databases: checked.databases,
+                        files: checked.files,
+                        bytes: 0,
+                        problems: checked.problems,
+                    };
+                    report("restore", &status)
+                }
+                Err(e) => {
+                    eprintln!("tazko backup restore: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some(BackupAction::Verify {
+            from,
+            data,
+            scratch,
+            env_file,
+        }) => {
+            let data = match data_dir(data, env_file.as_deref()) {
+                Ok(d) => d,
+                Err(code) => return code,
+            };
+            let scratch = scratch.unwrap_or_else(std::env::temp_dir);
+            let status = backup::run_restore_test(&from, &scratch);
+            if let Err(e) = backup::write_status(&data, "restore-test", &status) {
+                eprintln!("tazko: cannot record the restore test result: {e}");
+            }
+
+            report("restore test", &status)
+        }
+        None => {
+            let Some(to) = to else {
+                eprintln!("tazko backup: --to <folder> is required");
+                return ExitCode::from(2);
+            };
+            let data = match data_dir(data, env_file.as_deref()) {
+                Ok(d) => d,
+                Err(code) => return code,
+            };
+            let status = backup::run_backup(&data, &to, keep_days);
+            if let Err(e) = backup::write_status(&data, "backup", &status) {
+                eprintln!("tazko: cannot record the backup result: {e}");
+            }
+
+            report("backup", &status)
+        }
+    }
+}
+
+fn run_check(data: Option<PathBuf>, env_file: Option<PathBuf>) -> ExitCode {
+    let data = match data_dir(data, env_file.as_deref()) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let r = backup::check(&data);
+    if r.ok() {
+        println!("check ok: {} databases, {} files", r.databases, r.files);
+        return ExitCode::SUCCESS;
+    }
+
+    eprintln!("check FAILED: {} problems", r.problems.len());
+    for p in &r.problems {
+        eprintln!("  - {p}");
+    }
+
     ExitCode::FAILURE
 }

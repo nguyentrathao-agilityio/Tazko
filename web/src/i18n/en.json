@@ -126,7 +126,6 @@
   "server.emailOff": "Email is off. Invitations are shared by hand until email is set up in the server settings file.",
   "server.emailOn": "Email is on.",
   "server.backups": "Backups",
-  "server.backupsNone": "No backups yet. The nightly backup and the weekly restore test are set up with the deployment scripts.",
   "action.company_created": "created company",
   "action.company_updated": "changed company",
   "action.company_suspended": "suspended company",
@@ -182,5 +181,18 @@
   "toast.superOff": "{name} is no longer a super admin",
   "toast.activeOn": "{name} can sign in again",
   "toast.activeOff": "{name} is turned off",
-  "toast.undone": "Undone"
+  "toast.undone": "Undone",
+  "server.backupOk": "OK · {when}",
+  "server.backupFailed": "Failed · {when}",
+  "server.col.run": "Run",
+  "server.col.databases": "Databases",
+  "server.col.check": "Check",
+  "server.col.size": "Size",
+  "server.run.backup": "Last backup",
+  "server.run.restore": "Last restore test",
+  "server.verified": "{n} verified",
+  "server.passed": "Passed",
+  "server.failed": "Failed",
+  "server.notYet": "Not run yet",
+  "server.backupsHint": "The nightly backup runs at 02:30 and keeps 30 days. The restore test restores the newest backup every Sunday and checks it."
 }
