@@ -191,8 +191,8 @@ pub fn copy_card(
     labels: Option<&HashMap<i64, i64>>,
 ) -> rusqlite::Result<i64> {
     c.execute(
-        "INSERT INTO cards (board_id, list_id, title, position, created_by, description, start_at, due_at, done, cover)
-         SELECT ?2, ?3, ?4, ?5, ?6, description, start_at, due_at, done, cover FROM cards WHERE id = ?1",
+        "INSERT INTO cards (board_id, list_id, title, position, created_by, description, description_text, start_at, due_at, done, cover)
+         SELECT ?2, ?3, ?4, ?5, ?6, description, description_text, start_at, due_at, done, cover FROM cards WHERE id = ?1",
         params![card, board, list, title, position, by],
     )?;
     let new = c.last_insert_rowid();
