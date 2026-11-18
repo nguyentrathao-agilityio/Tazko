@@ -24,10 +24,22 @@ pub enum Command {
         )]
         env_file: Option<PathBuf>,
     },
-    #[command(about = "Manage super admins")]
+    #[command(about = "Make a person a super admin, adding them if they are new")]
     Admin {
-        #[arg(long, help = "Email of the person to make a super admin")]
-        email: Option<String>,
+        #[arg(long, help = "Google email address of the person")]
+        email: String,
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = "Data folder (default: TAZKO_DATA_DIR from the settings file)"
+        )]
+        data: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = "Settings file, used when --data is not given"
+        )]
+        env_file: Option<PathBuf>,
     },
     #[command(about = "Back up or restore the data folder")]
     Backup,

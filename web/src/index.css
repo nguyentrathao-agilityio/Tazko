@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '../../design/tokens.css';
+@import './ui/console.css';
 
 @theme inline {
   --color-bg: var(--bg);
@@ -20,4 +21,8 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--sans);
+}
+
+[hidden] {
+  display: none !important;
 }

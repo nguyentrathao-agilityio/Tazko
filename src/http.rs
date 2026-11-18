@@ -15,6 +15,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .merge(crate::api::routes())
         .merge(crate::auth::routes())
+        .merge(crate::admin::routes())
         .fallback(static_file)
         .with_state(state)
 }

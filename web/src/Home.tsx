@@ -1,44 +1,20 @@
-import { useEffect, useState } from 'react'
-import { getMe, signOut, SignInNeeded, type Me } from '@/api'
+import type { Me } from '@/api'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n'
+import { Link, type Go } from '@/ui/Link'
 import { Mark } from '@/ui/Mark'
 
-export function Home({ go }: { go: (to: string) => void }) {
-  const [me, setMe] = useState<Me | null>(null)
-  const [down, setDown] = useState(false)
-
-  useEffect(() => {
-    const ctrl = new AbortController()
-    getMe(ctrl.signal)
-      .then(setMe)
-      .catch((e: unknown) => {
-        if (ctrl.signal.aborted) return
-        if (e instanceof SignInNeeded) {
-          const here = window.location.pathname + window.location.search
-          go(here === '/' ? '/signin' : `/signin?next=${encodeURIComponent(here)}`)
-          return
-        }
-
-        setDown(true)
-      })
-
-    return () => ctrl.abort()
-  }, [go])
-
-  if (down) return <p className="p-8 text-center text-muted">{t('app.status.down')}</p>
-  if (!me) return <p role="status" className="p-8 text-center text-muted">{t('app.status.checking')}</p>
-
-  const onSignOut = async () => {
-    await signOut(me.csrf_token).catch(() => undefined)
-    go('/signin')
-  }
-
+export function Home({ me, go, onSignOut }: { me: Me; go: Go; onSignOut: () => void }) {
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
       <header className="flex items-center gap-3">
         <Mark size={32} />
         <h1 className="flex-1 text-xl font-bold">{t('app.name')}</h1>
+        {me.is_super_admin && (
+          <Link to="/admin/companies" go={go} className="btn sm">
+            {t('rail.console')}
+          </Link>
+        )}
         <Button variant="secondary" size="sm" onClick={onSignOut}>
           {t('home.signOut')}
         </Button>

@@ -1,3 +1,5 @@
+import { setCsrf } from '@/http'
+
 export type Company = { slug: string; name: string; role: 'owner' | 'member' }
 
 export type Me = {
@@ -15,7 +17,9 @@ export async function getMe(signal?: AbortSignal): Promise<Me> {
   const res = await fetch('/api/v1/me', { signal, headers: { accept: 'application/json' } })
   if (res.status === 401) throw new SignInNeeded()
   if (!res.ok) throw new Error(`me ${res.status}`)
-  return (await res.json()) as Me
+  const me = (await res.json()) as Me
+  setCsrf(me.csrf_token)
+  return me
 }
 
 export async function signOut(csrf: string): Promise<void> {

@@ -3,6 +3,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use clap::Parser;
+use tazko::admin::cli::Granted;
 use tazko::cli::{Cli, Command};
 use tazko::config::{self, DataLayout};
 use tazko::db::Databases;
@@ -13,7 +14,11 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Serve { env_file } => serve(env_file.as_deref()).await,
-        Command::Admin { .. } => not_yet("admin"),
+        Command::Admin {
+            email,
+            data,
+            env_file,
+        } => admin(&email, data.as_deref(), env_file.as_deref()).await,
         Command::Backup => not_yet("backup"),
         Command::Check => not_yet("check"),
     }
@@ -64,6 +69,7 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
         }
     };
     println!("{banner}");
+    tokio::spawn(purge_trash_daily(state.clone()));
     if let Err(e) = axum::serve(listener, tazko::http::router(state.clone()))
         .with_graceful_shutdown(shutdown())
         .await
@@ -75,6 +81,50 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
 
     state.dbs.close();
     ExitCode::SUCCESS
+}
+
+async fn admin(email: &str, data: Option<&Path>, env_file: Option<&Path>) -> ExitCode {
+    let data = match data {
+        Some(d) => d.to_path_buf(),
+        None => match config::load(env_file) {
+            Ok(s) => s.data_dir,
+            Err(e) => {
+                eprintln!("tazko: {e}");
+                eprintln!("tazko: or pass --data <folder>");
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    match tazko::admin::cli::grant_super_admin(&data, email).await {
+        Ok((email, Granted::Already)) => println!("{email} is already a super admin."),
+        Ok((email, Granted::Promoted)) => println!("{email} is now a super admin."),
+        Ok((email, Granted::Added)) => {
+            println!(
+                "{email} is now a super admin. Sign in with that Google account and open /admin."
+            )
+        }
+        Err(e) => {
+            eprintln!("tazko admin: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+
+    ExitCode::SUCCESS
+}
+
+async fn purge_trash_daily(state: AppState) {
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+    loop {
+        tick.tick().await;
+        let now = tazko::session::now();
+        match tazko::admin::trash::purge(state.dbs.layout(), state.dbs.control(), now).await {
+            Ok(removed) if !removed.is_empty() => {
+                println!("tazko: removed from trash: {}", removed.join(", "))
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("tazko: trash clean-up failed: {e}"),
+        }
+    }
 }
 
 async fn shutdown() {
