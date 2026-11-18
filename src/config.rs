@@ -287,9 +287,6 @@ impl DataLayout {
             create_private_dir(dir)?;
         }
 
-        let conn = rusqlite::Connection::open(&self.control_db).map_err(io::Error::other)?;
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(io::Error::other)?;
         Ok(())
     }
 }
