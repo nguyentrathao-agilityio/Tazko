@@ -83,7 +83,7 @@ export function CompanyShell({
 }: {
   me: Me
   company: Company
-  active: 'home' | 'projects' | 'settings'
+  active: 'home' | 'projects' | 'settings' | 'me'
   go: Go
   onSignOut: () => void
   children: ReactNode
@@ -113,13 +113,15 @@ export function CompanyShell({
           </>
         )}
         <div className="grow" />
-        <div className="nav me">
+        <Link to={`${base}/me`} go={go} className={`nav me${active === 'me' ? ' on' : ''}`}>
           <Avatar name={name} />
           <div>
             <b>{name}</b>
-            <small>{me.is_super_admin ? t('rail.superAdmin') : t('nav.member')}</small>
+            <small>
+              {me.is_super_admin ? t('rail.superAdmin') : t('nav.member')} · {t('settings.title')}
+            </small>
           </div>
-        </div>
+        </Link>
         <button type="button" className="nav" onClick={onSignOut}>
           <Icon name="out" />
           {t('home.signOut')}

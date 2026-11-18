@@ -167,7 +167,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    height: min(880px, calc(100vh - 48px));
+    height: min(880px, calc(100vh / var(--zm, 1) - 48px));
     color: var(--ink);
   }
 
