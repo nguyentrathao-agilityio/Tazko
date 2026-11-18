@@ -14,3 +14,5 @@ One entry per step: what was built, how its checks were verified, and anything l
 | 1.6 | 18 Nov 2026 | `tazko admin --email`; super admin console API and six screens; trash for 30 days (PR #9). | Every admin action writes an audit row (test); screens compared with the prototype. | |
 | 1.7 | 18 Nov 2026 | Company owner API; company home, settings, manage projects shell; switcher (PR #10). | Owner invites, member joins on first sign-in (full flow test); two-company isolation test. | |
 | 1.8 | 18 Nov 2026 | Every design token mapped into the Tailwind theme; toasts with Undo; shared empty state and page header (this step). | Side-by-side screenshots of the M1 screens with the prototype, light and dark; token mapping test. | Fonts (open question 1). |
+| 1.9 | 18 Nov 2026 | CI: web type check step, web licence check, `cargo deny` (licences, bans, sources) with `deny.toml`; `url` crate removed (PR #12). | `ci.sh` passes on a fresh clone of the branch with no tracked changes afterwards; 29 check tests including licence and product-name cases. | Licence exceptions (open question 4). |
+
