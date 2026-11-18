@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
@@ -18,6 +18,10 @@ import { BoardLists } from '@/board/BoardLists'
 import type { ListActions } from '@/board/ListColumn'
 import type { BoardData, CardData, ListData } from '@/board/types'
 import { CardDialog } from '@/card/CardDialog'
+import { active, applyFilter, emptyFilter, toggleMine, type Filter } from '@/board/filter'
+import { FilterPop } from '@/board/FilterPop'
+import { SearchButton } from '@/search/Search'
+import { isTyping, popoverOpen } from '@/ui/typing'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -44,7 +48,7 @@ function useCollapsed(boardId: number) {
   return { ids, set }
 }
 
-type Pop = { kind: 'access' | 'share' | 'members'; at: Anchor } | { kind: 'quick'; at: Anchor; card: CardData } | null
+type Pop = { kind: 'access' | 'share' | 'members' | 'filter'; at: Anchor } | { kind: 'quick'; at: Anchor; card: CardData } | null
 
 export function BoardPage({ company, id, cardId, me, go }: { company: Company; id: number; cardId: number | null; me: number; go: Go }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
@@ -56,6 +60,20 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
   const [renaming, setRenaming] = useState(false)
   const [adding, setAdding] = useState(false)
   const [composing, setComposing] = useState<number | null>(null)
+  const [filter, setFilter] = useState<Filter>(emptyFilter)
+  const labelNames = useMemo(() => new Map((board?.labels ?? []).map((l) => [l.id, l.name])), [board])
+  const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames) : []), [board, filter, me, labelNames])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'q' || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || popoverOpen()) return
+      e.preventDefault()
+      setFilter((f) => toggleMine(f))
+    }
+    window.addEventListener('keydown', onKey)
+
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const collapsed = useCollapsed(id)
 
   useEffect(() => {
@@ -143,6 +161,9 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           </Link>
         </div>
         <span className="sp" />
+        <div className="tools">
+          <SearchButton />
+        </div>
       </div>
       <div className="bh">
         {renaming ? (
@@ -195,19 +216,34 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
             {t('board.share')}
           </button>
         )}
+        <button type="button" className="btn sm" aria-label={t('filter.button')} onClick={(e) => setPop({ kind: 'filter', at: anchorOf(e.currentTarget) })}>
+          <Icon name="filter" />
+          {t('filter.button')}
+          {active(filter) ? ' •' : ''}
+        </button>
         <button type="button" className="ibtn" aria-label={t('boardMenu.title')} onClick={() => setMenu(true)}>
           <Icon name="more" />
         </button>
       </div>
       {board.closed && <div className="ro-banner">{t('board.closedBanner')}</div>}
       {!board.closed && board.role === 'observer' && <div className="ro-banner">{t('board.observerBanner')}</div>}
+      {active(filter) && (
+        <div className="fbar" role="status">
+          <Icon name="filter" />
+          <b>{shownLists.reduce((n, l) => n + l.cards.length, 0)}</b> {t('filter.matching')}
+          <button type="button" onClick={() => setFilter(emptyFilter)}>
+            {t('filter.clear')}
+          </button>
+        </div>
+      )}
       {error && (
         <div className="ro-banner" role="alert">
           {error}
         </div>
       )}
       <BoardLists
-        lists={lists}
+        lists={shownLists}
+        totals={active(filter) ? new Map(lists.map((l) => [l.id, l.cards.length])) : null}
         edit={edit}
         collapsed={collapsed.ids}
         onCollapse={collapsed.set}
@@ -271,6 +307,11 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
               })
             }}
           />
+        </Popover>
+      )}
+      {pop?.kind === 'filter' && (
+        <Popover anchor={pop.at} title={t('filter.title')} width={340} onClose={() => setPop(null)}>
+          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} />
         </Popover>
       )}
       {pop?.kind === 'access' && (

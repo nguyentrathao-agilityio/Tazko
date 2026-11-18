@@ -10,6 +10,7 @@ import { ManageProjects } from '@/company/ManageProjects'
 import { ProjectPage } from '@/projects/ProjectPage'
 import { BoardPage } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
+import { SearchHost } from '@/search/Search'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
@@ -65,7 +66,12 @@ export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: strin
   }
 
   if (match[5])
-    return <BoardPage key={`${company.slug}:b${match[5]}`} company={company} id={Number(match[5])} cardId={match[6] ? Number(match[6]) : null} me={me.id} go={go} />
+    return (
+      <>
+        <BoardPage key={`${company.slug}:b${match[5]}`} company={company} id={Number(match[5])} cardId={match[6] ? Number(match[6]) : null} me={me.id} go={go} />
+        <SearchHost company={company} go={go} />
+      </>
+    )
 
   const projectId = match[3] ? Number(match[3]) : null
   const section = projectId ? 'home' : match[2] === '/settings' ? 'settings' : match[2] === '/projects' ? 'projects' : 'home'
@@ -76,6 +82,7 @@ export function CompanyRoutes({ me, path, go, onSignOut }: { me: Me; path: strin
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
       {section === 'settings' && <CompanySettings key={company.slug} company={company} />}
       {section === 'projects' && <ManageProjects key={company.slug} company={company} />}
+      <SearchHost company={company} go={go} />
     </CompanyShell>
   )
 }

@@ -5,6 +5,7 @@
 @import './ui/projects.css';
 @import './board/board.css';
 @import './card/card.css';
+@import './search/search.css';
 
 body {
   margin: 0;

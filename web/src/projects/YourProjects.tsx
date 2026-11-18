@@ -10,6 +10,7 @@ import { useLoad } from '@/ui/useLoad'
 import { Stack } from '@/projects/Stack'
 import { BoardTile } from '@/board/BoardTile'
 import type { BoardTileData } from '@/board/types'
+import { SearchButton } from '@/search/Search'
 import type { MyProject } from '@/projects/types'
 
 export function YourProjects({ company, go }: { company: Company; go: Go }) {
@@ -23,6 +24,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
   return (
     <>
       <PageHead title={t('nav.projects')} lead={t('projects.lead', { company: company.name })}>
+        <SearchButton />
         {company.role === 'owner' && (
           <button type="button" className="btn" onClick={() => go(`/c/${company.slug}/projects`)}>
             <Icon name="building" />
