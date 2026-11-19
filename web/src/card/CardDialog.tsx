@@ -322,6 +322,12 @@ export function CardDialog({
                 })
               }
               hasFields={Boolean(board.fields?.length)}
+              onTemplate={() =>
+                void run(() => api('PUT', `${path}/template`, { on: !card.is_template })).then((ok) => {
+                  close()
+                  if (ok) toast(card.is_template ? t('ctpl.stopped') : t('ctpl.made'))
+                })
+              }
               onFields={() => {
                 close()
                 document.getElementById('card-fields')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -519,6 +525,7 @@ function CardMenu({
   onShare,
   hasFields,
   onFields,
+  onTemplate,
 }: {
   card: CardDetail
   edit: boolean
@@ -530,6 +537,7 @@ function CardMenu({
   onShare: () => void
   hasFields: boolean
   onFields: () => void
+  onTemplate: () => void
 }) {
   const self = people.find((p) => p.id === me)
   const item = (icon: Parameters<typeof Icon>[0]['name'], label: string, act: () => void) => (
@@ -557,6 +565,7 @@ function CardMenu({
       {edit && item('move', t('card.move'), () => onPick('move'))}
       {edit && item('copy', t('card.copy'), () => onPick('copy'))}
       {card.can.edit && item(card.archived ? 'undo' : 'archive', card.archived ? t('card.restore') : t('card.archive'), onArchive)}
+      {edit && item('tmpl', card.is_template ? t('ctpl.stop') : t('ctpl.make'), onTemplate)}
       {item('share', t('card.shareLink'), onShare)}
     </>
   )

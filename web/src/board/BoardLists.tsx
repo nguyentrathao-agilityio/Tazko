@@ -48,6 +48,7 @@ export function BoardLists({
   composing,
   setComposing,
   onAddCards,
+  onCardTemplate,
   onMoveCard,
   onMoveList,
   onOpenCard,
@@ -69,6 +70,7 @@ export function BoardLists({
   composing: number | null
   setComposing: (id: number | null) => void
   onAddCards: (list: ListData, titles: string[]) => Promise<boolean>
+  onCardTemplate?: (list: ListData, el: Element) => void
   onMoveCard: (m: CardMove) => void
   onMoveList: (m: ListMove) => void
   onOpenCard: (card: CardData) => void
@@ -188,6 +190,7 @@ export function BoardLists({
                         onOpen={() => setComposing(l.id)}
                         onClose={() => setComposing(null)}
                         onAdd={(titles) => onAddCards(l, titles)}
+                        onTemplate={onCardTemplate ? (el) => onCardTemplate(l, el) : undefined}
                       />
                     ) : undefined
                   }

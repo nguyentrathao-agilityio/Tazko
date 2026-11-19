@@ -3,7 +3,19 @@ import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { splitTitles } from '@/board/titles'
 
-export function Composer({ open, onOpen, onClose, onAdd }: { open: boolean; onOpen: () => void; onClose: () => void; onAdd: (titles: string[]) => Promise<boolean> }) {
+export function Composer({
+  open,
+  onOpen,
+  onClose,
+  onAdd,
+  onTemplate,
+}: {
+  open: boolean
+  onOpen: () => void
+  onClose: () => void
+  onAdd: (titles: string[]) => Promise<boolean>
+  onTemplate?: (el: Element) => void
+}) {
   const [text, setText] = useState('')
 
   const submit = (e?: FormEvent) => {
@@ -34,6 +46,11 @@ export function Composer({ open, onOpen, onClose, onAdd }: { open: boolean; onOp
           <Icon name="plus" />
           {t('card.add')}
         </button>
+        {onTemplate && (
+          <button type="button" className="ibtn sm" aria-label={t('ctpl.button')} title={t('ctpl.buttonHint')} onClick={(e) => onTemplate(e.currentTarget)}>
+            <Icon name="tmpl" />
+          </button>
+        )}
       </div>
     )
 

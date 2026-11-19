@@ -123,6 +123,10 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return `attached ${str(p.name)}`
     case 'attachment_removed':
       return `removed the attachment ${str(p.name)}`
+    case 'card_template':
+      return p.on ? 'made this card a template' : 'stopped this card being a template'
+    case 'board_saved_as_template':
+      return `saved this board as the template ${str(p.name)}`
     case 'comment_reacted':
       return 'reacted to a comment'
     default:
