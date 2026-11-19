@@ -26,7 +26,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings|\/templates)?|\/b\/(\d+)(?:\/c\/(\d+))?|\/me(\/appearance|\/sessions)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings|\/templates)?|\/b\/(\d+)(\/table)?(?:\/c\/(\d+))?|\/me(\/appearance|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const company = me.companies.find((c) => c.slug === slug)
   const fallback = me.companies.find((c) => c.slug === lastCompany()) ?? me.companies[0]
@@ -71,7 +71,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
   if (match[5])
     return (
       <MeContext.Provider value={me}>
-        <BoardPage key={`${company.slug}:b${match[5]}`} company={company} id={Number(match[5])} cardId={match[6] ? Number(match[6]) : null} me={me.id} go={go} />
+        <BoardPage key={`${company.slug}:b${match[5]}`} company={company} id={Number(match[5])} cardId={match[7] ? Number(match[7]) : null} me={me.id} go={go} view={match[6] ? 'table' : 'board'} />
         <SearchHost company={company} go={go} />
       </MeContext.Provider>
     )
@@ -87,7 +87,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
       {projectId && match[4] !== '/templates' && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
       {section === 'me' && (
-        <SettingsPage me={me} company={company} tab={match[7] === '/appearance' ? 'appearance' : match[7] === '/sessions' ? 'sessions' : 'profile'} go={go} onProfile={onProfile} />
+        <SettingsPage me={me} company={company} tab={match[8] === '/appearance' ? 'appearance' : match[8] === '/sessions' ? 'sessions' : 'profile'} go={go} onProfile={onProfile} />
       )}
       {section === 'settings' && <CompanySettings key={company.slug} company={company} />}
       {section === 'projects' && <ManageProjects key={company.slug} company={company} />}

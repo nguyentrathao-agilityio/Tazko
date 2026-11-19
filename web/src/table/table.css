@@ -1,0 +1,230 @@
+@layer components {
+  .vtabs {
+    display: flex;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 9px;
+    padding: 2px;
+  }
+
+  .vtabs button {
+    border: 0;
+    background: none;
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  .vtabs button.on {
+    background: rgba(255, 255, 255, 0.95);
+    color: #1b1b2f;
+  }
+
+  .tbd {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  .tbbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tbbar select {
+    height: 30px;
+    font-size: 0.85rem;
+  }
+
+  .tbw {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--surface);
+  }
+
+  table.tb {
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 100%;
+    font-size: 0.88rem;
+  }
+
+  .tb th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--sunken);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    padding: 8px 10px;
+    font: 600 0.72rem var(--sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .tb th:hover {
+    background: var(--accent-soft);
+  }
+
+  .tb th .sa {
+    font-style: normal;
+    color: var(--accent);
+    font-size: 0.7rem;
+  }
+
+  .tb td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+    white-space: nowrap;
+    background: var(--surface);
+  }
+
+  .tb td:first-child,
+  .tb th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    box-shadow: 1px 0 0 var(--line);
+  }
+
+  .tb th:first-child {
+    z-index: 4;
+  }
+
+  .tb tr:hover td,
+  .tb tr.sel td {
+    background: var(--accent-soft);
+  }
+
+  .tb tr.gh td {
+    background: var(--sunken);
+    font-weight: 700;
+    position: sticky;
+    left: 0;
+  }
+
+  .tb tr.addrow td {
+    background: var(--surface);
+  }
+
+  .tb .tt {
+    min-width: 300px;
+    max-width: 380px;
+  }
+
+  .tb .tl {
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    padding: 2px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 280px;
+  }
+
+  .tb .tl:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .tb .tl.dn {
+    color: var(--muted);
+    text-decoration: line-through;
+  }
+
+  .tb .chk {
+    width: 18px;
+    opacity: 1;
+    margin: 0;
+  }
+
+  .tb input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    flex: none;
+  }
+
+  .tb input[type='date'],
+  .tb input[type='number'],
+  .tb input[type='text'],
+  .tb select {
+    height: 30px;
+    font-size: 0.85rem;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0 6px;
+    width: auto;
+    border-radius: 6px;
+    color: var(--ink);
+  }
+
+  .tb input[type='date']:hover,
+  .tb input[type='number']:hover,
+  .tb input[type='text']:hover,
+  .tb select:hover {
+    border-color: var(--line);
+  }
+
+  .tb input.d-bad {
+    color: var(--bad);
+    font-weight: 600;
+  }
+
+  .tb input.d-warn {
+    color: var(--warn);
+    font-weight: 600;
+  }
+
+  .tb input.d-ok {
+    color: var(--ok);
+  }
+
+  .tb .num {
+    text-align: right;
+  }
+
+  .tb .addb {
+    width: 24px;
+    height: 24px;
+  }
+
+  .bar2 {
+    flex: 1;
+    height: 7px;
+    border-radius: 99px;
+    background: var(--sunken);
+    overflow: hidden;
+  }
+
+  .bar2 i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 99px;
+  }
+
+  .bar2 i.ok {
+    background: var(--ok);
+  }
+}

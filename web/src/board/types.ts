@@ -27,6 +27,7 @@ export type CardData = {
   cover_image?: number | null
   attachments?: number
   is_template?: boolean
+  updated_at?: number
   fields?: Record<string, FieldValue>
   comments?: number
   items?: number

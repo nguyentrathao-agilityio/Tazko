@@ -160,7 +160,7 @@ describe('keyboard shortcuts', () => {
     expect(await within(doing).findByLabelText('Card title')).toBeTruthy()
     fireEvent.click(within(doing).getByRole('button', { name: 'Cancel' }))
     press('f')
-    expect(screen.getByRole('dialog', { name: 'Filter cards' })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: 'Filter cards' })).toBeTruthy()
   })
 
   it('Z turns zen on and is remembered, and Esc clears the selection before leaving zen', async () => {
