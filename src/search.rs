@@ -172,7 +172,10 @@ async fn search(
             if p.done {
                 sql.push_str(" AND k.done = 1");
             }
-            if p.attachments || !p.unknown.is_empty() {
+            if p.attachments {
+                sql.push_str(" AND EXISTS (SELECT 1 FROM attachments a WHERE a.card_id = k.id)");
+            }
+            if !p.unknown.is_empty() {
                 sql.push_str(" AND 0");
             }
             sql.push_str(" ORDER BY k.updated_at DESC, k.id DESC");
