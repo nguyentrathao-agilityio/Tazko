@@ -141,6 +141,34 @@ impl FromRequestParts<AppState> for Company {
             Err(e) => return Err(e.into()),
         };
 
+        if let Some(limits) = user.0.token.as_ref().filter(|t| t.projects.is_some()) {
+            let id = |k: &str| params.get(k).and_then(|v| v.parse::<i64>().ok());
+            let project = match (id("project"), id("board")) {
+                (Some(p), _) => Some(p),
+                (None, Some(b)) => {
+                    db.read(move |c| {
+                        Ok(
+                            c.query_row("SELECT project_id FROM boards WHERE id = ?1", [b], |r| {
+                                r.get(0)
+                            })
+                            .optional()?,
+                        )
+                    })
+                    .await?
+                }
+                (None, None) => None,
+            };
+            if let Some(p) = project
+                && !limits.allows_project(&slug, p)
+            {
+                return Err(ApiError::NotFound);
+            }
+
+            if project.is_none() && (id("project").is_some() || id("board").is_some()) {
+                return Err(ApiError::NotFound);
+            }
+        }
+
         Ok(Company {
             org_id,
             slug,

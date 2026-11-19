@@ -663,3 +663,65 @@ async fn the_api_reference_is_published() {
     );
     assert!(body_text(page).await.contains("Tazko API"));
 }
+
+#[tokio::test]
+async fn a_project_limited_owner_token_cannot_manage_other_projects() {
+    let w = world().await;
+    req(
+        &w.app,
+        &w.lead,
+        Method::POST,
+        &format!("{C}/projects/{}/invites", w.project_a),
+        Some(json!({ "email": "boss@a.example", "role": "owner" })),
+    )
+    .await;
+    let token = personal(
+        &w,
+        &w.boss,
+        "manage",
+        Some(json!([{ "company": "company-a", "project": w.project_a }])),
+    )
+    .await;
+    for (method, path) in [
+        (
+            Method::POST,
+            format!("{C}/projects/{}/archive", w.project_b),
+        ),
+        (
+            Method::POST,
+            format!("{C}/projects/{}/archive", w.project_a),
+        ),
+        (Method::DELETE, format!("{C}/projects/{}", w.project_b)),
+        (Method::POST, format!("{C}/projects/{}/owners", w.project_b)),
+        (Method::POST, format!("{C}/projects")),
+    ] {
+        let s = status(
+            &w.app,
+            &token,
+            method.clone(),
+            &path,
+            Some(json!({ "user_id": w.boss.id, "name": "X", "owner_id": w.boss.id })),
+        )
+        .await;
+        assert!(
+            s == StatusCode::FORBIDDEN || s == StatusCode::NOT_FOUND,
+            "{method} {path} gave {s}"
+        );
+    }
+    let list = req(&w.app, &w.boss, Method::GET, &format!("{C}/projects"), None).await;
+    let projects = list["projects"].as_array().unwrap();
+    assert_eq!(projects.len(), 2, "{list}");
+    assert!(projects.iter().all(|p| p["status"] == "active"), "{list}");
+    let board_b = format!("{C}/boards/{}/watch", w.board_b);
+    assert_eq!(
+        status(
+            &w.app,
+            &token,
+            Method::PUT,
+            &board_b,
+            Some(json!({ "on": true }))
+        )
+        .await,
+        StatusCode::NOT_FOUND
+    );
+}

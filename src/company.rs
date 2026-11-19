@@ -41,7 +41,7 @@ impl FromRequestParts<AppState> for CompanyOwner {
             .0
             .token
             .as_ref()
-            .is_some_and(|t| t.scope != crate::api::tokens::Scope::Manage)
+            .is_some_and(|t| t.scope != crate::api::tokens::Scope::Manage || t.projects.is_some())
         {
             return Err(ApiError::Forbidden);
         }
