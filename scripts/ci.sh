@@ -16,9 +16,11 @@ step "commits";              run "$PY" scripts/checks.py commits
 step "no comments in source"; run "$PY" scripts/checks.py comments
 step "prototype-only controls"; run "$PY" scripts/checks.py prototype-only
 step "design is read-only";   run "$PY" scripts/checks.py design
+step "committed migrations unchanged"; run "$PY" scripts/checks.py migrations
 step "agent settings";        run "$PY" scripts/checks.py settings
 step "javascript budget";    run "$PY" scripts/checks.py js-budget web/dist
 step "tests for the checks"; run bash tests/ci/test_checks.sh
+step "tests for the write guard"; run bash tests/ci/test_guard.sh
 step "local dev target";     run bash scripts/dev-env.sh check
 step "tests for dev-env";    run bash tests/ci/test_dev_env.sh
 step "tests for deploy";     run bash tests/ci/test_deploy.sh

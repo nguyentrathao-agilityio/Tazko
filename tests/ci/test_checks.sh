@@ -172,6 +172,21 @@ expect fail "design file changed" checks design
 checks design --update >/dev/null; echo c > design/b.css; git add -A
 expect fail "design file added" checks design
 
+# migrations
+new_repo migrations; mkdir -p migrations/tenant scripts; echo a > migrations/tenant/0001.sql; git add -A
+expect fail "migration not listed yet" checks migrations
+checks migrations --update >/dev/null
+expect pass "migrations match their list" checks migrations
+echo b >> migrations/tenant/0001.sql
+expect fail "committed migration changed" checks migrations
+expect fail "update refuses a changed migration" checks migrations --update
+git checkout -q migrations/tenant/0001.sql; echo c > migrations/tenant/0002.sql; git add -A
+expect fail "new migration not listed" checks migrations
+checks migrations --update >/dev/null
+expect pass "new migration listed" checks migrations
+git rm -qf migrations/tenant/0001.sql
+expect fail "committed migration removed" checks migrations
+
 # settings
 new_repo settings; mkdir -p .claude
 cp "$ROOT/.claude/settings.json" .claude/settings.json
@@ -181,6 +196,18 @@ expect fail "sudo no longer asks" checks settings
 cp "$ROOT/.claude/settings.json" .claude/settings.json
 edit_settings 'd["includeCoAuthoredBy"] = True'
 expect fail "attribution turned back on" checks settings
+cp "$ROOT/.claude/settings.json" .claude/settings.json
+edit_settings 'd["hooks"]["PreToolUse"][0]["matcher"] = "Edit|Write"'
+expect fail "write guard no longer covers shell commands" checks settings
+cp "$ROOT/.claude/settings.json" .claude/settings.json
+edit_settings 'd.pop("hooks")'
+expect fail "write guard removed" checks settings
+cp "$ROOT/.claude/settings.json" .claude/settings.json
+edit_settings 'd["hooks"]["PreToolUse"][0]["matcher"] = ""'
+expect pass "write guard on every tool" checks settings
+cp "$ROOT/.claude/settings.json" .claude/settings.json
+edit_settings 'd["hooks"]["PreToolUse"][0]["matcher"] = "Edit|("'
+expect fail "broken matcher is a failure, not a crash" checks settings
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

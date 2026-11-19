@@ -26,7 +26,8 @@ expect pass "data folder is private to tazko" has 'install -d -o tazko -g tazko 
 expect pass "release script is root-owned" has 'install -o root -g root -m 0755 .*release.sh /usr/local/bin/tazko-release' "$TMP/setup.txt"
 expect pass "sudoers file is checked" has 'visudo -cf /etc/sudoers.d/tazko-deploy' "$TMP/setup.txt"
 expect pass "units and timers are enabled" has 'systemctl enable tazko.service tazko-backup.timer tazko-restore-test.timer' "$TMP/setup.txt"
-expect fail "setup refuses to run without root" env DRY_RUN=0 bash "$DEPLOY/setup.sh"
+mkdir "$TMP/bin"; printf '#!/bin/sh\necho 1000\n' >"$TMP/bin/id"; chmod +x "$TMP/bin/id"
+expect fail "setup refuses to run without root" env DRY_RUN=0 PATH="$TMP/bin:$PATH" bash "$DEPLOY/setup.sh"
 if grep -R -n -E '8790|cloudflared|config\.yml|/etc/cloudflared' "$DEPLOY" >"$TMP/other"; then
   fail=$((fail+1)); echo "  BAD  deploy files touch the other service or the tunnel"; cat "$TMP/other"
 else
