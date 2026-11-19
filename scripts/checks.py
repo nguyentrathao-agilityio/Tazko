@@ -21,21 +21,32 @@ itself name the products it keeps out of the repository.
 """
 import gzip
 import hashlib
+import json
 import os
 import re
 import subprocess
 import sys
+
+ENCODING = "utf-8"
+
+SRC_DIR = "src/"
+WEB_SRC_DIR = "web/src/"
+MIGRATIONS_DIR = "migrations/"
+TENANT_MIGRATIONS_DIR = MIGRATIONS_DIR + "tenant/"
+DESIGN_DIR = "design/"
+DESIGN_LIST = "scripts/design.sha256"
+SETTINGS_FILE = ".claude/settings.json"
 
 REQUIRED = [
     "CLAUDE.md",
     "deny.toml",
     "plan.md",
     ".gitignore",
-    ".claude/settings.json",
-    "design/tazko-prototype.html",
-    "design/tokens.css",
-    "design/README.md",
-    "design/CHANGELOG.md",
+    SETTINGS_FILE,
+    DESIGN_DIR + "tazko-prototype.html",
+    DESIGN_DIR + "tokens.css",
+    DESIGN_DIR + "README.md",
+    DESIGN_DIR + "CHANGELOG.md",
     "scripts/ci.sh",
 ]
 
@@ -95,6 +106,20 @@ def tracked_files():
     return [p for p in out.split("\0") if p and os.path.isfile(p)]
 
 
+def files_under(*prefixes):
+    return [p for p in tracked_files() if p.startswith(prefixes)]
+
+
+def read_text(path):
+    with open(path, encoding=ENCODING, errors="ignore") as f:
+        return f.read()
+
+
+def read_json(path):
+    with open(path, encoding=ENCODING) as f:
+        return json.load(f)
+
+
 def fail(msgs):
     for m in msgs:
         print("  FAIL " + m)
@@ -110,8 +135,7 @@ def check_names():
     for p in tracked_files():
         found = hits(p, PRODUCT_HASHES)
         try:
-            with open(p, encoding="utf-8", errors="ignore") as f:
-                found += hits(f.read(), PRODUCT_HASHES)
+            found += hits(read_text(p), PRODUCT_HASHES)
         except OSError:
             continue
         if found:
@@ -126,8 +150,7 @@ def check_secrets():
             bad.append(f"{p}: settings, key or database files must not be committed")
             continue
         try:
-            with open(p, encoding="utf-8", errors="ignore") as f:
-                text = f.read()
+            text = read_text(p)
         except OSError:
             continue
         for pat in SECRET_PATTERNS:
@@ -181,11 +204,7 @@ def build_tool_exception(name):
 
 
 def load_licences(path):
-    import json
-
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    return [(pkg["name"], licence) for licence, pkgs in data.items() for pkg in pkgs]
+    return [(pkg["name"], licence) for licence, pkgs in read_json(path).items() for pkg in pkgs]
 
 
 def check_js_licenses(prod_path, all_path):
@@ -218,8 +237,7 @@ def message_problems(msg):
 
 
 def check_commit_msg(path):
-    with open(path, encoding="utf-8") as f:
-        msg = "\n".join(l for l in f.read().splitlines() if not l.startswith("#"))
+    msg = "\n".join(l for l in read_text(path).splitlines() if not l.startswith("#"))
     return fail(message_problems(msg))
 
 
@@ -258,150 +276,138 @@ def check_commits():
     return fail(bad)
 
 
-COMMENT_ROOTS = ("src/", "web/src/", "migrations/")
-LINE_MARKERS = {".rs": "//", ".ts": "//", ".tsx": "//", ".js": "//", ".sql": "--"}
-BLOCK_COMMENT_EXTS = {".rs", ".ts", ".tsx", ".js", ".css", ".sql"}
+COMMENT_ROOTS = (SRC_DIR, WEB_SRC_DIR, MIGRATIONS_DIR)
+LINE_COMMENT_MARKERS = {".rs": "//", ".ts": "//", ".tsx": "//", ".js": "//", ".sql": "--"}
+BLOCK_COMMENT_EXTS = frozenset({".rs", ".ts", ".tsx", ".js", ".css", ".sql"})
+COMMENT_EXTS = BLOCK_COMMENT_EXTS | LINE_COMMENT_MARKERS.keys()
+BLOCK_COMMENT_MARKER = "/*"
+ESCAPED_SLASH = "\\/"
 COMMENT_ALLOWED = re.compile(r"^\s*///\s*<reference\s")
-STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\'(?:\\.|[^\'\\\n])*\'')
+STRING_LITERAL = re.compile(r""""(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|'(?:\\.|[^'\\\n])*'""")
+COMMENT_HINT = "comment in source; name things so the code reads without it, and put the reason in the commit message or docs/"
 
 
-def comment_on_line(line, ext):
+def has_comment(line, ext):
     if COMMENT_ALLOWED.match(line):
         return False
-    code = STRING_LITERAL.sub('""', line.replace("\\/", ""))
-    marker = LINE_MARKERS.get(ext)
-    if marker and marker in code:
-        return True
-    return ext in BLOCK_COMMENT_EXTS and "/*" in code
+    code = STRING_LITERAL.sub('""', line.replace(ESCAPED_SLASH, ""))
+    marker = LINE_COMMENT_MARKERS.get(ext)
+    return (marker is not None and marker in code) or (ext in BLOCK_COMMENT_EXTS and BLOCK_COMMENT_MARKER in code)
 
 
 def check_comments():
-    bad = []
-    for p in tracked_files():
-        ext = os.path.splitext(p)[1]
-        if not p.startswith(COMMENT_ROOTS) or (ext not in LINE_MARKERS and ext not in BLOCK_COMMENT_EXTS):
-            continue
-        with open(p, encoding="utf-8", errors="ignore") as f:
-            for n, line in enumerate(f, 1):
-                if comment_on_line(line, ext):
-                    bad.append(f"{p}:{n}: comment in source; name things so the code reads without it, "
-                               "and put the reason in the commit message or docs/")
+    bad = [
+        f"{p}:{n}: {COMMENT_HINT}"
+        for p in files_under(*COMMENT_ROOTS)
+        if (ext := os.path.splitext(p)[1]) in COMMENT_EXTS
+        for n, line in enumerate(read_text(p).splitlines(), 1)
+        if has_comment(line, ext)
+    ]
     return fail(bad)
 
 
-TENANT_COLUMN = re.compile(r"\b(?:org|orgs|company|companies|tenant|tenants)_(?:id|slug|key|uuid)\b", re.I)
+TENANT_COLUMN = re.compile(r"\b(?:orgs?|compan(?:y|ies)|tenants?)_(?:id|slug|key|uuid)\b", re.I)
+TENANT_HINT = "each company has its own tazko.db, so open that company's file instead of adding a company column"
 
 
-def check_tenant_schema(root="migrations/tenant"):
-    bad = []
-    if not os.path.isdir(root):
-        print(f"  skip tenant-schema: no {root}")
-        return 0
-    for n in sorted(os.listdir(root)):
-        p = os.path.join(root, n)
-        if not n.endswith(".sql"):
-            continue
-        with open(p, encoding="utf-8") as f:
-            for i, line in enumerate(f, 1):
-                m = TENANT_COLUMN.search(line)
-                if m:
-                    bad.append(f"{p}:{i}: '{m.group(0)}' in a company file; each company has its own "
-                               "tazko.db, so open that company's file instead of adding a company column")
+def check_tenant_schema():
+    bad = [
+        f"{p}:{n}: '{m.group(0)}' in a company file; {TENANT_HINT}"
+        for p in files_under(TENANT_MIGRATIONS_DIR)
+        if p.endswith(".sql")
+        for n, line in enumerate(read_text(p).splitlines(), 1)
+        if (m := TENANT_COLUMN.search(line))
+    ]
     return fail(bad)
 
 
-PROTOTYPE_ONLY = ["View as", "Live sim"]
+PROTOTYPE_ONLY_LABELS = ("View as", "Live sim")
+PROTOTYPE_HINT = "is a prototype-only control; build the role differences on the server and leave the prototype bar out"
 
 
-def check_prototype_only(root="web/src/"):
-    bad = []
-    for p in tracked_files():
-        if not p.startswith(root):
-            continue
-        with open(p, encoding="utf-8", errors="ignore") as f:
-            text = f.read()
-        for label in PROTOTYPE_ONLY:
-            if label in text:
-                bad.append(f"{p}: '{label}' is a prototype-only control; build the role differences "
-                           "on the server and leave the prototype bar out")
+def check_prototype_only():
+    bad = [
+        f"{p}: '{label}' {PROTOTYPE_HINT}"
+        for p in files_under(WEB_SRC_DIR)
+        for label in PROTOTYPE_ONLY_LABELS
+        if label in read_text(p)
+    ]
     return fail(bad)
 
 
-DESIGN_DIR = "design/"
-DESIGN_LIST = "scripts/design.sha256"
+DESIGN_HINT = "design/ is read-only for the build; ask the owner, who runs checks.py design --update after the change"
+UPDATE_FLAG = "--update"
+
+
+def sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def design_hashes():
-    out = {}
-    for p in sorted(tracked_files()):
-        if p.startswith(DESIGN_DIR):
-            with open(p, "rb") as f:
-                out[p] = hashlib.sha256(f.read()).hexdigest()
-    return out
+    return {p: sha256_file(p) for p in sorted(files_under(DESIGN_DIR))}
+
+
+def saved_design_hashes():
+    return {path: digest for digest, path in (line.split(None, 1) for line in read_text(DESIGN_LIST).splitlines() if line.strip())}
+
+
+def write_design_hashes(hashes):
+    with open(DESIGN_LIST, "w", encoding=ENCODING) as f:
+        f.writelines(f"{digest}  {path}\n" for path, digest in hashes.items())
 
 
 def check_design(*args):
     current = design_hashes()
-    if args == ("--update",):
-        with open(DESIGN_LIST, "w", encoding="utf-8") as f:
-            f.writelines(f"{d}  {p}\n" for p, d in current.items())
+    if args == (UPDATE_FLAG,):
+        write_design_hashes(current)
         print(f"  design: {len(current)} file(s) written to {DESIGN_LIST}")
         return 0
     if args:
         print(__doc__)
         return 2
     if not os.path.isfile(DESIGN_LIST):
-        return fail([f"missing {DESIGN_LIST}; the owner creates it with checks.py design --update"])
-    saved = {}
-    with open(DESIGN_LIST, encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                d, p = line.split(None, 1)
-                saved[p.strip()] = d
-    hint = "design/ is read-only for the build; ask the owner, who runs checks.py design --update after the change"
-    bad = [f"{p}: changed; {hint}" for p in current if p in saved and saved[p] != current[p]]
-    bad += [f"{p}: added; {hint}" for p in current if p not in saved]
-    bad += [f"{p}: removed; {hint}" for p in saved if p not in current]
+        return fail([f"missing {DESIGN_LIST}; the owner creates it with checks.py design {UPDATE_FLAG}"])
+    saved = saved_design_hashes()
+    changed = [p for p in current.keys() & saved.keys() if current[p] != saved[p]]
+    bad = [f"{p}: {state}; {DESIGN_HINT}" for state, paths in (
+        ("changed", changed),
+        ("added", current.keys() - saved.keys()),
+        ("removed", saved.keys() - current.keys()),
+    ) for p in sorted(paths)]
     return fail(bad)
 
 
-SETTINGS_FILE = ".claude/settings.json"
-REQUIRED_ASK = [
-    "Bash(sudo:*)",
-    "Bash(systemctl:*)",
-    "Bash(cloudflared:*)",
-    "Bash(apt:*)",
-    "Bash(apt-get:*)",
-    "Bash(brew install:*)",
-    "Bash(useradd:*)",
-    "Bash(usermod:*)",
-    "Bash(ssh:*)",
-    "Bash(scp:*)",
-]
+MACHINE_COMMANDS = (
+    "sudo",
+    "systemctl",
+    "cloudflared",
+    "apt",
+    "apt-get",
+    "brew install",
+    "useradd",
+    "usermod",
+    "ssh",
+    "scp",
+)
+REQUIRED_ASK = tuple(f"Bash({command}:*)" for command in MACHINE_COMMANDS)
 
 
 def check_settings(path=SETTINGS_FILE):
-    import json
-
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+        data = read_json(path)
     except (OSError, ValueError) as e:
         return fail([f"{path}: cannot read ({e})"])
-    bad = []
     attribution = data.get("attribution", {})
+    permissions = data.get("permissions", {})
+    ask, allow = permissions.get("ask", []), permissions.get("allow", [])
+    bad = []
     if attribution.get("commit") != "" or attribution.get("pr") != "":
         bad.append(f"{path}: attribution.commit and attribution.pr must stay empty strings")
     if data.get("includeCoAuthoredBy") is not False:
         bad.append(f"{path}: includeCoAuthoredBy must stay false")
-    perms = data.get("permissions", {})
-    ask = perms.get("ask", [])
-    allow = perms.get("allow", [])
-    for rule in REQUIRED_ASK:
-        if rule not in ask:
-            bad.append(f"{path}: permissions.ask must keep {rule}; machine changes wait for the owner")
-        if rule in allow:
-            bad.append(f"{path}: {rule} must not be in permissions.allow")
+    bad += [f"{path}: permissions.ask must keep {rule}; machine changes wait for the owner" for rule in REQUIRED_ASK if rule not in ask]
+    bad += [f"{path}: {rule} must not be in permissions.allow" for rule in REQUIRED_ASK if rule in allow]
     return fail(bad)
 
 
