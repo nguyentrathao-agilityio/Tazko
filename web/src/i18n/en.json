@@ -614,7 +614,7 @@
   "attach.upload": "Upload a file",
   "attach.uploading": "Uploading…",
   "attach.hint": "Files up to {max}.",
-  "attach.hintLimit": "Files up to {max}. This company uses {used} of {limit}.",
+  "attach.hintLimit": "Files up to {max}. This company uses {usage}.",
   "attach.tooLarge": "Files can be up to {size}; this one is larger.",
   "attach.badLink": "Enter a link that starts with https://",
   "attach.pasteLink": "Paste a link",
@@ -674,5 +674,6 @@
   "bg.uploading": "Uploading…",
   "bg.tooLarge": "Background pictures can be up to 5 MB; this one is larger.",
   "bg.uploaded": "Background uploaded",
-  "bg.current": "Uploaded picture"
+  "bg.current": "Uploaded picture",
+  "attach.popTitle": "Attach"
 }

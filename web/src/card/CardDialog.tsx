@@ -449,7 +449,7 @@ function popTitle(kind: PopKind): string {
     move: t('card.moveTitle'),
     copy: t('card.copyTitle'),
     checklist: t('card.addChecklist'),
-    attach: t('attach.attachment'),
+    attach: t('attach.popTitle'),
   }
   return titles[kind]
 }
@@ -909,7 +909,7 @@ function Feed({
                 </>
               ) : (
                 <div className="body">
-                  <CommentText text={c.body} />
+                  <CommentText text={c.body} names={board.people.flatMap((p) => [p.name, p.email, p.email.split('@')[0]])} />
                 </div>
               )}
               <Reactions comment={c.id} reactions={c.reactions ?? []} edit={edit} base={base} run={run} />
