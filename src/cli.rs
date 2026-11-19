@@ -66,6 +66,11 @@ pub enum Command {
         )]
         env_file: Option<PathBuf>,
     },
+    #[command(about = "Tools for local development")]
+    Dev {
+        #[command(subcommand)]
+        action: DevAction,
+    },
     #[command(about = "Check every database and stored file in a data folder")]
     Check {
         #[arg(
@@ -79,6 +84,21 @@ pub enum Command {
             value_name = "PATH",
             help = "Settings file, used when --data is not given"
         )]
+        env_file: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DevAction {
+    #[command(about = "Add a demo company with a project, boards and cards (local addresses only)")]
+    Seed {
+        #[arg(
+            long,
+            value_name = "EMAIL",
+            help = "Super admin who owns the demo company (default: the first super admin)"
+        )]
+        owner: Option<String>,
+        #[arg(long, value_name = "PATH", help = "Settings file")]
         env_file: Option<PathBuf>,
     },
 }
