@@ -10,6 +10,11 @@ Usage: checks.py <check> [args]
                       web dependencies use allowed licences (pnpm licenses list --json)
   commits             every commit is by the owner and carries no attribution lines
   commit-msg <file>   one commit message carries no attribution lines
+  comments            no comments in src/, web/src/ or migrations/
+  tenant-schema       no company column in the company file migrations
+  prototype-only      the prototype-only controls are not built
+  design [--update]   design/ matches scripts/design.sha256 (--update: owner only)
+  settings            .claude/settings.json keeps attribution off and machine commands on ask
 
 The word lists are stored as short SHA-256 prefixes so that this file does not
 itself name the products it keeps out of the repository.
@@ -62,6 +67,8 @@ SECRET_PATTERNS = [
     re.compile(r"^[ \t]*TAZKO_(?:GOOGLE_CLIENT_SECRET|SMTP_PASSWORD|SECRET)[ \t]*=[ \t]*\S{8,}", re.M),
 ]
 SECRET_FILES = re.compile(r"(^|/)(\.env(\..*)?|.*\.env|secret|.*\.pem|.*\.key|.*\.db(-wal|-shm)?)$")
+
+OWNER_EMAIL_HASHES = {"1caab6a871c4cf3e"}
 
 JS_BUDGET_BYTES = 200 * 1024  # gzip-compressed size of all shipped .js
 
@@ -216,14 +223,25 @@ def check_commit_msg(path):
     return fail(message_problems(msg))
 
 
+def email_hash(email):
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:16]
+
+
+def owner_matcher():
+    name = os.environ.get("TAZKO_OWNER_NAME")
+    email = os.environ.get("TAZKO_OWNER_EMAIL")
+    if email:
+        return (lambda n, e: (not name or n == name) and e.lower() == email.lower()), f"{name or '*'} <{email}>"
+    return (lambda n, e: email_hash(e) in OWNER_EMAIL_HASHES), "the owner's email in OWNER_EMAIL_HASHES"
+
+
 def check_commits():
     try:
         git("rev-parse", "--verify", "-q", "HEAD")
     except subprocess.CalledProcessError:
         print("  skip commits: no commits yet")
         return 0
-    owner_name = os.environ.get("TAZKO_OWNER_NAME") or git("config", "user.name").strip()
-    owner_email = os.environ.get("TAZKO_OWNER_EMAIL") or git("config", "user.email").strip()
+    is_owner, owner = owner_matcher()
     log = git("log", "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e")
     bad = []
     for rec in filter(str.strip, log.split("\x1e")):
@@ -232,11 +250,158 @@ def check_commits():
         if len(parents.split()) > 1 and (cn, ce.lower()) == GITHUB_MERGE_COMMITTER:
             bad += [f"{short}: {p}" for p in message_problems(body)]
             continue
-        if (an, ae.lower()) != (owner_name, owner_email.lower()):
-            bad.append(f"{short}: author {an} <{ae}> is not the owner {owner_name} <{owner_email}>")
-        if (cn, ce.lower()) != (owner_name, owner_email.lower()):
-            bad.append(f"{short}: committer {cn} <{ce}> is not the owner")
+        if not is_owner(an, ae):
+            bad.append(f"{short}: author {an} <{ae}> is not {owner}; commit with the owner's git identity")
+        if not is_owner(cn, ce):
+            bad.append(f"{short}: committer {cn} <{ce}> is not {owner}; commit with the owner's git identity")
         bad += [f"{short}: {p}" for p in message_problems(body)]
+    return fail(bad)
+
+
+COMMENT_ROOTS = ("src/", "web/src/", "migrations/")
+LINE_MARKERS = {".rs": "//", ".ts": "//", ".tsx": "//", ".js": "//", ".sql": "--"}
+BLOCK_COMMENT_EXTS = {".rs", ".ts", ".tsx", ".js", ".css", ".sql"}
+COMMENT_ALLOWED = re.compile(r"^\s*///\s*<reference\s")
+STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\'(?:\\.|[^\'\\\n])*\'')
+
+
+def comment_on_line(line, ext):
+    if COMMENT_ALLOWED.match(line):
+        return False
+    code = STRING_LITERAL.sub('""', line.replace("\\/", ""))
+    marker = LINE_MARKERS.get(ext)
+    if marker and marker in code:
+        return True
+    return ext in BLOCK_COMMENT_EXTS and "/*" in code
+
+
+def check_comments():
+    bad = []
+    for p in tracked_files():
+        ext = os.path.splitext(p)[1]
+        if not p.startswith(COMMENT_ROOTS) or (ext not in LINE_MARKERS and ext not in BLOCK_COMMENT_EXTS):
+            continue
+        with open(p, encoding="utf-8", errors="ignore") as f:
+            for n, line in enumerate(f, 1):
+                if comment_on_line(line, ext):
+                    bad.append(f"{p}:{n}: comment in source; name things so the code reads without it, "
+                               "and put the reason in the commit message or docs/")
+    return fail(bad)
+
+
+TENANT_COLUMN = re.compile(r"\b(?:org|orgs|company|companies|tenant|tenants)_(?:id|slug|key|uuid)\b", re.I)
+
+
+def check_tenant_schema(root="migrations/tenant"):
+    bad = []
+    if not os.path.isdir(root):
+        print(f"  skip tenant-schema: no {root}")
+        return 0
+    for n in sorted(os.listdir(root)):
+        p = os.path.join(root, n)
+        if not n.endswith(".sql"):
+            continue
+        with open(p, encoding="utf-8") as f:
+            for i, line in enumerate(f, 1):
+                m = TENANT_COLUMN.search(line)
+                if m:
+                    bad.append(f"{p}:{i}: '{m.group(0)}' in a company file; each company has its own "
+                               "tazko.db, so open that company's file instead of adding a company column")
+    return fail(bad)
+
+
+PROTOTYPE_ONLY = ["View as", "Live sim"]
+
+
+def check_prototype_only(root="web/src/"):
+    bad = []
+    for p in tracked_files():
+        if not p.startswith(root):
+            continue
+        with open(p, encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+        for label in PROTOTYPE_ONLY:
+            if label in text:
+                bad.append(f"{p}: '{label}' is a prototype-only control; build the role differences "
+                           "on the server and leave the prototype bar out")
+    return fail(bad)
+
+
+DESIGN_DIR = "design/"
+DESIGN_LIST = "scripts/design.sha256"
+
+
+def design_hashes():
+    out = {}
+    for p in sorted(tracked_files()):
+        if p.startswith(DESIGN_DIR):
+            with open(p, "rb") as f:
+                out[p] = hashlib.sha256(f.read()).hexdigest()
+    return out
+
+
+def check_design(*args):
+    current = design_hashes()
+    if args == ("--update",):
+        with open(DESIGN_LIST, "w", encoding="utf-8") as f:
+            f.writelines(f"{d}  {p}\n" for p, d in current.items())
+        print(f"  design: {len(current)} file(s) written to {DESIGN_LIST}")
+        return 0
+    if args:
+        print(__doc__)
+        return 2
+    if not os.path.isfile(DESIGN_LIST):
+        return fail([f"missing {DESIGN_LIST}; the owner creates it with checks.py design --update"])
+    saved = {}
+    with open(DESIGN_LIST, encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                d, p = line.split(None, 1)
+                saved[p.strip()] = d
+    hint = "design/ is read-only for the build; ask the owner, who runs checks.py design --update after the change"
+    bad = [f"{p}: changed; {hint}" for p in current if p in saved and saved[p] != current[p]]
+    bad += [f"{p}: added; {hint}" for p in current if p not in saved]
+    bad += [f"{p}: removed; {hint}" for p in saved if p not in current]
+    return fail(bad)
+
+
+SETTINGS_FILE = ".claude/settings.json"
+REQUIRED_ASK = [
+    "Bash(sudo:*)",
+    "Bash(systemctl:*)",
+    "Bash(cloudflared:*)",
+    "Bash(apt:*)",
+    "Bash(apt-get:*)",
+    "Bash(brew install:*)",
+    "Bash(useradd:*)",
+    "Bash(usermod:*)",
+    "Bash(ssh:*)",
+    "Bash(scp:*)",
+]
+
+
+def check_settings(path=SETTINGS_FILE):
+    import json
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        return fail([f"{path}: cannot read ({e})"])
+    bad = []
+    attribution = data.get("attribution", {})
+    if attribution.get("commit") != "" or attribution.get("pr") != "":
+        bad.append(f"{path}: attribution.commit and attribution.pr must stay empty strings")
+    if data.get("includeCoAuthoredBy") is not False:
+        bad.append(f"{path}: includeCoAuthoredBy must stay false")
+    perms = data.get("permissions", {})
+    ask = perms.get("ask", [])
+    allow = perms.get("allow", [])
+    for rule in REQUIRED_ASK:
+        if rule not in ask:
+            bad.append(f"{path}: permissions.ask must keep {rule}; machine changes wait for the owner")
+        if rule in allow:
+            bad.append(f"{path}: {rule} must not be in permissions.allow")
     return fail(bad)
 
 
@@ -253,6 +418,11 @@ def main(argv):
         "js-licenses": check_js_licenses,
         "commits": check_commits,
         "commit-msg": check_commit_msg,
+        "comments": check_comments,
+        "tenant-schema": check_tenant_schema,
+        "prototype-only": check_prototype_only,
+        "design": check_design,
+        "settings": check_settings,
     }
     if cmd not in table:
         print(__doc__)

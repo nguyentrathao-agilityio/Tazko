@@ -13,6 +13,11 @@ step "repository files";     run "$PY" scripts/checks.py required
 step "clean-room names";     run "$PY" scripts/checks.py names
 step "secrets";              run "$PY" scripts/checks.py secrets
 step "commits";              run "$PY" scripts/checks.py commits
+step "no comments in source"; run "$PY" scripts/checks.py comments
+step "one company per file";  run "$PY" scripts/checks.py tenant-schema
+step "prototype-only controls"; run "$PY" scripts/checks.py prototype-only
+step "design is read-only";   run "$PY" scripts/checks.py design
+step "agent settings";        run "$PY" scripts/checks.py settings
 step "javascript budget";    run "$PY" scripts/checks.py js-budget web/dist
 step "tests for the checks"; run bash tests/ci/test_checks.sh
 step "local dev target";     run bash scripts/dev-env.sh check

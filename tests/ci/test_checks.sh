@@ -3,6 +3,7 @@
 # temporary folder and expects the check to pass or fail.
 set -euo pipefail
 unset TAZKO_OWNER_NAME TAZKO_OWNER_EMAIL
+export TAZKO_OWNER_NAME="Owner Person" TAZKO_OWNER_EMAIL="owner@example.com"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CHECKS="$ROOT/scripts/checks.py"
 PY=${PYTHON:-python3}
@@ -122,6 +123,81 @@ new_repo js; mkdir -p dist
 expect pass "empty dist under budget" "$PY" "$CHECKS" js-budget dist
 "$PY" -c "import os;open('dist/a.js','wb').write(os.urandom(260*1024))"
 expect fail "260 KB of incompressible JS is over budget" "$PY" "$CHECKS" js-budget dist
+
+new_repo localidentity; printf 'Seed\n' | commit
+expect fail "local git identity is not the owner without the variables" \
+  env -u TAZKO_OWNER_NAME -u TAZKO_OWNER_EMAIL "$PY" "$CHECKS" commits
+
+# comments
+new_repo comments; mkdir -p src web/src/a migrations/tenant docs
+printf 'fn main() {\n    let u = "https://example.com";\n}\n' > src/main.rs
+printf "const r = /^https?:\\/\\//\nconst s = 'a // b'\n" > web/src/a/x.ts
+printf '/// <reference types="node" />\nexport {}\n' > web/src/a/t.test.ts
+printf '.a { color: red; }\n' > web/src/a/x.css
+printf 'CREATE TABLE t (id INTEGER);\n' > migrations/tenant/0001.sql
+printf '// notes are fine outside the source folders\n' > docs/n.rs
+git add -A
+expect pass "no comments in source" "$PY" "$CHECKS" comments
+printf 'fn f() {}\n// why\n' > src/b.rs; git add -A
+expect fail "line comment in Rust" "$PY" "$CHECKS" comments
+new_repo comments2; mkdir -p src; printf 'fn f() {} // why\n' > src/b.rs; git add -A
+expect fail "trailing comment in Rust" "$PY" "$CHECKS" comments
+new_repo comments3; mkdir -p src; printf '/// docs\nfn f() {}\n' > src/b.rs; git add -A
+expect fail "doc comment in Rust" "$PY" "$CHECKS" comments
+new_repo comments4; mkdir -p web/src; printf 'export const A = () => <div>{/* x */}</div>\n' > web/src/a.tsx; git add -A
+expect fail "comment in JSX" "$PY" "$CHECKS" comments
+new_repo comments5; mkdir -p web/src; printf '/* x */\n.a {}\n' > web/src/a.css; git add -A
+expect fail "comment in CSS" "$PY" "$CHECKS" comments
+new_repo comments6; mkdir -p migrations/control; printf -- '-- x\nCREATE TABLE t (id INTEGER);\n' > migrations/control/0001.sql; git add -A
+expect fail "comment in a migration" "$PY" "$CHECKS" comments
+
+# tenant-schema
+new_repo tenant; mkdir -p migrations/tenant migrations/control
+printf 'CREATE TABLE boards (id INTEGER PRIMARY KEY, project_id INTEGER);\n' > migrations/tenant/0001.sql
+printf 'CREATE TABLE company_members (company_id INTEGER);\n' > migrations/control/0001.sql
+expect pass "company column only in control" "$PY" "$CHECKS" tenant-schema
+printf 'ALTER TABLE boards ADD COLUMN org_id INTEGER;\n' > migrations/tenant/0002.sql
+expect fail "org_id in a company file" "$PY" "$CHECKS" tenant-schema
+rm migrations/tenant/0002.sql; printf 'CREATE TABLE x (Company_Slug TEXT);\n' > migrations/tenant/0003.sql
+expect fail "company slug in a company file" "$PY" "$CHECKS" tenant-schema
+
+# prototype-only
+new_repo proto; mkdir -p web/src; printf 'export const t = "Board"\n' > web/src/a.ts; git add -A
+expect pass "no prototype-only controls" "$PY" "$CHECKS" prototype-only
+printf 'export const t = "View as"\n' > web/src/b.ts; git add -A
+expect fail "prototype role switch built" "$PY" "$CHECKS" prototype-only
+
+# design
+new_repo design; mkdir -p design scripts; echo a > design/a.html; git add -A
+expect fail "no design list yet" "$PY" "$CHECKS" design
+"$PY" "$CHECKS" design --update >/dev/null
+expect pass "design matches its list" "$PY" "$CHECKS" design
+echo b >> design/a.html
+expect fail "design file changed" "$PY" "$CHECKS" design
+"$PY" "$CHECKS" design --update >/dev/null; echo c > design/b.css; git add -A
+expect fail "design file added" "$PY" "$CHECKS" design
+
+# settings
+new_repo settings; mkdir -p .claude
+cp "$ROOT/.claude/settings.json" .claude/settings.json
+expect pass "repository settings" "$PY" "$CHECKS" settings
+"$PY" - <<'PYEOF'
+import json
+p = ".claude/settings.json"
+d = json.load(open(p))
+d["permissions"]["ask"].remove("Bash(sudo:*)")
+json.dump(d, open(p, "w"))
+PYEOF
+expect fail "sudo no longer asks" "$PY" "$CHECKS" settings
+cp "$ROOT/.claude/settings.json" .claude/settings.json
+"$PY" - <<'PYEOF'
+import json
+p = ".claude/settings.json"
+d = json.load(open(p))
+d["includeCoAuthoredBy"] = True
+json.dump(d, open(p, "w"))
+PYEOF
+expect fail "attribution turned back on" "$PY" "$CHECKS" settings
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
