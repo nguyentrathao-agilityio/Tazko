@@ -8,6 +8,7 @@ export type MyCard = {
   project: { id: number; name: string }
   items: number
   items_done: number
-  labels: { name: string; color: number }[]
+  can_edit: boolean
+  labels: { id: number; name: string; color: number }[]
   company: { slug: string; name: string }
 }

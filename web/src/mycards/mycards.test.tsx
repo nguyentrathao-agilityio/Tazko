@@ -31,15 +31,16 @@ const mine = (id: number, title: string, extra: Partial<MyCard> = {}): MyCard =>
   project: { id: 4, name: 'Website' },
   items: 0,
   items_done: 0,
+  can_edit: true,
   labels: [],
   company: acme,
   ...extra,
 })
 const here = [
-  mine(21, 'Write copy', { due_at: NOW - DAY, labels: [{ name: 'Bug', color: 3 }] }),
+  mine(21, 'Write copy', { due_at: NOW - DAY, labels: [{ id: 31, name: 'Bug', color: 3 }] }),
   mine(22, 'Audit nav', { due_at: NOW + 3600, items: 3, items_done: 1 }),
   mine(23, 'Plan launch', { project: { id: 5, name: 'Ops' }, board: { id: 8, name: 'Ops board' } }),
-  mine(24, 'Choose fonts', { done: true }),
+  mine(24, 'Choose fonts', { done: true, can_edit: false }),
 ]
 const there = mine(31, 'Lab report', { company: { slug: 'north', name: 'Northwind' }, board: { id: 2, name: 'Lab' }, project: { id: 1, name: 'Labs' }, due_at: NOW + 3 * DAY })
 
@@ -98,9 +99,10 @@ describe('my cards page', () => {
     expect(await screen.findByText('Write copy')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'My cards' }).className).toContain('on')
     expect(screen.getByRole('tab', { name: 'Assigned to me (4)' })).toBeTruthy()
-    expect(groups()).toEqual(['Overdue · 1', 'Today · 1', 'No date · 1', 'Completed · 1'])
+    expect(groups()).toEqual(['Overdue · 1', 'Next 24 hours · 1', 'No date · 1', 'Completed · 1'])
     expect(within(screen.getByText('Write copy').closest('.mc') as HTMLElement).getByText('Website › Sprint 15 › To do')).toBeTruthy()
     expect(screen.queryByText('Lab report')).toBeNull()
+    expect((within(screen.getByText('Choose fonts').closest('.mc') as HTMLElement).getByRole('checkbox') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('filters by title, project and completion', async () => {
@@ -112,7 +114,7 @@ describe('my cards page', () => {
     expect(groups()).toEqual(['No date · 1'])
     fireEvent.change(screen.getByLabelText('Project'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Filter by title'), { target: { value: 'audit' } })
-    expect(groups()).toEqual(['Today · 1'])
+    expect(groups()).toEqual(['Next 24 hours · 1'])
   })
 
   it('takes in every company with the switch and opens cards in their own company', async () => {

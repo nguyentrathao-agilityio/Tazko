@@ -229,6 +229,46 @@ async fn my_cards_lists_only_projects_the_person_belongs_to() {
     assert_eq!(titles(&only_a), ["Visible card"]);
     assert_eq!(only_a["cards"][0]["company"]["slug"], "company-a");
     assert_eq!(only_a["cards"][0]["project"]["name"], "Web");
+    assert_eq!(only_a["cards"][0]["can_edit"], true);
+
+    let watcher = person(&app, "obs@a.example").await;
+    app.member(a, watcher.id, "member").await;
+    req(
+        &app,
+        &boss,
+        Method::POST,
+        &format!("{base_a}/projects/{p1}/invites"),
+        Some(json!({ "email": "obs@a.example", "role": "member" })),
+    )
+    .await;
+    board_with_card(
+        &app,
+        &boss,
+        base_a,
+        p1,
+        "Watch",
+        "Observed card",
+        watcher.id,
+    )
+    .await;
+    req(
+        &app,
+        &boss,
+        Method::PATCH,
+        &format!("{base_a}/projects/{p1}/members/{}", watcher.id),
+        Some(json!({ "role": "observer" })),
+    )
+    .await;
+    let seen = body_json(
+        app.get("/api/v1/me/cards?company=company-a", Some(&watcher.cookie))
+            .await,
+    )
+    .await;
+    assert_eq!(titles(&seen), ["Observed card"]);
+    assert_eq!(
+        seen["cards"][0]["can_edit"], false,
+        "observers see their cards read-only"
+    );
     let all = body_json(app.get("/api/v1/me/cards", Some(&dev.cookie)).await).await;
     assert_eq!(titles(&all), ["Card in company B", "Visible card"]);
 

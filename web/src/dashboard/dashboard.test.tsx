@@ -22,7 +22,7 @@ const labels = [
 const lists = () => [
   { id: 11, title: 'To do', position: 'V', cards: [card(21, 'Write copy', { due_at: NOW - DAY, labels: [31], members: [1] }), card(22, 'Audit nav', { due_at: NOW + 3600, members: [1, 2] }), card(23, 'Plan', { due_at: NOW + 3 * DAY })] },
   { id: 12, title: 'Doing', position: 'W', cards: [card(24, 'Hero', { due_at: NOW + 30 * DAY, labels: [31, 32] })] },
-  { id: 13, title: 'Done', position: 'X', cards: [card(25, 'Choose fonts', { done: true, due_at: NOW - DAY, members: [2] }), card(26, 'Logo', { done: true })] },
+  { id: 13, title: 'Done', position: 'X', cards: [card(25, 'Choose fonts', { done: true, due_at: NOW - DAY, members: [2] }), card(26, 'Logo', { done: true, members: [9] })] },
 ]
 const board = () => ({ id: 7, name: 'Sprint 15', description: '', background: 'sea', restricted: false, closed: false, starred: false, project: { id: 4, name: 'Website' }, role: 'member', can: { edit: true, manage: false, invite: false, create_board: true }, people, lists: lists(), labels, archived_lists: 0 })
 

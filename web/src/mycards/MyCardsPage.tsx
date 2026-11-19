@@ -10,6 +10,7 @@ import { EmptyState } from '@/ui/EmptyState'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { Icon } from '@/ui/Icon'
 import type { Go } from '@/ui/Link'
+import { PageHead } from '@/ui/PageHead'
 import { Tools } from '@/ui/Tools'
 import { useLoad } from '@/ui/useLoad'
 import { groupCards, projectKey } from '@/mycards/groups'
@@ -26,6 +27,7 @@ function Row({ card, all, onOpen, onDone }: { card: MyCard; all: boolean; onOpen
         role="checkbox"
         aria-checked={card.done}
         aria-label={t('card.markComplete')}
+        disabled={!card.can_edit}
         onClick={(e) => {
           e.stopPropagation()
           onDone()
@@ -40,7 +42,7 @@ function Row({ card, all, onOpen, onDone }: { card: MyCard; all: boolean; onOpen
       </div>
       <div className="mcm">
         {card.labels.map((l) => (
-          <span key={l.name} className="lb" style={labelStyle(l.color)}>
+          <span key={l.id} className="lb" style={labelStyle(l.color)}>
             {l.name}
           </span>
         ))}
@@ -79,16 +81,9 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
 
   return (
     <>
-      <div className="head">
-        <div>
-          <h1>{t('mycards.title')}</h1>
-          <p className="muted" style={{ margin: 0 }}>
-            {all ? t('mycards.leadAll') : t('mycards.lead', { company: company.name })}
-          </p>
-        </div>
-        <span className="sp" />
+      <PageHead title={t('mycards.title')} lead={all ? t('mycards.leadAll') : t('mycards.lead', { company: company.name })}>
         <Tools />
-      </div>
+      </PageHead>
       <div className="tabs2" role="tablist">
         <button type="button" role="tab" aria-selected="true" className="on">
           {t('mycards.assigned', { n: cards.length })}

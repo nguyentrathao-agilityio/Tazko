@@ -27,6 +27,7 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
   const due = new Map<DueBucket, number>()
   const byMember = new Map<number, number>()
   const byLabel = new Map<number, number>()
+  const known = new Set(people.map((p) => p.id))
   const bump = <K>(m: Map<K, number>, k: K) => m.set(k, (m.get(k) ?? 0) + 1)
   let cards = 0
   let soon = 0
@@ -35,9 +36,10 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
     cards += 1
     bump(due, dueBucket(c.due_at, c.done, now))
     if (!c.done && c.due_at && c.due_at >= now && c.due_at - now < 2 * DAY) soon += 1
-    for (const m of c.members ?? []) bump(byMember, m)
+    const members = (c.members ?? []).filter((m) => known.has(m))
+    for (const m of members) bump(byMember, m)
     for (const l of c.labels ?? []) bump(byLabel, l)
-    if (!c.members?.length) none += 1
+    if (!members.length) none += 1
   }
 
   return {
