@@ -1,12 +1,10 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
-export const JSON_TYPE = 'application/json'
+const JSON_TYPE = 'application/json'
 export const CSRF_HEADER = 'x-csrf-token'
 export const ACCEPT_JSON = { accept: JSON_TYPE } as const
 
 const BINARY_TYPE = 'application/octet-stream'
-const NO_CONTENT = 204
-const PAYLOAD_TOO_LARGE = 413
 
 let csrf = ''
 
@@ -34,7 +32,7 @@ export async function api<T>(method: HttpMethod, path: string, body?: unknown): 
   if (body !== undefined) headers['content-type'] = JSON_TYPE
   const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   if (!res.ok) throw await errorFrom(res, `request failed (${res.status})`)
-  if (res.status === NO_CONTENT) return undefined as T
+  if (res.status === 204) return undefined as T
   return (await res.json()) as T
 }
 
@@ -44,6 +42,6 @@ export async function upload<T>(path: string, file: File): Promise<T> {
     headers: { ...ACCEPT_JSON, [CSRF_HEADER]: csrf, 'content-type': BINARY_TYPE },
     body: file,
   })
-  if (!res.ok) throw await errorFrom(res, res.status === PAYLOAD_TOO_LARGE ? 'this file is too large' : `upload failed (${res.status})`)
+  if (!res.ok) throw await errorFrom(res, res.status === 413 ? 'this file is too large' : `upload failed (${res.status})`)
   return (await res.json()) as T
 }

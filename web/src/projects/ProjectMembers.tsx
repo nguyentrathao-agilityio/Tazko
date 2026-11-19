@@ -12,8 +12,6 @@ import type { Can, ProjectInvite, ProjectMember, ProjectRole, ProjectView } from
 import { useRun } from '@/projects/useRun'
 import { PROJECT_ROLES } from '@/roles'
 
-const roles: readonly ProjectRole[] = PROJECT_ROLES
-
 export function ProjectMembers({ company, project, onChange }: { company: Company; project: ProjectView; onChange: () => void }) {
   const base = `/api/v1/c/${company.slug}/projects/${project.id}`
   const { data, reload } = useLoad(
@@ -125,7 +123,7 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
                     <td>
                       {can.manage ? (
                         <select aria-label={t('project.roleOf', { name })} value={m.role} onChange={(e) => setRole(m, e.target.value)}>
-                          {roles.map((r) => (
+                          {PROJECT_ROLES.map((r) => (
                             <option key={r} value={r}>
                               {t(`projectRole.${r}`)}
                             </option>

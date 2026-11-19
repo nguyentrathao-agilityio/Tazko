@@ -2,7 +2,6 @@
 # Tests for scripts/checks.py. Each case builds a throw-away repository in a
 # temporary folder and expects the check to pass or fail.
 set -euo pipefail
-unset TAZKO_OWNER_NAME TAZKO_OWNER_EMAIL
 export TAZKO_OWNER_NAME="Owner Person" TAZKO_OWNER_EMAIL="owner@example.com"
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CHECKS="$ROOT/scripts/checks.py"

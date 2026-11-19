@@ -6,6 +6,7 @@ import { Storage } from '@/admin/Companies'
 import { MembersPanel } from '@/admin/MembersPanel'
 import type { Invite, Member } from '@/admin/types'
 import { NoAccess } from '@/company/CompanyHome'
+import { isOwner } from '@/roles'
 
 type Settings = {
   members: Member[]
@@ -15,7 +16,7 @@ type Settings = {
 }
 
 export function CompanySettings({ company }: { company: Company }) {
-  if (company.role !== 'owner') return <NoAccess company={company} />
+  if (!isOwner(company.role)) return <NoAccess company={company} />
   return <OwnerSettings company={company} />
 }
 

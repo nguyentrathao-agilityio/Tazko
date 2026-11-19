@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -108,26 +109,22 @@ UNBUNDLED_EXCEPTIONS = {
 LICENCE_TOKEN = re.compile(r"\(|\)|[^\s()]+")
 
 GITHUB_MERGE_COMMITTER = ("GitHub", "noreply@github.com")
-GIT_FIELD_SEPARATOR = "\x1f"
-GIT_RECORD_SEPARATOR = "\x1e"
-GIT_LOG_FIELDS = ("%H", "%P", "%an", "%ae", "%cn", "%ce", "%B")
-GIT_LOG_FORMAT = "%x1f".join(GIT_LOG_FIELDS) + "%x1e"
 OWNER_IDENTITY_HINT = "commit with the owner's git identity"
 
 COMMENT_ROOTS = (SRC_DIR, WEB_SRC_DIR, MIGRATIONS_DIR)
 LINE_COMMENT_MARKERS = {".rs": "//", ".ts": "//", ".tsx": "//", ".js": "//", ".sql": "--"}
 BLOCK_COMMENT_EXTS = frozenset({".rs", ".ts", ".tsx", ".js", ".css", ".sql"})
-COMMENT_EXTS = BLOCK_COMMENT_EXTS | LINE_COMMENT_MARKERS.keys()
 BLOCK_COMMENT_MARKER = "/*"
 ESCAPED_SLASH = "\\/"
 COMMENT_ALLOWED = re.compile(r"^\s*///\s*<reference\s")
 STRING_LITERAL = re.compile(r""""(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|'(?:\\.|[^'\\\n])*'""")
 COMMENT_HINT = "comment in source; name things so the code reads without it, and put the reason in the commit message or docs/"
 
-TENANT_COLUMN = re.compile(r"\b(?:orgs?|compan(?:y|ies)|tenants?)_(?:id|slug|key|uuid)\b", re.I)
+TENANT_COLUMN = re.compile(r"(?:orgs?|compan(?:y|ies)|tenants?)_(?:id|slug|key|uuid)\b", re.I)
 TENANT_HINT = "each company has its own tazko.db, so open that company's file instead of adding a company column"
 
 PROTOTYPE_ONLY_LABELS = ("View as", "Live sim")
+WEB_SOURCE_EXTS = (".ts", ".tsx", ".js", ".json", ".css", ".html")
 PROTOTYPE_HINT = "is a prototype-only control; build the role differences on the server and leave the prototype bar out"
 
 DESIGN_HINT = "design/ is read-only for the build; ask the owner, who runs checks.py design --update after the change"
@@ -210,9 +207,10 @@ def check_required() -> int:
 
 def product_words(path: str) -> set[str]:
     try:
-        return set(hits(path, OTHER_WORK_TRACKER_HASHES) + hits(read_text(path), OTHER_WORK_TRACKER_HASHES))
+        text = path + "\n" + read_text(path)
     except OSError:
         return set()
+    return set(hits(text, OTHER_WORK_TRACKER_HASHES))
 
 
 def check_names() -> int:
@@ -355,9 +353,9 @@ def has_commits() -> bool:
 
 
 def commit_records() -> Iterable[list[str]]:
-    log = git("log", f"--format={GIT_LOG_FORMAT}")
-    for record in filter(str.strip, log.split(GIT_RECORD_SEPARATOR)):
-        yield record.strip("\n").split(GIT_FIELD_SEPARATOR, len(GIT_LOG_FIELDS) - 1)
+    log = git("log", "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e")
+    for record in filter(str.strip, log.split("\x1e")):
+        yield record.strip("\n").split("\x1f", 6)
 
 
 def is_github_merge(parents: str, committer: str, committer_email: str) -> bool:
@@ -395,7 +393,7 @@ def check_comments() -> int:
     return fail(
         f"{p}:{n}: {COMMENT_HINT}"
         for p in files_under(*COMMENT_ROOTS)
-        if (ext := os.path.splitext(p)[1]) in COMMENT_EXTS
+        if (ext := os.path.splitext(p)[1]) in BLOCK_COMMENT_EXTS
         for n, line in numbered_lines(p)
         if has_comment(line, ext)
     )
@@ -415,8 +413,10 @@ def check_prototype_only() -> int:
     return fail(
         f"{p}: '{label}' {PROTOTYPE_HINT}"
         for p in files_under(WEB_SRC_DIR)
+        if p.endswith(WEB_SOURCE_EXTS)
+        for text in (read_text(p),)
         for label in PROTOTYPE_ONLY_LABELS
-        if label in read_text(p)
+        if label in text
     )
 
 
@@ -435,13 +435,13 @@ def write_design_hashes(hashes: dict[str, str]) -> None:
 
 
 def check_design(*args: str) -> int:
+    if args and args != (UPDATE_FLAG,):
+        return usage()
     current = design_hashes()
-    if args == (UPDATE_FLAG,):
+    if args:
         write_design_hashes(current)
         print(f"  design: {len(current)} file(s) written to {DESIGN_LIST}")
         return EXIT_OK
-    if args:
-        return usage()
     if not os.path.isfile(DESIGN_LIST):
         return fail([f"missing {DESIGN_LIST}; the owner creates it with checks.py design {UPDATE_FLAG}"])
     saved = saved_design_hashes()
@@ -495,10 +495,12 @@ def usage() -> int:
 def main(argv: list[str]) -> int:
     if len(argv) < 2 or argv[1] not in CHECKS:
         return usage()
+    check, args = CHECKS[argv[1]], argv[2:]
     try:
-        return CHECKS[argv[1]](*argv[2:])
+        inspect.signature(check).bind(*args)
     except TypeError:
         return usage()
+    return check(*args)
 
 
 if __name__ == "__main__":
