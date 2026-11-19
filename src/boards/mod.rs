@@ -1,3 +1,4 @@
+pub mod background;
 pub mod lists;
 
 use std::collections::HashMap;
@@ -146,6 +147,7 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/boards/{board}/archive"), get(archived))
         .route(&p("/boards/{board}/activity"), get(activity))
         .merge(lists::routes())
+        .merge(background::routes())
 }
 
 fn tile(r: &rusqlite::Row) -> rusqlite::Result<Value> {
@@ -219,10 +221,11 @@ struct NewBoard {
     restricted: bool,
 }
 
-fn background(raw: Option<&str>, fallback: &str) -> Result<String, ApiError> {
+fn background(raw: Option<&str>, fallback: &str, allow_image: bool) -> Result<String, ApiError> {
     match raw {
         None => Ok(fallback.to_string()),
         Some(b) if BACKGROUNDS.contains(&b) => Ok(b.to_string()),
+        Some(b) if allow_image && background::image_id(b).is_some() => Ok(b.to_string()),
         Some(_) => Err(bad("choose one of the backgrounds")),
     }
 }
@@ -257,7 +260,7 @@ async fn create(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = project.writing(&headers, Act::CreateBoard)?;
     let name = validate::name(&body.name).ok_or_else(|| bad("enter a board title"))?;
-    let bg = background(body.background.as_deref(), &project.info.background)?;
+    let bg = background(body.background.as_deref(), &project.info.background, false)?;
     let pid = project.id;
     let restricted = body.restricted;
     let id = project
@@ -342,8 +345,9 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
                 |r| r.get(0),
             )?;
             let labels = crate::cards::detail::labels_of_board(c, id)?;
+            let fields: Vec<Value> = crate::cards::fields::defs(c, id)?.iter().map(|d| d.json()).collect();
             let last_event = crate::realtime::last_event(c)?;
-            Ok((lists, people, (starred, watching), archived, labels, last_event))
+            Ok((lists, people, (starred, watching), archived, (labels, fields), last_event))
         })
         .await?;
     let i = &board.info;
@@ -363,7 +367,8 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
         "can": can,
         "people": people,
         "lists": lists,
-        "labels": labels,
+        "labels": labels.0,
+        "fields": labels.1,
         "archived_lists": archived,
         "last_event": last_event,
     })))
@@ -395,13 +400,26 @@ async fn update(
         info.description = d.trim().to_string();
     }
 
-    info.background = background(body.background.as_deref(), &info.background)?;
+    info.background = background(body.background.as_deref(), &info.background, true)?;
     let (id, at) = (board.id, board.at());
     board
         .project
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
+            if let Some(image) = background::image_id(&info.background) {
+                let ours: bool = tx.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM board_images WHERE id = ?1 AND board_id = ?2)",
+                    params![image, id],
+                    |r| r.get(0),
+                )?;
+                if !ours {
+                    return Ok(Err(bad("choose one of the backgrounds")));
+                }
+            } else {
+                tx.execute("DELETE FROM board_images WHERE board_id = ?1", [id])?;
+            }
+
             tx.execute(
                 "UPDATE boards SET name = ?2, description = ?3, background = ?4 WHERE id = ?1",
                 params![id, info.name, info.description, info.background],
@@ -414,9 +432,9 @@ async fn update(
                 json!({ "name": info.name, "background": info.background }),
             )?;
             tx.commit()?;
-            Ok(())
+            Ok(Ok(()))
         })
-        .await?;
+        .await??;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -568,12 +586,14 @@ async fn copy(
     let name = validate::name(&body.name).ok_or_else(|| bad("enter a board title"))?;
     let (from, pid) = (board.id, board.project.id);
     let info = board.info.clone();
+    let fallback = board.project.info.background.clone();
     let id = board
         .project
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
-            let id = insert_board(&tx, pid, &name, &info.background, info.restricted, by)?;
+            let bg = if background::image_id(&info.background).is_some() { fallback.clone() } else { info.background.clone() };
+            let id = insert_board(&tx, pid, &name, &bg, info.restricted, by)?;
             tx.execute("UPDATE boards SET description = ?2 WHERE id = ?1", params![id, info.description])?;
             if info.restricted {
                 tx.execute(

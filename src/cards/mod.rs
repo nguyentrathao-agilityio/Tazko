@@ -1,4 +1,6 @@
 pub mod detail;
+pub mod fields;
+pub mod reactions;
 
 use std::collections::HashMap;
 
@@ -35,6 +37,8 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/lists/{list}/move-cards"), post(move_all))
         .route(&p("/lists/{list}/archive-cards"), post(archive_all))
         .merge(detail::routes())
+        .merge(fields::routes())
+        .merge(reactions::routes())
 }
 
 pub fn title(raw: &str) -> Result<String, ApiError> {
@@ -173,8 +177,12 @@ pub fn summaries(c: &Connection, board: i64) -> rusqlite::Result<HashMap<i64, Ve
             }),
         ))
     })?;
+    let mut front = fields::board_values(c, board)?;
     for row in rows {
         let (list, id, mut card) = row?;
+        if let Some(f) = front.remove(&id) {
+            card["fields"] = Value::Object(f);
+        }
         card["labels"] = json!(labels.remove(&id).unwrap_or_default());
         card["members"] = json!(members.remove(&id).unwrap_or_default());
         out.entry(list).or_default().push(card);

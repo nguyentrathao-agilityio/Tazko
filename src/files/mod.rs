@@ -27,6 +27,7 @@ use crate::tenant::Company;
 
 const MB: u64 = 1024 * 1024;
 const LINK_MAX: usize = 2000;
+pub const STORED: &str = "SELECT EXISTS (SELECT 1 FROM attachments WHERE hash = ?1) OR EXISTS (SELECT 1 FROM board_images WHERE hash = ?1)";
 
 pub fn routes() -> Router<AppState> {
     let p = |s: &str| format!("{COMPANY_PREFIX}/boards/{{board}}{s}");
@@ -46,7 +47,7 @@ pub fn routes() -> Router<AppState> {
 
 type Params = Path<HashMap<String, String>>;
 
-fn org_dir(state: &AppState, slug: &str) -> PathBuf {
+pub fn org_dir(state: &AppState, slug: &str) -> PathBuf {
     state.dbs.layout().orgs.join(slug)
 }
 
@@ -66,7 +67,7 @@ pub fn size_text(n: u64) -> String {
     }
 }
 
-async fn storage_limit(state: &AppState, org: i64) -> Result<Option<u64>, ApiError> {
+pub async fn storage_limit(state: &AppState, org: i64) -> Result<Option<u64>, ApiError> {
     let limit: Option<i64> = state
         .dbs
         .control()
@@ -123,14 +124,14 @@ struct UploadQuery {
     name: Option<String>,
 }
 
-fn too_large(max: u64) -> ApiError {
+pub fn too_large(max: u64) -> ApiError {
     ApiError::TooLarge(format!(
         "files can be up to {}; this one is larger",
         size_text(max)
     ))
 }
 
-async fn read_limited(body: Body, max: u64) -> Result<Vec<u8>, ApiError> {
+pub async fn read_limited(body: Body, max: u64) -> Result<Vec<u8>, ApiError> {
     let mut body = body;
     let mut out = Vec::new();
     while let Some(frame) = body.frame().await {
@@ -190,7 +191,7 @@ async fn upload(
             }
 
             let stored: bool = tx.query_row(
-                "SELECT EXISTS (SELECT 1 FROM attachments WHERE hash = ?1)",
+                STORED,
                 [&hash],
                 |r| r.get(0),
             )?;
@@ -408,14 +409,18 @@ async fn download(
         .map_err(|_| ApiError::NotFound)?;
     let image = found.mime.starts_with("image/");
     let inline = image && q.download.is_none();
-    let mime = HeaderValue::from_str(&found.mime)
-        .unwrap_or(HeaderValue::from_static("application/octet-stream"));
+    Ok(file_response(bytes, &found.mime, &found.name, inline))
+}
+
+pub fn file_response(bytes: Vec<u8>, mime: &str, name: &str, inline: bool) -> Response {
+    let mime =
+        HeaderValue::from_str(mime).unwrap_or(HeaderValue::from_static("application/octet-stream"));
     let mut res = (StatusCode::OK, bytes).into_response();
     let h = res.headers_mut();
     h.insert(header::CONTENT_TYPE, mime);
     h.insert(
         header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&disposition(inline, &found.name))
+        HeaderValue::from_str(&disposition(inline, name))
             .unwrap_or(HeaderValue::from_static("attachment")),
     );
     h.insert(
@@ -434,7 +439,7 @@ async fn download(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, max-age=300"),
     );
-    Ok(res)
+    res
 }
 
 async fn remove(
@@ -468,11 +473,7 @@ async fn remove(
                 json!({ "attachment": attachment, "name": found.name }),
             )?;
             let orphan = match &found.hash {
-                Some(h) => !tx.query_row(
-                    "SELECT EXISTS (SELECT 1 FROM attachments WHERE hash = ?1)",
-                    [h],
-                    |r| r.get::<_, bool>(0),
-                )?,
+                Some(h) => !tx.query_row(STORED, [h], |r| r.get::<_, bool>(0))?,
                 None => false,
             };
             tx.commit()?;
@@ -556,7 +557,7 @@ pub async fn sweep(db: &crate::db::Database, org_dir: PathBuf) -> Result<usize, 
     Ok(db
         .write(move |c| {
             let mut stmt =
-                c.prepare("SELECT DISTINCT hash FROM attachments WHERE hash IS NOT NULL")?;
+                c.prepare("SELECT hash FROM attachments WHERE hash IS NOT NULL UNION SELECT hash FROM board_images")?;
             let kept: std::collections::HashSet<String> = stmt
                 .query_map([], |r| r.get(0))?
                 .collect::<Result<_, _>>()?;

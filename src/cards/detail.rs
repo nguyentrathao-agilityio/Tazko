@@ -152,7 +152,7 @@ fn checklists(c: &Connection, card: i64) -> rusqlite::Result<Vec<Value>> {
 
 async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiError> {
     let card = path_id(&params, "card")?;
-    let id = board.id;
+    let (id, me) = (board.id, board.user_id());
     let found = board
         .project
         .db()
@@ -194,6 +194,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             v["members"] = json!(ids("SELECT user_id FROM card_members WHERE card_id = ?1")?);
             v["checklists"] = json!(checklists(c, card)?);
             v["attachments"] = json!(crate::files::attachments_of(c, card)?);
+            v["fields"] = Value::Object(super::fields::card_values(c, card, false)?);
             v["created_by"] = person(c, creator)?;
             let mut stmt = c.prepare(
                 "SELECT id, user_id, body, created_at, edited_at FROM comments WHERE card_id = ?1 ORDER BY id DESC",
@@ -204,6 +205,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             let mut comments = Vec::new();
             for (cid, user, body, at, edited) in rows {
                 comments.push(json!({
+                    "reactions": super::reactions::of_comment(c, cid, me)?,
                     "id": cid,
                     "author": person(c, user)?,
                     "body": body,
