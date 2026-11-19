@@ -326,6 +326,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
       )}
       <BoardLists
         lists={shownLists}
+        base={base}
         totals={active(filter) ? new Map(lists.map((l) => [l.id, l.cards.length])) : null}
         edit={edit}
         collapsed={collapsed.ids}

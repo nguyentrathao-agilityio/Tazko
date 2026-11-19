@@ -8,6 +8,8 @@ export type ChecklistItem = { id: number; text: string; done: boolean }
 
 export type Checklist = { id: number; title: string; items: ChecklistItem[] }
 
+export type Attachment = { id: number; kind: 'file' | 'link'; name: string; size: number; url: string | null; image: boolean; type: string; created_at: number }
+
 export type CardDetail = {
   id: number
   title: string
@@ -23,6 +25,8 @@ export type CardDetail = {
   labels: number[]
   members: number[]
   checklists: Checklist[]
+  attachments: Attachment[]
+  cover_image: number | null
   comments: Comment[]
   activity: ActivityEntry[]
   can: { edit: boolean }

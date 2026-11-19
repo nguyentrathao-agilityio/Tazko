@@ -13,11 +13,13 @@ import type { BoardData } from '@/board/types'
 import { describe } from '@/card/activity'
 import { Editor, type DescriptionSave } from '@/card/Editor'
 import { ago, dateRange, dueState, labelStyle } from '@/card/look'
+import { AttachPop, AttachmentsSection } from '@/card/Attachments'
+import { fileUrl } from '@/card/files'
 import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop } from '@/card/Pops'
 import { CommentText } from '@/card/Rich'
 import type { CardDetail, Checklist, Comment } from '@/card/types'
 
-type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist'
+type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist' | 'attach'
 type Pop = { kind: PopKind; at: Anchor } | null
 
 const ITEMS_SHOWN = 6
@@ -106,10 +108,12 @@ export function CardDialog({
   const labels = board.labels.filter((l) => card.labels.includes(l.id))
   const members = people.filter((p) => card.members.includes(p.id))
   const state = dueState(card.due_at, card.done)
+  const coverImage = card.cover_image ? fileUrl(base, card.cover_image) : null
+  const hasCover = Boolean(card.cover || coverImage)
 
   return (
     <Shell onClose={onClose} onKey={onKey} sheet={sheet}>
-      <div className={`cm${card.cover ? '' : ' nocv'}`}>
+      <div className={`cm${hasCover ? '' : ' nocv'}`}>
         <button type="button" className="ibtn x" aria-label={t('card.close')} onClick={onClose}>
           <Icon name="x" />
         </button>
@@ -117,8 +121,9 @@ export function CardDialog({
           <Icon name="more" />
           {t('card.menu')}
         </button>
-        {card.cover && (
-          <div className="cover" style={{ background: card.cover }}>
+        {hasCover && (
+          <div className={`cover${coverImage ? ' img' : ''}`} style={coverImage ? undefined : { background: card.cover ?? undefined }}>
+            {coverImage && <img src={coverImage} alt="" />}
             {edit && (
               <button type="button" className="btn" onClick={open('cover')}>
                 <Icon name="image" />
@@ -284,6 +289,7 @@ export function CardDialog({
                 </button>
               </div>
             )}
+            <AttachmentsSection card={card} base={base} edit={edit} run={run} onAdd={(el) => setPop({ kind: 'attach', at: anchorOf(el) })} />
           </div>
           <aside className="cm-cm" aria-label={t('card.commentsAndActivity')}>
             <Feed me={me} card={card} board={board} edit={edit} base={base} path={path} run={run} />
@@ -352,8 +358,15 @@ export function CardDialog({
           {pop.kind === 'cover' && (
             <CoverPop
               cover={card.cover}
+              coverImage={card.cover_image}
+              images={card.attachments.filter((a) => a.image).map((a) => ({ id: a.id, name: a.name, src: fileUrl(base, a.id) }))}
               onPick={(c) =>
                 void patch({ cover: c }).then((ok) => {
+                  if (ok) close()
+                })
+              }
+              onPickImage={(id) =>
+                void run(() => api('PUT', `${base}/attachments/${id}/cover`)).then((ok) => {
                   if (ok) close()
                 })
               }
@@ -389,6 +402,17 @@ export function CardDialog({
               }
             />
           )}
+          {pop.kind === 'attach' && (
+            <AttachPop
+              base={base}
+              path={path}
+              onDone={(name) => {
+                close()
+                changed()
+                toast(t('attach.uploaded', { name }))
+              }}
+            />
+          )}
           {pop.kind === 'checklist' && (
             <TitlePop
               initial={t('card.checklistDefault')}
@@ -416,6 +440,7 @@ function popTitle(kind: PopKind): string {
     move: t('card.moveTitle'),
     copy: t('card.copyTitle'),
     checklist: t('card.addChecklist'),
+    attach: t('attach.attachment'),
   }
   return titles[kind]
 }
@@ -510,6 +535,7 @@ function CardMenu({
           {item('tag', t('card.labels'), () => onPick('labels'))}
           {item('checksq', t('card.checklist'), () => onPick('checklist'))}
           {item('clock', t('card.dates'), () => onPick('dates'))}
+          {item('clip', t('attach.attachment'), () => onPick('attach'))}
           {item('image', t('card.cover'), () => onPick('cover'))}
         </>
       )}

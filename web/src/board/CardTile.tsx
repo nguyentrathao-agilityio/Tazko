@@ -10,6 +10,7 @@ import type { BoardPerson, CardData, Label } from '@/board/types'
 
 export function CardTile({
   card,
+  base,
   selected = false,
   edit,
   labels,
@@ -19,6 +20,7 @@ export function CardTile({
   onToggleDone,
 }: {
   card: CardData
+  base?: string
   selected?: boolean
   edit: boolean
   labels: Label[]
@@ -34,7 +36,7 @@ export function CardTile({
   const members = people.filter((p) => card.members?.includes(p.id))
   const state = dueState(card.due_at, card.done)
   const items = card.items ?? 0
-  const hasBadges = Boolean(card.due_at || card.start_at || card.has_description || card.comments || items || members.length)
+  const hasBadges = Boolean(card.due_at || card.start_at || card.has_description || card.comments || card.attachments || items || members.length)
 
   return (
     <article
@@ -49,7 +51,13 @@ export function CardTile({
       onClick={() => onOpen(card)}
 
     >
-      {card.cover && <div className="cv" style={{ background: card.cover }} />}
+      {card.cover_image && base ? (
+        <div className="cv img">
+          <img src={`${base}/attachments/${card.cover_image}`} alt="" loading="lazy" draggable={false} />
+        </div>
+      ) : (
+        card.cover && <div className="cv" style={{ background: card.cover }} />
+      )}
       <div className="cb">
         {own.length > 0 && (
           <div className="lbs">
@@ -95,6 +103,12 @@ export function CardTile({
               <span className="bdg" title={t('card.commentsBadge')}>
                 <Icon name="msg" />
                 {card.comments}
+              </span>
+            )}
+            {Boolean(card.attachments) && (
+              <span className="bdg" title={t('attach.badge')}>
+                <Icon name="clip" />
+                {card.attachments}
               </span>
             )}
             {items > 0 && (

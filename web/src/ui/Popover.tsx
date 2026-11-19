@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import type { Anchor } from '@/ui/anchor'
@@ -19,6 +19,14 @@ export function Popover({
   children: ReactNode
 }) {
   const box = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState(anchor.bottom + 6)
+
+  useLayoutEffect(() => {
+    const h = box.current?.offsetHeight ?? 0
+    const vh = window.innerHeight
+    const below = anchor.bottom + 6
+    setTop(below + h > vh - 8 ? Math.max(8, Math.min(anchor.top - 6 - h, vh - 8 - h)) : below)
+  }, [anchor.bottom, anchor.top, children])
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null
@@ -46,7 +54,7 @@ export function Popover({
   const vw = typeof window === 'undefined' ? 1024 : window.innerWidth
   const left = Math.max(8, Math.min(anchor.left, vw - width - 8))
   return (
-    <div className="pop" role="dialog" aria-label={title} ref={box} style={{ left, top: anchor.bottom + 6, width }}>
+    <div className="pop" role="dialog" aria-label={title} ref={box} style={{ left, top, width }}>
       <div className="pop-h">
         {onBack ? (
           <button type="button" className="ibtn sm" onClick={onBack} aria-label={t('pop.back')}>
