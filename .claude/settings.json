@@ -17,5 +17,18 @@
       "Bash(ssh:*)",
       "Bash(scp:*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/hooks/guard-write.py\""
+          }
+        ]
+      }
+    ]
   }
 }
