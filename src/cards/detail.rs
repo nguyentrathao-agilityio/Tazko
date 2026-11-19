@@ -441,6 +441,9 @@ async fn set_member(
             if n > 0 {
                 let kind = if body.on { "member_assigned" } else { "member_unassigned" };
                 events::record(&tx, by, kind, At::card(pid, id, card), json!({ "user": user }))?;
+                if body.on {
+                    crate::notifications::notify(&tx, user, by, id, card, crate::notifications::Kind::Assigned)?;
+                }
             }
             tx.commit()?;
             Ok(Ok(()))
@@ -1023,6 +1026,7 @@ async fn add_comment(
                 At::card(pid, id, card),
                 json!({ "comment": comment }),
             )?;
+            crate::notifications::mentioned_in_comment(&tx, id, card, comment, by, &text, None)?;
             tx.commit()?;
             Ok(Ok(comment))
         })
@@ -1065,9 +1069,22 @@ async fn edit_comment(
                 Ok(card) => card,
                 Err(e) => return Ok(Err(e)),
             };
+            let before: String =
+                tx.query_row("SELECT body FROM comments WHERE id = ?1", [comment], |r| {
+                    r.get(0)
+                })?;
             tx.execute(
                 "UPDATE comments SET body = ?2, edited_at = ?3 WHERE id = ?1",
                 params![comment, text, now()],
+            )?;
+            crate::notifications::mentioned_in_comment(
+                &tx,
+                id,
+                card,
+                comment,
+                by,
+                &text,
+                Some(&before),
             )?;
             events::record(
                 &tx,

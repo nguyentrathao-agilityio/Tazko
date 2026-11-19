@@ -331,6 +331,11 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
                 params![id, user],
                 |r| r.get(0),
             )?;
+            let watching: bool = c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM board_watchers WHERE board_id = ?1 AND user_id = ?2)",
+                params![id, user],
+                |r| r.get(0),
+            )?;
             let archived: i64 = c.query_row(
                 "SELECT count(*) FROM lists WHERE board_id = ?1 AND archived_at IS NOT NULL",
                 [id],
@@ -338,7 +343,7 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
             )?;
             let labels = crate::cards::detail::labels_of_board(c, id)?;
             let last_event = crate::realtime::last_event(c)?;
-            Ok((lists, people, starred, archived, labels, last_event))
+            Ok((lists, people, (starred, watching), archived, labels, last_event))
         })
         .await?;
     let i = &board.info;
@@ -351,7 +356,8 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
         "background": i.background,
         "restricted": i.restricted,
         "closed": i.closed,
-        "starred": starred,
+        "starred": starred.0,
+        "watching": starred.1,
         "project": { "id": board.project.id, "name": board.project.info.name },
         "role": board.project.role.as_str(),
         "can": can,

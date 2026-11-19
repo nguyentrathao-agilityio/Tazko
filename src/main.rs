@@ -136,6 +136,7 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
     };
     println!("{banner}");
     tokio::spawn(purge_trash_daily(state.clone()));
+    tokio::spawn(tazko::notifications::due_soon_job(state.clone()));
     if let Err(e) = axum::serve(listener, tazko::http::router(state.clone()))
         .with_graceful_shutdown(shutdown())
         .await

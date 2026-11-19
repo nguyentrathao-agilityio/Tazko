@@ -356,6 +356,9 @@ async fn create(
                 prev = Some(pos);
             }
             let ids: Vec<&Value> = created.iter().map(|c| &c["id"]).collect();
+            for c in &created {
+                crate::notifications::card_added(&tx, id, c["id"].as_i64().unwrap_or_default(), by)?;
+            }
             if created.len() == 1 {
                 let card = created[0]["id"].as_i64().unwrap_or_default();
                 events::record(&tx, by, "card_created", At::card(pid, id, card), json!({ "list": list, "title": titles[0] }))?;

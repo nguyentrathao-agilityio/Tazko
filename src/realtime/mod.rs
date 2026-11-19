@@ -71,7 +71,7 @@ async fn live(
     Ok(ws.on_upgrade(move |socket| run(state, board, session, q.after, socket)))
 }
 
-fn allowed(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
+pub fn allowed(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
     c.query_row(
         &format!(
             "SELECT EXISTS (SELECT 1 FROM boards b

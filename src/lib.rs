@@ -13,6 +13,7 @@ pub mod error;
 pub mod events;
 pub mod files;
 pub mod http;
+pub mod notifications;
 pub mod order;
 pub mod projects;
 pub mod realtime;
