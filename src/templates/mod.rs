@@ -406,6 +406,16 @@ async fn remove(
     Path(params): Path<HashMap<String, String>>,
 ) -> Result<StatusCode, ApiError> {
     check_csrf(&co.user, &headers)?;
+    if co
+        .user
+        .0
+        .token
+        .as_ref()
+        .is_some_and(|t| t.scope != crate::api::tokens::Scope::Manage || t.projects.is_some())
+    {
+        return Err(ApiError::Forbidden);
+    }
+
     let user = co.user.0.user_id;
     let owner = co.role == CompanyRole::Owner;
     let id = path_id(&params, "template")?;

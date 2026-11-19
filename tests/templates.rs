@@ -763,3 +763,48 @@ async fn a_card_made_into_a_template_makes_new_cards_until_unmarked() {
         "card templates belong to their board"
     );
 }
+
+#[tokio::test]
+async fn only_manage_tokens_delete_templates() {
+    let w = world().await;
+    fill(&w).await;
+    let saved = req(
+        &w.app,
+        &w.lead,
+        Method::POST,
+        &format!("{A}/boards/{}/save-template", w.board),
+        Some(json!({ "name": "T" })),
+    )
+    .await;
+    let id = saved["id"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("c:")
+        .to_string();
+    let token = |scope: &str| {
+        let body = json!({ "name": "t", "scope": scope });
+        let app = &w.app;
+        let admin = &w.admin;
+        async move {
+            body_json(call(app, admin, Method::POST, "/api/v1/me/tokens", Some(body)).await).await["token"].as_str().unwrap().to_string()
+        }
+    };
+    let path = format!("{A}/templates/{id}");
+    let send = |t: String| {
+        let r = axum::http::Request::builder()
+            .method(Method::DELETE)
+            .uri(&path)
+            .header(axum::http::header::AUTHORIZATION, format!("Bearer {t}"))
+            .body(axum::body::Body::empty())
+            .unwrap();
+        w.app.send(r)
+    };
+    assert_eq!(
+        send(token("write").await).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        send(token("manage").await).await.status(),
+        StatusCode::NO_CONTENT
+    );
+}
