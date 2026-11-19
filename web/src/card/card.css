@@ -1022,9 +1022,18 @@
     color: var(--muted);
     cursor: pointer;
     border: 2px dashed var(--line);
-    width: 96px;
-    height: 62px;
+    width: 44px;
+    height: 32px;
     border-radius: 7px;
+    align-self: center;
+  }
+
+  .men {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 0 3px;
+    font-weight: 600;
   }
 
   .sw.up:hover {

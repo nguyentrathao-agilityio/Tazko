@@ -3,7 +3,7 @@ import { api, HttpError, upload } from '@/http'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { ago } from '@/card/look'
-import { extOf, fileSize, fileUrl, shortUrl, shownName } from '@/card/files'
+import { extOf, fileSize, fileUrl, shortUrl, shownName, sizeShort, usage } from '@/card/files'
 import type { CardDetail } from '@/card/types'
 
 const SHOWN = 3
@@ -123,7 +123,7 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
   const pick = (file: File | undefined) => {
     if (!file) return
     if (storage && file.size > storage.max_file) {
-      setError(t('attach.tooLarge', { size: fileSize(storage.max_file) }))
+      setError(t('attach.tooLarge', { size: sizeShort(storage.max_file) }))
       return
     }
 
@@ -139,7 +139,7 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
     void send(() => api('POST', `${path}/attachments/link`, { url: url.trim(), name: name.trim() || undefined }), name.trim() || url.trim())
   }
 
-  const max = storage ? fileSize(storage.max_file) : '10 MB'
+  const max = storage ? sizeShort(storage.max_file) : '10 MB'
   return (
     <>
       <label className="mi" style={{ cursor: busy ? 'progress' : 'pointer' }}>
@@ -149,7 +149,7 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
       </label>
       <p className="hint" style={{ margin: '2px 8px 10px' }}>
         {storage?.limit
-          ? t('attach.hintLimit', { max, used: fileSize(storage.used), limit: fileSize(storage.limit) })
+          ? t('attach.hintLimit', { max, usage: usage(storage.used, storage.limit) })
           : t('attach.hint', { max })}
       </p>
       {error && (
