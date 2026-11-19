@@ -1,3 +1,4 @@
+import { TemplatesPage } from '@/templates/TemplatesPage'
 import { useEffect, type ReactNode } from 'react'
 import type { Me } from '@/api'
 import { t } from '@/i18n'
@@ -25,7 +26,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings)?|\/b\/(\d+)(?:\/c\/(\d+))?|\/me(\/appearance|\/sessions)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(\/settings|\/projects|\/p\/(\d+)(\/members|\/settings|\/templates)?|\/b\/(\d+)(?:\/c\/(\d+))?|\/me(\/appearance|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const company = me.companies.find((c) => c.slug === slug)
   const fallback = me.companies.find((c) => c.slug === lastCompany()) ?? me.companies[0]
@@ -82,7 +83,8 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
   return (
     <MeContext.Provider value={me}>
     <CompanyShell me={me} company={company} active={section} go={go} onSignOut={onSignOut}>
-      {projectId && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
+      {projectId && match[4] === '/templates' && <TemplatesPage key={`${company.slug}:t${projectId}`} company={company} project={projectId} go={go} />}
+      {projectId && match[4] !== '/templates' && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
       {section === 'me' && (
         <SettingsPage me={me} company={company} tab={match[7] === '/appearance' ? 'appearance' : match[7] === '/sessions' ? 'sessions' : 'profile'} go={go} onProfile={onProfile} />

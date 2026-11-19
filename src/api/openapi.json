@@ -29,6 +29,9 @@
      },
      "restricted": {
       "type": "boolean"
+     },
+     "template": {
+      "type": "string"
      }
     },
     "required": [
@@ -111,12 +114,6 @@
      "title": {
       "type": "string"
      },
-     "description": {
-      "type": "string"
-     },
-     "markdown": {
-      "type": "string"
-     },
      "start_at": {
       "type": [
        "integer",
@@ -137,6 +134,12 @@
        "string",
        "null"
       ]
+     },
+     "description_markdown": {
+      "type": "string"
+     },
+     "description_html": {
+      "type": "string"
      }
     }
    },
@@ -254,6 +257,44 @@
      "scope",
      "projects"
     ]
+   },
+   "SaveTemplate": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   },
+   "UseCardTemplate": {
+    "type": "object",
+    "properties": {
+     "list_id": {
+      "type": "integer"
+     },
+     "card": {
+      "type": "integer"
+     },
+     "builtin": {
+      "enum": [
+       "bug",
+       "feature",
+       "meeting"
+      ]
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "list_id"
+    ]
    }
   }
  },
@@ -367,7 +408,7 @@
     }
    },
    "post": {
-    "summary": "Create a board",
+    "summary": "Create a board, empty or from a template (template: c:<id> or a:<id>)",
     "tags": [
      "Boards"
     ],
@@ -1209,6 +1250,166 @@
       "application/json": {
        "schema": {
         "$ref": "#/components/schemas/NewPersonalToken"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/templates": {
+   "get": {
+    "summary": "Board templates of this company and those offered to every company",
+    "tags": [
+     "Templates"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/save-template": {
+   "post": {
+    "summary": "Save this board's lists, labels, custom fields and card titles as a template",
+    "tags": [
+     "Templates"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SaveTemplate"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/card-templates": {
+   "get": {
+    "summary": "Card templates saved on this board and built-in ones",
+    "tags": [
+     "Templates"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/card-templates/use": {
+   "post": {
+    "summary": "Add a card from a card template",
+    "tags": [
+     "Templates"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UseCardTemplate"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/template": {
+   "put": {
+    "summary": "Make a card a template, or stop",
+    "tags": [
+     "Templates"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/On"
        }
       }
      }

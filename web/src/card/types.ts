@@ -30,6 +30,7 @@ export type CardDetail = {
   attachments: Attachment[]
   fields?: Record<string, FieldValue>
   cover_image: number | null
+  is_template?: boolean
   comments: Comment[]
   activity: ActivityEntry[]
   can: { edit: boolean }

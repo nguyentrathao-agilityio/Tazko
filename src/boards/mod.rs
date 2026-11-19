@@ -219,6 +219,7 @@ struct NewBoard {
     background: Option<String>,
     #[serde(default)]
     restricted: bool,
+    template: Option<String>,
 }
 
 fn background(raw: Option<&str>, fallback: &str, allow_image: bool) -> Result<String, ApiError> {
@@ -254,13 +255,28 @@ pub fn insert_board(
 }
 
 async fn create(
+    State(state): State<AppState>,
     project: Project,
     headers: HeaderMap,
     Json(body): Json<NewBoard>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = project.writing(&headers, Act::CreateBoard)?;
     let name = validate::name(&body.name).ok_or_else(|| bad("enter a board title"))?;
-    let bg = background(body.background.as_deref(), &project.info.background, false)?;
+    let template = match body.template.as_deref().filter(|t| !t.is_empty()) {
+        Some(t) => {
+            let (data, tbg) = crate::templates::load(&state, project.db(), t).await?;
+            crate::templates::validate(&data)?;
+            Some((data, tbg))
+        }
+        None => None,
+    };
+    let fallback = template
+        .as_ref()
+        .map(|(_, b)| b.clone())
+        .filter(|b| BACKGROUNDS.contains(&b.as_str()))
+        .unwrap_or_else(|| project.info.background.clone());
+    let bg = background(body.background.as_deref(), &fallback, false)?;
+    let from_template = body.template.clone().filter(|_| template.is_some());
     let pid = project.id;
     let restricted = body.restricted;
     let id = project
@@ -268,19 +284,23 @@ async fn create(
         .write(move |c| {
             let tx = c.transaction()?;
             let id = insert_board(&tx, pid, &name, &bg, restricted, by)?;
-            crate::cards::detail::insert_default_labels(&tx, id)?;
-            for (title, pos) in DEFAULT_LISTS.iter().zip(order::spread(DEFAULT_LISTS.len())) {
-                tx.execute(
-                    "INSERT INTO lists (board_id, title, position) VALUES (?1, ?2, ?3)",
-                    params![id, title, pos],
-                )?;
+            if let Some((data, _)) = &template {
+                crate::templates::apply(&tx, id, data, by)?;
+            } else {
+                crate::cards::detail::insert_default_labels(&tx, id)?;
+                for (title, pos) in DEFAULT_LISTS.iter().zip(order::spread(DEFAULT_LISTS.len())) {
+                    tx.execute(
+                        "INSERT INTO lists (board_id, title, position) VALUES (?1, ?2, ?3)",
+                        params![id, title, pos],
+                    )?;
+                }
             }
             events::record(
                 &tx,
                 by,
                 "board_created",
                 At::board(pid, id),
-                json!({ "name": name, "restricted": restricted }),
+                json!({ "name": name, "restricted": restricted, "template": from_template }),
             )?;
             tx.commit()?;
             Ok(id)

@@ -40,6 +40,11 @@ pub static CONTROL: Migrations = Migrations {
             name: "0003_personal_tokens.sql",
             sql: include_str!("../../migrations/control/0003_personal_tokens.sql"),
         },
+        Migration {
+            version: 4,
+            name: "0004_admin_templates.sql",
+            sql: include_str!("../../migrations/control/0004_admin_templates.sql"),
+        },
     ],
 };
 
@@ -95,6 +100,11 @@ pub static TENANT: Migrations = Migrations {
             version: 10,
             name: "0010_api_tokens.sql",
             sql: include_str!("../../migrations/tenant/0010_api_tokens.sql"),
+        },
+        Migration {
+            version: 11,
+            name: "0011_templates.sql",
+            sql: include_str!("../../migrations/tenant/0011_templates.sql"),
         },
     ],
 };

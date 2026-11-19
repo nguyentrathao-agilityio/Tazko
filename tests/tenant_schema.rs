@@ -66,3 +66,21 @@ fn company_column_names_are_recognised() {
         assert!(!names_a_company(name), "{name}");
     }
 }
+
+#[test]
+fn the_template_tables_are_part_of_the_company_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut conn = open_connection(&dir.path().join("tazko.db")).unwrap();
+    migrate(&mut conn, &TENANT).unwrap();
+    let all = columns(&conn);
+    for (table, column) in [
+        ("board_templates", "data"),
+        ("board_templates", "background"),
+        ("cards", "is_template"),
+    ] {
+        assert!(
+            all.iter().any(|(t, c)| t == table && c == column),
+            "{table}.{column} missing"
+        );
+    }
+}

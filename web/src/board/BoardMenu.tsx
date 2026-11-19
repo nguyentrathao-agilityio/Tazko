@@ -12,7 +12,7 @@ import { Avatar } from '@/ui/people'
 import { FieldsPage } from '@/card/Fields'
 import type { BoardData } from '@/board/types'
 
-type Page = 'main' | 'about' | 'bg' | 'fields' | 'arch' | 'access' | 'copy' | 'activity'
+type Page = 'main' | 'about' | 'bg' | 'tpl' | 'fields' | 'arch' | 'access' | 'copy' | 'activity'
 
 export function BoardMenu({
   board,
@@ -49,6 +49,7 @@ export function BoardMenu({
     copy: t('boardMenu.copy'),
     activity: t('boardMenu.activity'),
     fields: t('fields.title'),
+    tpl: t('tpl.save'),
   }
   const item = (to: Page, icon: IconName, label: string) => (
     <button type="button" className="mi" onClick={() => setPage(to)}>
@@ -94,6 +95,7 @@ export function BoardMenu({
               <>
                 <hr />
                 {item('copy', 'copy', t('boardMenu.copy'))}
+                {board.can.manage && item('tpl', 'tmpl', t('tpl.save'))}
               </>
             )}
             {board.can.manage && (
@@ -115,6 +117,7 @@ export function BoardMenu({
         {page === 'about' && <About board={board} base={base} run={run} />}
         {page === 'fields' && <FieldsPage defs={board.fields ?? []} edit={board.can.edit} base={base} run={run} />}
         {page === 'bg' && <BackgroundPage board={board} base={base} run={run} />}
+        {page === 'tpl' && <SaveTemplate board={board} base={base} onDone={() => setPage('main')} />}
         {page === 'arch' && <Archived board={board} base={base} run={run} />}
         {page === 'access' && <Access board={board} base={base} run={run} />}
         {page === 'activity' && <Activity board={board} base={base} />}
@@ -290,6 +293,52 @@ function BackgroundPage({ board, base, run }: { board: BoardData; base: string; 
       <p className="hint" style={{ marginTop: 10 }}>
         {busy ? t('bg.uploading') : t('bg.hint')}
       </p>
+    </>
+  )
+}
+
+function SaveTemplate({ board, base, onDone }: { board: BoardData; base: string; onDone: () => void }) {
+  const [name, setName] = useState(t('tpl.nameDefault', { name: board.name }))
+  const [description, setDescription] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const save = () =>
+    void api('POST', `${base}/save-template`, { name, description }).then(
+      () => {
+        setSaved(true)
+        setError(null)
+      },
+      (e: unknown) => setError(e instanceof HttpError ? e.message : String(e)),
+    )
+
+  if (saved)
+    return (
+      <>
+        <p role="status">{t('tpl.saved')}</p>
+        <button type="button" className="btn sm" onClick={onDone}>
+          {t('pop.back')}
+        </button>
+      </>
+    )
+  return (
+    <>
+      <div className="field">
+        <label htmlFor="st-n">{t('tpl.saveName')}</label>
+        <input type="text" id="st-n" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor="st-d">{t('tpl.saveDesc')}</label>
+        <input type="text" id="st-d" placeholder={t('tpl.saveDescHint')} value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <p className="hint">{t('tpl.saveHint')}</p>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn primary sm" onClick={save}>
+        {t('tpl.saveButton')}
+      </button>
     </>
   )
 }

@@ -88,7 +88,10 @@ export function CardTile({
           >
             {card.done && <Icon name="check" />}
           </button>
-          <span className="ttl">{card.title}</span>
+          <span className="ttl">
+            {card.is_template && <span className="tplb">{t('ctpl.badge')}</span>}
+            {card.title}
+          </span>
         </div>
         {hasBadges && (
           <div className="bdgs">
