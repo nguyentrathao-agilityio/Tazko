@@ -15,5 +15,5 @@ export default defineConfig({
     proxy: { '/health': server, '/api': server, '/auth': server },
   },
   build: { outDir: 'dist', emptyOutDir: true, sourcemap: false },
-  test: { environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'] },
+  test: { environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'], setupFiles: ['src/test-setup.ts'] },
 })

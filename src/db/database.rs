@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 use rusqlite::Connection;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 
 use super::migrate::{Migrations, migrate, open_connection};
 use super::{DbError, DbResult};
@@ -19,6 +19,7 @@ struct Inner {
     thread: Mutex<Option<thread::JoinHandle<()>>>,
     readers: Vec<Mutex<Connection>>,
     next: AtomicUsize,
+    changed: watch::Sender<u64>,
 }
 
 #[derive(Clone)]
@@ -40,11 +41,14 @@ impl Database {
             .collect::<DbResult<Vec<_>>>()?;
 
         let (tx, rx) = mpsc::channel::<Job>();
+        let (changed, _) = watch::channel(0u64);
+        let notify = changed.clone();
         let name = format!("db-writer:{}", path.display());
         let handle = thread::Builder::new().name(name).spawn(move || {
             let mut conn = conn;
             while let Ok(job) = rx.recv() {
                 job(&mut conn);
+                notify.send_modify(|n| *n = n.wrapping_add(1));
             }
         })?;
 
@@ -55,8 +59,13 @@ impl Database {
                 thread: Mutex::new(Some(handle)),
                 readers,
                 next: AtomicUsize::new(0),
+                changed,
             }),
         })
+    }
+
+    pub fn subscribe(&self) -> watch::Receiver<u64> {
+        self.inner.changed.subscribe()
     }
 
     pub fn path(&self) -> &Path {

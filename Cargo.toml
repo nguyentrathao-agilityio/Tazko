@@ -6,7 +6,7 @@ publish = false
 build = "build.rs"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 base64 = "0.23.1"
 brotli = "8"
 clap = { version = "4", features = ["derive"] }
@@ -29,9 +29,11 @@ ureq = { version = "3", default-features = false, features = ["rustls-no-provide
 brotli = "8"
 
 [dev-dependencies]
+futures-util = "0.3.34"
 http-body-util = "0.1"
 rand = "0.8"
 rsa = "0.9"
+tokio-tungstenite = "0.28"
 tower = { version = "0.5", features = ["util"] }
 
 [profile.release]
