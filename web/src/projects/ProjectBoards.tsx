@@ -10,6 +10,7 @@ import { BoardTile } from '@/board/BoardTile'
 import type { BoardTileData } from '@/board/types'
 import { background, backgroundNames } from '@/projects/look'
 import type { ProjectView } from '@/projects/types'
+import type { TemplateList } from '@/templates/types'
 import { useRun } from '@/projects/useRun'
 
 export function ProjectBoards({ company, project, go }: { company: Company; project: ProjectView; go: Go }) {
@@ -32,13 +33,17 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
           {error ?? loadError}
         </p>
       )}
-      {closed.length > 0 && (
-        <div className="row" style={{ marginBottom: 14 }}>
+      <div className="row" style={{ marginBottom: 14 }}>
+        <button type="button" className="btn" onClick={() => go(`/c/${company.slug}/p/${project.id}/templates`)}>
+          <Icon name="tmpl" />
+          {t('tpl.button')}
+        </button>
+        {closed.length > 0 && (
           <button type="button" className="btn quiet" onClick={() => setShowClosed((s) => !s)}>
             {t(showClosed ? 'project.hideClosed' : 'project.showClosed', { n: closed.length })}
           </button>
-        </div>
-      )}
+        )}
+      </div>
       {starred.length > 0 && (
         <>
           <div className="sechd">
@@ -102,6 +107,7 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
       {creating && (
         <CreateBoard
           initial={project.background}
+          templates={`/api/v1/c/${company.slug}/templates`}
           onClose={() => setCreating(false)}
           onCreate={async (body) => {
             const res = await api<{ id: number }>('POST', path, body)
@@ -116,14 +122,17 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
 
 function CreateBoard({
   initial,
+  templates,
   onClose,
   onCreate,
 }: {
   initial: string
+  templates: string
   onClose: () => void
-  onCreate: (body: { name: string; background: string; restricted: boolean }) => Promise<void>
+  onCreate: (body: { name: string; background: string; restricted: boolean; template?: string }) => Promise<void>
 }) {
   const [bg, setBg] = useState(initial)
+  const { data: offered } = useLoad(() => api<TemplateList>('GET', templates), templates)
   const [problem, setProblem] = useState<string | null>(null)
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
@@ -135,7 +144,8 @@ function CreateBoard({
       return
     }
 
-    onCreate({ name, background: bg, restricted: f.get('access') === 'r' }).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))
+    const template = String(f.get('template') ?? '')
+    onCreate({ name, background: bg, restricted: f.get('access') === 'r', ...(template ? { template } : {}) }).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)))
   }
 
   return (
@@ -158,6 +168,17 @@ function CreateBoard({
               <button key={k} type="button" className="sw" style={{ background: background(k) }} aria-pressed={bg === k} aria-label={k} onClick={() => setBg(k)} />
             ))}
           </div>
+        </div>
+        <div className="field">
+          <label htmlFor="nb-t">{t('tpl.startFrom')}</label>
+          <select id="nb-t" name="template" style={{ width: '100%' }}>
+            <option value="">{t('tpl.empty')}</option>
+            {(offered?.templates ?? []).map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="field">
           <label htmlFor="nb-a">{t('board.access')}</label>

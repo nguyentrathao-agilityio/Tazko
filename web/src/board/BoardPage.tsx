@@ -7,6 +7,7 @@ import { Link, type Go } from '@/ui/Link'
 import { displayName } from '@/ui/names'
 import { anchorOf, type Anchor } from '@/ui/anchor'
 import { Popover } from '@/ui/Popover'
+import { CardTemplatePop } from '@/templates/CardTemplatePop'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import { background } from '@/projects/look'
@@ -57,7 +58,7 @@ function useCollapsed(boardId: number) {
 
 type CardPop = 'quick' | 'k-members' | 'k-dates' | 'k-labels' | 'k-move'
 
-type Pop = { kind: 'access' | 'share' | 'members' | 'filter' | 'live'; at: Anchor } | { kind: CardPop; at: Anchor; card: CardData } | null
+type Pop = { kind: 'access' | 'share' | 'members' | 'filter' | 'live'; at: Anchor } | { kind: 'cardtpl'; at: Anchor; list: number } | { kind: CardPop; at: Anchor; card: CardData } | null
 
 export function BoardPage({ company, id, cardId, me, go }: { company: Company; id: number; cardId: number | null; me: number; go: Go }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
@@ -336,6 +337,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
         composing={composing}
         setComposing={setComposing}
         onAddCards={addCards}
+        onCardTemplate={(l, el) => setPop({ kind: 'cardtpl', at: anchorOf(el), list: l.id })}
         onMoveCard={(m) => void run(() => api('POST', `${base}/cards/${m.card}/move`, { list_id: m.list, after: m.after }))}
         onMoveList={(m) => void run(() => api('POST', `${base}/lists/${m.list}/move`, { after: m.after }))}
         labels={board.labels}
@@ -432,6 +434,19 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
         </Popover>
       )}
       {help && <Shortcuts onClose={() => setHelp(false)} />}
+      {pop?.kind === 'cardtpl' && (
+        <Popover anchor={pop.at} title={t('ctpl.title')} width={300} onClose={() => setPop(null)}>
+          <CardTemplatePop
+            base={base}
+            list={pop.list}
+            onMade={(id) => {
+              setPop(null)
+              reload()
+              go(`${boardPath}/c/${id}`)
+            }}
+          />
+        </Popover>
+      )}
       {pop?.kind === 'live' && (
         <Popover anchor={pop.at} title={t('live.title')} width={300} onClose={() => setPop(null)}>
           <LiveList viewers={live.viewers} me={me} />

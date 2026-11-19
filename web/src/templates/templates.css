@@ -1,0 +1,97 @@
+@layer components {
+  .tgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .tcard {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .tprev {
+    height: 130px;
+    padding: 12px;
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    overflow: hidden;
+  }
+
+  .tprev i {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.88);
+    border-radius: 6px;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    height: 100%;
+  }
+
+  .tprev i s {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(40, 40, 80, 0.18);
+  }
+
+  .tprev i s:first-child {
+    background: rgba(40, 40, 80, 0.4);
+    width: 70%;
+  }
+
+  .tcard .tb {
+    padding: 12px 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .tcard .tb h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .tcard .tb p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .tcard .row {
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .tplb {
+    display: inline-block;
+    font: 600 0.66rem var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-right: 6px;
+    vertical-align: 1px;
+  }
+
+  .lf {
+    display: flex;
+    align-items: center;
+  }
+
+  .lf .addc {
+    flex: 1;
+  }
+}

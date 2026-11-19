@@ -37,7 +37,7 @@ const board = () => ({
     { id: 2, name: 'Jo Lee', email: 'jo@example.com', role: 'member', access: true },
     { id: 3, name: 'Ana Reyes', email: 'ana@example.com', role: 'observer', access: true },
   ],
-  lists: [{ id: 11, title: 'To do', position: 'V', cards: [{ id: 21, title: 'Write copy', position: 'V', labels: [31], members: [2], due_at: 1, done: false, comments: 5, items: 8, items_done: 2, has_description: true, fields: { '81': 'High', '82': 3 } }] }],
+  lists: [{ id: 11, title: 'To do', position: 'V', cards: [{ id: 21, title: 'Write copy', position: 'V', labels: [31], members: [2], due_at: 1, done: false, comments: 5, items: 8, items_done: 2, has_description: true, is_template: true, fields: { '81': 'High', '82': 3 } }] }],
   labels: [{ id: 31, name: 'Bug', color: 3 }],
   fields: [
     { id: 81, name: 'Priority', type: 'select', options: ['Low', 'High'], show_on_card: true },
@@ -84,6 +84,8 @@ beforeEach(() => {
       calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body })
       if (url === '/api/v1/me') return json(me)
       if (url === '/api/v1/c/acme/storage') return json({ max_file: 10 * 1024 * 1024, used: 1_932_735_283, limit: 5 * 1024 ** 3 })
+      if (url === '/api/v1/c/acme/boards/7/card-templates') return json({ saved: [{ id: 21, title: 'Write copy' }], builtin: [{ key: 'bug', title: 'Bug report' }] })
+      if (url === '/api/v1/c/acme/boards/7/card-templates/use') return json({ id: 99 }, 201)
       if (url.startsWith('/api/v1/c/acme/boards/7/background?name=')) return json({ error: 'choose a PNG, JPEG, GIF or WebP picture for the background' }, 415)
       if (url.startsWith('/api/v1/c/acme/boards/7/cards/21/attachments?name=')) return json({ error: 'this file is named .png but it is not an image Tazko can show' }, 415)
       if (method !== 'GET') return method === 'POST' ? json({ id: 99 }, 201) : new Response(null, { status: 204 })
@@ -253,6 +255,25 @@ describe('card dialog', () => {
     expect(within(menu).getByRole('alert').textContent).toBe('Background pictures can be up to 5 MB; this one is larger.')
     fireEvent.change(input, { target: { files: [new File(['%PDF'], 'brief.png', { type: 'image/png' })] } })
     await waitFor(() => expect(within(menu).getByRole('alert').textContent).toBe('choose a PNG, JPEG, GIF or WebP picture for the background'))
+  })
+
+  it('marks cards as templates and makes cards from them under a list', async () => {
+    open('/c/acme/b/7')
+    const tile = await screen.findByRole('button', { name: 'Write copy' })
+    expect(within(tile).getByText('Template')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Create from template' }))
+    const pop = screen.getByRole('dialog', { name: 'Card template' })
+    fireEvent.click(await within(pop).findByRole('button', { name: 'Bug report' }))
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith('/card-templates/use'))?.body).toEqual({ list_id: 11, builtin: 'bug' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/c/acme/b/7/c/99'))
+  })
+
+  it('offers Make template in the card menu', async () => {
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Card menu/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Make template' }))
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith('/cards/21/template'))?.body).toEqual({ on: true }))
   })
 })
 
