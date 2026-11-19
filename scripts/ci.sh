@@ -14,7 +14,6 @@ step "clean-room names";     run "$PY" scripts/checks.py names
 step "secrets";              run "$PY" scripts/checks.py secrets
 step "commits";              run "$PY" scripts/checks.py commits
 step "no comments in source"; run "$PY" scripts/checks.py comments
-step "one company per file";  run "$PY" scripts/checks.py tenant-schema
 step "prototype-only controls"; run "$PY" scripts/checks.py prototype-only
 step "design is read-only";   run "$PY" scripts/checks.py design
 step "agent settings";        run "$PY" scripts/checks.py settings

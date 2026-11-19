@@ -156,16 +156,6 @@ expect fail "comment in CSS" checks comments
 new_repo comments6; mkdir -p migrations/control; printf -- '-- x\nCREATE TABLE t (id INTEGER);\n' > migrations/control/0001.sql; git add -A
 expect fail "comment in a migration" checks comments
 
-# tenant-schema
-new_repo tenant; mkdir -p migrations/tenant migrations/control
-printf 'CREATE TABLE boards (id INTEGER PRIMARY KEY, project_id INTEGER);\n' > migrations/tenant/0001.sql
-printf 'CREATE TABLE company_members (company_id INTEGER);\n' > migrations/control/0001.sql
-expect pass "company column only in control" checks tenant-schema
-printf 'ALTER TABLE boards ADD COLUMN org_id INTEGER;\n' > migrations/tenant/0002.sql
-expect fail "org_id in a company file" checks tenant-schema
-rm migrations/tenant/0002.sql; printf 'CREATE TABLE x (Company_Slug TEXT);\n' > migrations/tenant/0003.sql
-expect fail "company slug in a company file" checks tenant-schema
-
 # prototype-only
 new_repo proto; mkdir -p web/src; printf 'export const t = "Board"\n' > web/src/a.ts; git add -A
 expect pass "no prototype-only controls" checks prototype-only

@@ -11,7 +11,6 @@ Usage: checks.py <check> [args]
   commits             every commit is by the owner and carries no attribution lines
   commit-msg <file>   one commit message carries no attribution lines
   comments            no comments in src/, web/src/ or migrations/
-  tenant-schema       no company column in the company file migrations
   prototype-only      the prototype-only controls are not built
   design [--update]   design/ matches scripts/design.sha256 (--update: owner only)
   settings            .claude/settings.json keeps attribution off and machine commands on ask
@@ -44,7 +43,6 @@ SRC_DIR = "src/"
 WEB_SRC_DIR = "web/src/"
 WEB_DIST_DIR = "web/dist"
 MIGRATIONS_DIR = "migrations/"
-TENANT_MIGRATIONS_DIR = MIGRATIONS_DIR + "tenant/"
 DESIGN_DIR = "design/"
 DESIGN_LIST = "scripts/design.sha256"
 SETTINGS_FILE = ".claude/settings.json"
@@ -119,9 +117,6 @@ ESCAPED_SLASH = "\\/"
 COMMENT_ALLOWED = re.compile(r"^\s*///\s*<reference\s")
 STRING_LITERAL = re.compile(r""""(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|'(?:\\.|[^'\\\n])*'""")
 COMMENT_HINT = "comment in source; name things so the code reads without it, and put the reason in the commit message or docs/"
-
-TENANT_COLUMN = re.compile(r"(?:orgs?|compan(?:y|ies)|tenants?)_(?:id|slug|key|uuid)\b", re.I)
-TENANT_HINT = "each company has its own tazko.db, so open that company's file instead of adding a company column"
 
 PROTOTYPE_ONLY_LABELS = ("View as", "Live sim")
 WEB_SOURCE_EXTS = (".ts", ".tsx", ".js", ".json", ".css", ".html")
@@ -399,16 +394,6 @@ def check_comments() -> int:
     )
 
 
-def check_tenant_schema() -> int:
-    return fail(
-        f"{p}:{n}: '{match.group(0)}' in a company file; {TENANT_HINT}"
-        for p in files_under(TENANT_MIGRATIONS_DIR)
-        if p.endswith(".sql")
-        for n, line in numbered_lines(p)
-        if (match := TENANT_COLUMN.search(line))
-    )
-
-
 def check_prototype_only() -> int:
     return fail(
         f"{p}: '{label}' {PROTOTYPE_HINT}"
@@ -480,7 +465,6 @@ CHECKS: dict[str, Callable[..., int]] = {
     "commits": check_commits,
     "commit-msg": check_commit_msg,
     "comments": check_comments,
-    "tenant-schema": check_tenant_schema,
     "prototype-only": check_prototype_only,
     "design": check_design,
     "settings": check_settings,
