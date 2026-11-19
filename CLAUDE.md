@@ -10,6 +10,7 @@ Tazko is a self-hosted kanban work tracker for several companies: one Rust binar
 - Write a test for every "Done when" check and for every permission rule.
 - Small commits. Run `scripts/ci.sh` before every commit; do not commit while it fails.
 - No comments in `src/`, `web/src/` or `migrations/`: name things so the code reads on its own, and put reasons in the commit message or `docs/`.
+- Before opening every pull request, in this order: run the app on the local target and check the change works; run `/simplify`; run `/code-review` (`high` when the change touches sign-in, permissions, tokens, uploads, webhooks or more than one company, otherwise `medium`) and fix what it confirms; run `/security-review` when the change touches sign-in, permissions, tokens, uploads or webhooks; then `scripts/ci.sh`. List what each step found and fixed under "How" in the pull request.
 - When the owner corrects the same mistake twice, turn it into a check in `scripts/checks.py` with a test, not into another line here.
 - When something is ambiguous, ask the owner; record unanswered questions in `docs/open-questions.md` and progress in `docs/progress.md`.
 
