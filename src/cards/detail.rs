@@ -160,7 +160,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             let row = c
                 .query_row(
                     "SELECT k.title, k.description, k.start_at, k.due_at, k.done, k.cover, k.list_id, l.title,
-                            k.archived_at IS NOT NULL, k.created_at, k.created_by, k.cover_attachment
+                            k.archived_at IS NOT NULL, k.created_at, k.created_by, k.cover_attachment, k.is_template
                      FROM cards k JOIN lists l ON l.id = k.list_id WHERE k.id = ?1 AND k.board_id = ?2",
                     params![card, id],
                     |r| {
@@ -177,6 +177,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
                                 "archived": r.get::<_, bool>(8)?,
                                 "created_at": r.get::<_, i64>(9)?,
                                 "cover_image": r.get::<_, Option<i64>>(11)?,
+                                "is_template": r.get::<_, bool>(12)?,
                             }),
                             r.get::<_, Option<i64>>(10)?,
                         ))
