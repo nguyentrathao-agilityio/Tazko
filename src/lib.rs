@@ -11,6 +11,7 @@ pub mod db;
 pub mod devseed;
 pub mod error;
 pub mod events;
+pub mod files;
 pub mod http;
 pub mod order;
 pub mod projects;

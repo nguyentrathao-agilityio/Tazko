@@ -160,7 +160,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             let row = c
                 .query_row(
                     "SELECT k.title, k.description, k.start_at, k.due_at, k.done, k.cover, k.list_id, l.title,
-                            k.archived_at IS NOT NULL, k.created_at, k.created_by
+                            k.archived_at IS NOT NULL, k.created_at, k.created_by, k.cover_attachment
                      FROM cards k JOIN lists l ON l.id = k.list_id WHERE k.id = ?1 AND k.board_id = ?2",
                     params![card, id],
                     |r| {
@@ -176,6 +176,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
                                 "list": { "id": r.get::<_, i64>(6)?, "title": r.get::<_, String>(7)? },
                                 "archived": r.get::<_, bool>(8)?,
                                 "created_at": r.get::<_, i64>(9)?,
+                                "cover_image": r.get::<_, Option<i64>>(11)?,
                             }),
                             r.get::<_, Option<i64>>(10)?,
                         ))
@@ -192,6 +193,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             v["labels"] = json!(ids("SELECT label_id FROM card_labels WHERE card_id = ?1")?);
             v["members"] = json!(ids("SELECT user_id FROM card_members WHERE card_id = ?1")?);
             v["checklists"] = json!(checklists(c, card)?);
+            v["attachments"] = json!(crate::files::attachments_of(c, card)?);
             v["created_by"] = person(c, creator)?;
             let mut stmt = c.prepare(
                 "SELECT id, user_id, body, created_at, edited_at FROM comments WHERE card_id = ?1 ORDER BY id DESC",
@@ -296,6 +298,7 @@ async fn update(
                 };
                 changed.insert("cover".into(), json!(cv));
                 sets.push(("cover", cv.map_or(Sql::Null, Sql::Text)));
+                sets.push(("cover_attachment", Sql::Null));
             }
             _ => return Err(bad(&format!("{key} cannot be changed here"))),
         }

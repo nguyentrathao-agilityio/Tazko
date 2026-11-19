@@ -222,14 +222,45 @@ export function DatesPop({
   )
 }
 
-export function CoverPop({ cover, onPick }: { cover: string | null; onPick: (c: string | null) => void }) {
+export function CoverPop({
+  cover,
+  coverImage = null,
+  images = [],
+  onPick,
+  onPickImage,
+}: {
+  cover: string | null
+  coverImage?: number | null
+  images?: { id: number; name: string; src: string }[]
+  onPick: (c: string | null) => void
+  onPickImage?: (id: number) => void
+}) {
   return (
     <>
+      <div className="sub">{t('cardPop.coverColors')}</div>
       <div className="swatches" style={{ margin: '8px 0' }}>
         {labelColors.map((c) => (
           <button key={c} type="button" className="sw" style={{ background: c }} aria-pressed={cover === c} aria-label={t('cardPop.coverColor', { color: c })} onClick={() => onPick(c)} />
         ))}
       </div>
+      {onPickImage && (
+        <>
+          <div className="sub" style={{ marginTop: 12 }}>
+            {t('cardPop.coverImages')}
+          </div>
+          {images.length ? (
+            <div className="swatches" style={{ margin: '8px 0' }}>
+              {images.map((a) => (
+                <button key={a.id} type="button" className="sw img" aria-pressed={coverImage === a.id} aria-label={t('cardPop.coverImage', { name: a.name })} onClick={() => onPickImage(a.id)}>
+                  <img src={a.src} alt="" loading="lazy" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="hint">{t('cardPop.coverNoImages')}</p>
+          )}
+        </>
+      )}
       <button type="button" className="btn sm" style={{ marginTop: 10 }} onClick={() => onPick(null)}>
         {t('cardPop.removeCover')}
       </button>

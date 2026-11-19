@@ -11,6 +11,8 @@ pub enum ApiError {
     Forbidden,
     BadRequest(String),
     Conflict(String),
+    TooLarge(String),
+    Unsupported(String),
     Internal(String),
 }
 
@@ -22,6 +24,8 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "not allowed".to_string()),
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
+            ApiError::TooLarge(m) => (StatusCode::PAYLOAD_TOO_LARGE, m),
+            ApiError::Unsupported(m) => (StatusCode::UNSUPPORTED_MEDIA_TYPE, m),
             ApiError::Internal(m) => {
                 eprintln!("tazko: internal error: {m}");
                 (

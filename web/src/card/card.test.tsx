@@ -50,6 +50,13 @@ const card = () => ({
   due_at: null,
   done: false,
   cover: null,
+  cover_image: null,
+  attachments: [
+    { id: 71, kind: 'file', name: 'old-draft.png', size: 2048, url: null, image: true, type: 'image/png', created_at: 1_700_000_000 },
+    { id: 72, kind: 'file', name: 'spec.pdf', size: 3_200_000, url: null, image: false, type: 'application/pdf', created_at: 1_700_000_001 },
+    { id: 73, kind: 'link', name: 'Brand guide', size: 0, url: 'https://example.com/brand', image: false, type: '', created_at: 1_700_000_002 },
+    { id: 74, kind: 'file', name: 'hero.png', size: 482_000, url: null, image: true, type: 'image/png', created_at: 1_700_000_003 },
+  ],
   list: { id: 11, title: 'To do' },
   archived: false,
   created_at: 1_700_000_000,
@@ -69,8 +76,10 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (url: string, init: RequestInit = {}) => {
       const method = init.method ?? 'GET'
-      calls.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined })
+      calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body })
       if (url === '/api/v1/me') return json(me)
+      if (url === '/api/v1/c/acme/storage') return json({ max_file: 10 * 1024 * 1024, used: 1_932_735_283, limit: 5 * 1024 ** 3 })
+      if (url.startsWith('/api/v1/c/acme/boards/7/cards/21/attachments?name=')) return json({ error: 'this file is named .png but it is not an image Tazko can show' }, 415)
       if (method !== 'GET') return method === 'POST' ? json({ id: 99 }, 201) : new Response(null, { status: 204 })
       if (url === '/api/v1/c/acme/boards/7') return json(board())
       if (url === '/api/v1/c/acme/boards/7/cards/21') return json(card())
@@ -142,5 +151,43 @@ describe('card dialog', () => {
     expect(within(dialog).queryByRole('button', { name: 'Add checklist' })).toBeNull()
     expect(within(dialog).queryByRole('button', { name: 'Add members' })).toBeNull()
     expect((within(dialog).getAllByRole('checkbox', { name: 'Mark complete' })[0] as HTMLButtonElement).disabled).toBe(true)
+    const files = within(dialog).getByRole('region', { name: 'Attachments' })
+    expect(within(files).queryByRole('button', { name: 'Add' })).toBeNull()
+    expect(within(files).queryByRole('button', { name: /Delete attachment/ })).toBeNull()
+    expect(within(files).getByRole('link', { name: 'hero.png' }).getAttribute('href')).toBe('/api/v1/c/acme/boards/7/attachments/74')
+  })
+
+  it('lists attachments, makes a cover and explains a refused upload', async () => {
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    const files = await within(dialog).findByRole('region', { name: 'Attachments' })
+    expect(within(files).queryByText('old-draft.png')).toBeNull()
+    expect(within(files).getByRole('link', { name: 'spec.pdf' }).getAttribute('href')).toBe('/api/v1/c/acme/boards/7/attachments/72?download=1')
+    expect(within(files).getByText(/^3\.1 MB/)).toBeTruthy()
+    expect(within(files).getByRole('link', { name: 'Brand guide' }).getAttribute('href')).toBe('https://example.com/brand')
+    fireEvent.click(within(files).getByRole('button', { name: 'Show all 4 attachments' }))
+    expect(within(files).getByText('old-draft.png')).toBeTruthy()
+    fireEvent.click(within(files).getAllByRole('button', { name: 'Make cover' })[1])
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.url.endsWith('/attachments/74/cover'))).toBe(true))
+
+    fireEvent.click(within(files).getByRole('button', { name: 'Add' }))
+    const pop = screen.getByRole('dialog', { name: 'Attachment' })
+    expect(await within(pop).findByText('Files up to 10.0 MB. This company uses 1.8 GB of 5.0 GB.')).toBeTruthy()
+    const big = new File(['x'], 'huge.png', { type: 'image/png' })
+    Object.defineProperty(big, 'size', { value: 11 * 1024 * 1024 })
+    fireEvent.change(within(pop).getByLabelText('Upload a file'), { target: { files: [big] } })
+    expect(within(pop).getByRole('alert').textContent).toBe('Files can be up to 10.0 MB; this one is larger.')
+    expect(calls.some((c) => c.url.includes('/attachments?name='))).toBe(false)
+    const fake = new File(['MZ'], 'cat.png', { type: 'image/png' })
+    fireEvent.change(within(pop).getByLabelText('Upload a file'), { target: { files: [fake] } })
+    await waitFor(() => expect(within(pop).getByRole('alert').textContent).toContain('not an image'))
+    expect(calls.find((c) => c.url.includes('/attachments?name='))?.url).toBe('/api/v1/c/acme/boards/7/cards/21/attachments?name=cat.png')
+
+    fireEvent.change(within(pop).getByLabelText('Paste a link'), { target: { value: 'ftp://nope' } })
+    fireEvent.click(within(pop).getByRole('button', { name: 'Attach link' }))
+    expect(within(pop).getByRole('alert').textContent).toBe('Enter a link that starts with https://')
+    fireEvent.change(within(pop).getByLabelText('Paste a link'), { target: { value: 'https://example.com/a' } })
+    fireEvent.click(within(pop).getByRole('button', { name: 'Attach link' }))
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith('/attachments/link'))?.body).toEqual({ url: 'https://example.com/a' }))
   })
 })

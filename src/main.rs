@@ -214,6 +214,10 @@ async fn purge_projects(state: &AppState, now: i64) {
         if let Err(e) = tazko::projects::purge(&db, now).await {
             eprintln!("tazko: project clean-up failed for {slug}: {e:?}");
         }
+        let dir = state.dbs.layout().orgs.join(&slug);
+        if let Err(e) = tazko::files::sweep(&db, dir).await {
+            eprintln!("tazko: file clean-up failed for {slug}: {e:?}");
+        }
     }
 }
 

@@ -35,6 +35,7 @@ function SortableList({ list, edit, children }: { list: ListData; edit: boolean;
 
 export function BoardLists({
   lists: source,
+  base,
   totals,
   labels,
   people,
@@ -54,6 +55,7 @@ export function BoardLists({
   after,
 }: {
   lists: ListData[]
+  base?: string
   totals: Map<number, number> | null
   labels: Label[]
   people: BoardPerson[]
@@ -189,7 +191,7 @@ export function BoardLists({
                 >
                   <SortableContext items={l.cards.map((c) => `c:${c.id}`)} strategy={verticalListSortingStrategy}>
                     {l.cards.map((c) => (
-                      <CardTile key={c.id} card={c} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
+                      <CardTile key={c.id} card={c} base={base} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
                     ))}
                   </SortableContext>
                 </ListColumn>

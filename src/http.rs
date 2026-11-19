@@ -23,6 +23,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::search::routes())
         .merge(crate::settings::routes())
         .merge(crate::realtime::routes())
+        .merge(crate::files::routes())
         .fallback(static_file)
         .with_state(state)
 }

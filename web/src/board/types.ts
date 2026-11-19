@@ -23,6 +23,8 @@ export type CardData = {
   due_at?: number | null
   done?: boolean
   cover?: string | null
+  cover_image?: number | null
+  attachments?: number
   comments?: number
   items?: number
   items_done?: number
