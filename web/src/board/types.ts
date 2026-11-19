@@ -1,3 +1,4 @@
+import type { FieldDef, FieldValue } from '@/card/fieldTypes'
 import type { Can, ProjectRole } from '@/projects/types'
 
 export type BoardTileData = {
@@ -25,6 +26,7 @@ export type CardData = {
   cover?: string | null
   cover_image?: number | null
   attachments?: number
+  fields?: Record<string, FieldValue>
   comments?: number
   items?: number
   items_done?: number
@@ -51,6 +53,7 @@ export type BoardData = {
   people: BoardPerson[]
   lists: ListData[]
   labels: Label[]
+  fields?: FieldDef[]
   archived_lists: number
   last_event?: number
 }

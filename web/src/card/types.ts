@@ -2,7 +2,9 @@ export type PersonRef = { id: number; name: string; email: string } | null
 
 export type ActivityEntry = { id: number; type: string; actor: PersonRef; payload: Record<string, unknown> | null; created_at: number }
 
-export type Comment = { id: number; author: PersonRef; body: string; created_at: number; edited_at: number | null }
+import type { FieldValue, Reaction } from '@/card/fieldTypes'
+
+export type Comment = { id: number; author: PersonRef; body: string; created_at: number; edited_at: number | null; reactions?: Reaction[] }
 
 export type ChecklistItem = { id: number; text: string; done: boolean }
 
@@ -26,6 +28,7 @@ export type CardDetail = {
   members: number[]
   checklists: Checklist[]
   attachments: Attachment[]
+  fields?: Record<string, FieldValue>
   cover_image: number | null
   comments: Comment[]
   activity: ActivityEntry[]

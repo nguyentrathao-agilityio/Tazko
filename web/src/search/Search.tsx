@@ -56,13 +56,13 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
 
   const data = q.trim() && result ? result.data : null
   const hits: { key: string; to: string; title: string; sub: string; bg: string }[] = [
-    ...(data?.boards ?? []).map((b) => ({ key: `b${b.id}`, to: `/c/${company.slug}/b/${b.id}`, title: b.name, sub: b.project, bg: b.background })),
+    ...(data?.boards ?? []).map((b) => ({ key: `b${b.id}`, to: `/c/${company.slug}/b/${b.id}`, title: b.name, sub: b.project, bg: background(b.background, `/api/v1/c/${company.slug}/boards/${b.id}`) })),
     ...(data?.cards ?? []).map((c) => ({
       key: `c${c.id}`,
       to: `/c/${company.slug}/b/${c.board.id}/c/${c.id}`,
       title: c.title,
       sub: [c.board.name, c.archived ? t('search.archived') : c.list, c.due_at ? t('search.due', { date: shortDate(c.due_at) }) : ''].filter(Boolean).join(' · '),
-      bg: c.board.background,
+      bg: background(c.board.background, `/api/v1/c/${company.slug}/boards/${c.board.id}`),
     })),
   ]
 
@@ -121,7 +121,7 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
               <div key={h.key}>
                 {i === boards && <div className="sub">{t('search.cards', { n: data.total })}</div>}
                 <button type="button" role="option" aria-selected={i === on} className={`hit${i === on ? ' on' : ''}`} onClick={() => pick(h.to)} onMouseEnter={() => setOn(i)}>
-                  <span className="bgdot" style={{ background: background(h.bg) }} />
+                  <span className="bgdot" style={{ background: h.bg }} />
                   <span>
                     <b>{h.title}</b>
                     <small>{h.sub}</small>

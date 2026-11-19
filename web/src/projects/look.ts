@@ -16,6 +16,13 @@ export const backgroundNames = Object.keys(backgrounds)
 
 export const colors = ['c0', 'c1', 'c2', 'c3', 'c4']
 
-export function background(name: string): string {
+export function background(name: string, board?: string): string {
+  const m = /^img:(\d+)$/.exec(name)
+  if (m) return board ? `url("${board}/background/${m[1]}") center / cover no-repeat, ${backgrounds.ink}` : backgrounds.ink
   return backgrounds[name] ?? backgrounds.dusk
+}
+
+export function boardApi(board: number): string | undefined {
+  const m = /^\/c\/([a-z0-9-]+)(\/|$)/.exec(window.location.pathname)
+  return m ? `/api/v1/c/${m[1]}/boards/${board}` : undefined
 }

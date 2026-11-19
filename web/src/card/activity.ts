@@ -83,6 +83,7 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
     case 'board_created':
       return p.copied_from ? 'created this board as a copy' : 'created this board'
     case 'board_updated':
+      if (p.uploaded) return 'changed the background to an uploaded picture'
       return 'changed the board'
     case 'board_closed':
       return 'closed this board'
@@ -110,6 +111,20 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'changed a label'
     case 'label_deleted':
       return 'deleted a label'
+    case 'field_set':
+      return `changed ${str(p.name) || 'a custom field'}`
+    case 'field_created':
+      return `added the custom field ${str(p.name)}`
+    case 'field_changed':
+      return `changed the custom field ${str(p.name)}`
+    case 'field_deleted':
+      return `deleted the custom field ${str(p.name)}`
+    case 'attachment_added':
+      return `attached ${str(p.name)}`
+    case 'attachment_removed':
+      return `removed the attachment ${str(p.name)}`
+    case 'comment_reacted':
+      return 'reacted to a comment'
     default:
       return e.type.replace(/_/g, ' ')
   }

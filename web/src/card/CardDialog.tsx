@@ -16,7 +16,9 @@ import { ago, dateRange, dueState, labelStyle } from '@/card/look'
 import { AttachPop, AttachmentsSection } from '@/card/Attachments'
 import { fileUrl } from '@/card/files'
 import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop } from '@/card/Pops'
+import { FieldsSection } from '@/card/Fields'
 import { MentionBox } from '@/card/MentionBox'
+import { Reactions } from '@/card/Reactions'
 import { CommentText } from '@/card/Rich'
 import type { CardDetail, Checklist, Comment } from '@/card/types'
 
@@ -271,6 +273,7 @@ export function CardDialog({
                 <div className="desc empty">{t('boardMenu.noDescription')}</div>
               )}
             </section>
+            <FieldsSection defs={board.fields ?? []} values={card.fields ?? {}} edit={edit} path={path} run={run} />
             {card.checklists.map((k, i) => (
               <ChecklistBlock
                 key={k.id}
@@ -318,6 +321,11 @@ export function CardDialog({
                   if (ok) toast(card.archived ? t('card.restored') : t('card.archived'))
                 })
               }
+              hasFields={Boolean(board.fields?.length)}
+              onFields={() => {
+                close()
+                document.getElementById('card-fields')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }}
               onShare={() => {
                 const url = `${window.location.origin}${link}`
                 void navigator.clipboard?.writeText(url).then(
@@ -509,6 +517,8 @@ function CardMenu({
   onJoin,
   onArchive,
   onShare,
+  hasFields,
+  onFields,
 }: {
   card: CardDetail
   edit: boolean
@@ -518,6 +528,8 @@ function CardMenu({
   onJoin: (id: number) => void
   onArchive: () => void
   onShare: () => void
+  hasFields: boolean
+  onFields: () => void
 }) {
   const self = people.find((p) => p.id === me)
   const item = (icon: Parameters<typeof Icon>[0]['name'], label: string, act: () => void) => (
@@ -538,6 +550,7 @@ function CardMenu({
           {item('clock', t('card.dates'), () => onPick('dates'))}
           {item('clip', t('attach.attachment'), () => onPick('attach'))}
           {item('image', t('card.cover'), () => onPick('cover'))}
+          {hasFields && item('sliders', t('fields.title'), onFields)}
         </>
       )}
       <div className="pg2">{t('card.actions')}</div>
@@ -899,6 +912,7 @@ function Feed({
                   <CommentText text={c.body} />
                 </div>
               )}
+              <Reactions comment={c.id} reactions={c.reactions ?? []} edit={edit} base={base} run={run} />
               {mine && edit && editing?.id !== c.id && (
                 <div className="acts">
                   <button type="button" onClick={() => setEditing({ id: c.id, text: c.body })}>

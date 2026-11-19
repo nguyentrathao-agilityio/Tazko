@@ -37,8 +37,12 @@ const board = () => ({
     { id: 2, name: 'Jo Lee', email: 'jo@example.com', role: 'member', access: true },
     { id: 3, name: 'Ana Reyes', email: 'ana@example.com', role: 'observer', access: true },
   ],
-  lists: [{ id: 11, title: 'To do', position: 'V', cards: [{ id: 21, title: 'Write copy', position: 'V', labels: [31], members: [2], due_at: 1, done: false, comments: 5, items: 8, items_done: 2, has_description: true }] }],
+  lists: [{ id: 11, title: 'To do', position: 'V', cards: [{ id: 21, title: 'Write copy', position: 'V', labels: [31], members: [2], due_at: 1, done: false, comments: 5, items: 8, items_done: 2, has_description: true, fields: { '81': 'High', '82': 3 } }] }],
   labels: [{ id: 31, name: 'Bug', color: 3 }],
+  fields: [
+    { id: 81, name: 'Priority', type: 'select', options: ['Low', 'High'], show_on_card: true },
+    { id: 82, name: 'Points', type: 'number', options: [], show_on_card: false },
+  ],
   archived_lists: 0,
 })
 
@@ -51,6 +55,7 @@ const card = () => ({
   done: false,
   cover: null,
   cover_image: null,
+  fields: { '81': 'High', '82': 3 },
   attachments: [
     { id: 71, kind: 'file', name: 'old-draft.png', size: 2048, url: null, image: true, type: 'image/png', created_at: 1_700_000_000 },
     { id: 72, kind: 'file', name: 'spec.pdf', size: 3_200_000, url: null, image: false, type: 'application/pdf', created_at: 1_700_000_001 },
@@ -64,7 +69,7 @@ const card = () => ({
   labels: [31],
   members: [2],
   checklists: [{ id: 41, title: 'Launch', items: Array.from({ length: 8 }, (_, i) => ({ id: 50 + i, text: `Step ${i + 1}`, done: i < 2 })) }],
-  comments: Array.from({ length: 5 }, (_, i) => ({ id: 60 + i, author: { id: i === 0 ? 1 : 2, name: i === 0 ? 'Mai Tran' : 'Jo Lee', email: 'x@example.com' }, body: `Note ${i + 1}`, created_at: 1_700_000_000 + i, edited_at: null })),
+  comments: Array.from({ length: 5 }, (_, i) => ({ id: 60 + i, author: { id: i === 0 ? 1 : 2, name: i === 0 ? 'Mai Tran' : 'Jo Lee', email: 'x@example.com' }, body: `Note ${i + 1}`, created_at: 1_700_000_000 + i, edited_at: null, reactions: i === 4 ? [{ emoji: '👍', count: 2, mine: true, people: ['Mai Tran', 'Jo Lee'] }] : [] })),
   activity: [{ id: 1, type: 'card_created', actor: { id: 2, name: 'Jo Lee', email: 'jo@example.com' }, payload: { list: 11 }, created_at: 1_699_999_000 }],
   can: { edit: role !== 'observer' },
 })
@@ -79,6 +84,7 @@ beforeEach(() => {
       calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body })
       if (url === '/api/v1/me') return json(me)
       if (url === '/api/v1/c/acme/storage') return json({ max_file: 10 * 1024 * 1024, used: 1_932_735_283, limit: 5 * 1024 ** 3 })
+      if (url.startsWith('/api/v1/c/acme/boards/7/background?name=')) return json({ error: 'choose a PNG, JPEG, GIF or WebP picture for the background' }, 415)
       if (url.startsWith('/api/v1/c/acme/boards/7/cards/21/attachments?name=')) return json({ error: 'this file is named .png but it is not an image Tazko can show' }, 415)
       if (method !== 'GET') return method === 'POST' ? json({ id: 99 }, 201) : new Response(null, { status: 204 })
       if (url === '/api/v1/c/acme/boards/7') return json(board())
@@ -190,4 +196,63 @@ describe('card dialog', () => {
     fireEvent.click(within(pop).getByRole('button', { name: 'Attach link' }))
     await waitFor(() => expect(calls.find((c) => c.url.endsWith('/attachments/link'))?.body).toEqual({ url: 'https://example.com/a' }))
   })
+
+  it('shows custom fields on the tile and in the card, and sets values', async () => {
+    open('/c/acme/b/7')
+    const tile = await screen.findByRole('button', { name: 'Write copy' })
+    expect(within(tile).getByText('Priority').parentElement?.textContent).toBe('Priority High')
+    expect(within(tile).queryByText('Points')).toBeNull()
+    fireEvent.click(tile)
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    const fields = within(dialog).getByRole('region', { name: 'Custom fields' })
+    expect((within(fields).getByLabelText('Priority') as HTMLSelectElement).value).toBe('High')
+    fireEvent.change(within(fields).getByLabelText('Priority'), { target: { value: 'Low' } })
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith('/cards/21/fields/81'))?.body).toEqual({ value: 'Low' }))
+    const points = within(fields).getByLabelText('Points')
+    fireEvent.change(points, { target: { value: '8' } })
+    fireEvent.blur(points)
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith('/cards/21/fields/82'))?.body).toEqual({ value: 8 }))
+  })
+
+  it('toggles reactions on comments', async () => {
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    const chip = await within(dialog).findByRole('button', { name: '👍 2' })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(chip)
+    await waitFor(() => expect(calls.find((c) => c.url.endsWith('/comments/64/reactions'))?.body).toEqual({ emoji: '👍', on: false }))
+    fireEvent.click(within(dialog).getAllByRole('button', { name: 'Add reaction' })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'React with 🎉' }))
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT' && c.body && (c.body as { emoji: string }).emoji === '🎉')).toBe(true))
+  })
+
+  it('gives observers read-only fields and no reaction button', async () => {
+    role = 'observer'
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    const fields = await within(dialog).findByRole('region', { name: 'Custom fields' })
+    expect((within(fields).getByLabelText('Priority') as HTMLSelectElement).disabled).toBe(true)
+    expect(within(dialog).queryByRole('button', { name: 'Add reaction' })).toBeNull()
+    expect((within(dialog).getByRole('button', { name: '👍 2' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('refuses a big or wrong background picture with a clear message and lists custom fields', async () => {
+    open('/c/acme/b/7')
+    await screen.findByRole('button', { name: 'Write copy' })
+    fireEvent.click(screen.getByRole('button', { name: 'Board menu' }))
+    const menu = screen.getByRole('complementary', { name: 'Board menu' })
+    fireEvent.click(within(menu).getByRole('button', { name: 'Custom fields' }))
+    expect(within(menu).getByText('Priority')).toBeTruthy()
+    expect(within(menu).getByText(/Dropdown: Low, High · shown on cards/)).toBeTruthy()
+    fireEvent.click(within(menu).getByRole('button', { name: 'Back' }))
+    fireEvent.click(within(menu).getByRole('button', { name: 'Change background' }))
+    const input = within(menu).getByLabelText('Upload a background image')
+    const big = new File(['x'], 'sky.png', { type: 'image/png' })
+    Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 })
+    fireEvent.change(input, { target: { files: [big] } })
+    expect(within(menu).getByRole('alert').textContent).toBe('Background pictures can be up to 5 MB; this one is larger.')
+    fireEvent.change(input, { target: { files: [new File(['%PDF'], 'brief.png', { type: 'image/png' })] } })
+    await waitFor(() => expect(within(menu).getByRole('alert').textContent).toBe('choose a PNG, JPEG, GIF or WebP picture for the background'))
+  })
 })
+
