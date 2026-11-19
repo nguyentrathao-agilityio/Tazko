@@ -126,11 +126,14 @@ Sign-in is invite-only, so create a local super admin with your Google address f
 cargo run -- admin --data ./data --email you@example.com
 ```
 
-Load the prototype's sample companies and boards:
+Load a demo company ("Tazko Demo") with a project, a "Sprint 12" board of about fifteen cards (labels, dates, checklists, comments, some Vietnamese text) and a "Roadmap" board, owned by the super admin:
 
 ```bash
 cargo run -- dev seed
+cargo run -- dev seed --owner you@example.com
 ```
+
+It goes through the app's own routes, so events, ordering, search and the description cleaner all apply. It runs only when `TAZKO_PUBLIC_URL` is a local address, and does nothing if the demo company already exists. Stop the server first, or run it while the server is stopped.
 
 ## Reset data
 
