@@ -16,6 +16,7 @@ import { ago, dateRange, dueState, labelStyle } from '@/card/look'
 import { AttachPop, AttachmentsSection } from '@/card/Attachments'
 import { fileUrl } from '@/card/files'
 import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop } from '@/card/Pops'
+import { MentionBox } from '@/card/MentionBox'
 import { CommentText } from '@/card/Rich'
 import type { CardDetail, Checklist, Comment } from '@/card/types'
 
@@ -829,18 +830,13 @@ function Feed({
         <div className="cmt">
           <Avatar name={displayName(board.people.find((p) => p.id === me)?.name ?? '', board.people.find((p) => p.id === me)?.email ?? '?')} />
           <div className="bub">
-            <textarea
-              className="ta-s"
+            <MentionBox
               value={draft}
+              people={board.people.filter((p) => p.access && p.id !== me)}
               placeholder={t('card.commentPlaceholder')}
-              aria-label={t('card.comment')}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault()
-                  save()
-                }
-              }}
+              label={t('card.comment')}
+              onChange={setDraft}
+              onSubmit={save}
             />
             <div className="row" style={{ marginTop: 6 }}>
               <button type="button" className="btn primary sm" onClick={save}>

@@ -44,6 +44,7 @@ export type BoardData = {
   restricted: boolean
   closed: boolean
   starred: boolean
+  watching?: boolean
   project: { id: number; name: string }
   role: ProjectRole
   can: Can

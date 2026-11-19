@@ -76,6 +76,11 @@ pub static TENANT: Migrations = Migrations {
             name: "0007_attachments.sql",
             sql: include_str!("../../migrations/tenant/0007_attachments.sql"),
         },
+        Migration {
+            version: 8,
+            name: "0008_notifications.sql",
+            sql: include_str!("../../migrations/tenant/0008_notifications.sql"),
+        },
     ],
 };
 

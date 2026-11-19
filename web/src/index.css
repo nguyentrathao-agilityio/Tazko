@@ -9,6 +9,7 @@
 @import './zen/zen.css';
 @import './settings/settings.css';
 @import './live/live.css';
+@import './notify/notify.css';
 
 body {
   margin: 0;

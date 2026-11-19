@@ -77,6 +77,15 @@ export function BoardMenu({
             {board.can.edit && item('bg', 'palette', t('boardMenu.background'))}
             {item('arch', 'archive', t('boardMenu.archived'))}
             {item('activity', 'act', t('boardMenu.activity'))}
+            <button
+              type="button"
+              className="mi"
+              aria-pressed={board.watching}
+              onClick={() => void run(() => api('PUT', `${base}/watch`, { on: !board.watching }))}
+            >
+              <Icon name="eye" />
+              {board.watching ? t('board.unwatch') : t('board.watch')}
+            </button>
             {board.can.manage && item('access', 'lock', t('boardMenu.access'))}
             {board.can.create_board && (
               <>

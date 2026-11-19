@@ -129,7 +129,7 @@ describe('keyboard shortcuts', () => {
     await openBoard()
     press('j')
     press('e')
-    expect(screen.getByRole('dialog', { name: 'Quick edit' })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: 'Quick edit' })).toBeTruthy()
     press('Escape', document.activeElement ?? window)
     for (const [key, title] of [
       ['a', 'Members'],
