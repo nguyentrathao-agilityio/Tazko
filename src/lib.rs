@@ -8,6 +8,7 @@ pub mod cli;
 pub mod company;
 pub mod config;
 pub mod db;
+pub mod devseed;
 pub mod error;
 pub mod events;
 pub mod http;

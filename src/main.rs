@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use tazko::admin::cli::Granted;
 use tazko::backup;
-use tazko::cli::{BackupAction, Cli, Command};
+use tazko::cli::{BackupAction, Cli, Command, DevAction};
 use tazko::config::{self, DataLayout};
 use tazko::db::Databases;
 use tazko::state::AppState;
@@ -28,6 +28,65 @@ async fn main() -> ExitCode {
             env_file,
         } => run_backup(action, data, to, keep_days, env_file),
         Command::Check { data, env_file } => run_check(data, env_file),
+        Command::Dev {
+            action: DevAction::Seed { owner, env_file },
+        } => dev_seed(owner.as_deref(), env_file.as_deref()).await,
+    }
+}
+
+async fn dev_seed(owner: Option<&str>, env_file: Option<&Path>) -> ExitCode {
+    let settings = match config::load(env_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("tazko dev seed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if !tazko::devseed::local(&settings.public_url) {
+        eprintln!("tazko dev seed: refusing, TAZKO_PUBLIC_URL is not a local address");
+        return ExitCode::FAILURE;
+    }
+
+    let layout = DataLayout::new(&settings.data_dir);
+    if let Err(e) = layout.create() {
+        eprintln!("tazko dev seed: cannot prepare the data folder: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    let secret = match config::server_secret(&settings, &layout) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("tazko dev seed: cannot load the server secret: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let dbs = match Databases::open(layout) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("tazko dev seed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let public = settings.public_url.trim_end_matches('/').to_string();
+    let state = AppState::new(settings, dbs, secret);
+    let outcome = tazko::devseed::seed(&state, owner).await;
+    state.dbs.close();
+    match outcome {
+        Ok(tazko::devseed::Seeded::Created { board, .. }) => {
+            println!(
+                "Seeded the Tazko Demo company. Open {public}/c/{}/b/{board}",
+                tazko::devseed::SLUG
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(tazko::devseed::Seeded::AlreadyThere) => {
+            println!("The Tazko Demo company is already there; nothing changed.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("tazko dev seed: {e}");
+            ExitCode::FAILURE
+        }
     }
 }
 
