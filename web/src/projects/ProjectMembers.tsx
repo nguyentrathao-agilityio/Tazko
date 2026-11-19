@@ -10,8 +10,9 @@ import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { Can, ProjectInvite, ProjectMember, ProjectRole, ProjectView } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
+import { PROJECT_ROLES } from '@/roles'
 
-const roles: ProjectRole[] = ['owner', 'member', 'observer']
+const roles: readonly ProjectRole[] = PROJECT_ROLES
 
 export function ProjectMembers({ company, project, onChange }: { company: Company; project: ProjectView; onChange: () => void }) {
   const base = `/api/v1/c/${company.slug}/projects/${project.id}`

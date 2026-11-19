@@ -12,6 +12,7 @@ import { BoardTile } from '@/board/BoardTile'
 import type { BoardTileData } from '@/board/types'
 import { Tools } from '@/ui/Tools'
 import type { MyProject } from '@/projects/types'
+import { isOwner } from '@/roles'
 
 export function YourProjects({ company, go }: { company: Company; go: Go }) {
   const path = `/api/v1/c/${company.slug}/my-projects`
@@ -24,7 +25,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
   return (
     <>
       <PageHead title={t('nav.projects')} lead={t('projects.lead', { company: company.name })}>
-        {company.role === 'owner' && (
+        {isOwner(company.role) && (
           <button type="button" className="btn" onClick={() => go(`/c/${company.slug}/projects`)}>
             <Icon name="building" />
             {t('nav.manageProjects')}
@@ -77,7 +78,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
                 <div className="foot">
                   <Stack people={p.members} />
                   <span>{t('projects.boardCount', { n: p.boards })}</span>
-                  <span className={`pill${p.role === 'owner' ? ' accent' : ''}`} style={{ marginLeft: 'auto' }}>
+                  <span className={`pill${isOwner(p.role) ? ' accent' : ''}`} style={{ marginLeft: 'auto' }}>
                     {t(`projectRole.${p.role}`).toLowerCase()}
                   </span>
                 </div>
