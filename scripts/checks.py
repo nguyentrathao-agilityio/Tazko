@@ -13,7 +13,11 @@ Usage: checks.py <check> [args]
   comments            no comments in src/, web/src/ or migrations/
   prototype-only      the prototype-only controls are not built
   design [--update]   design/ matches scripts/design.sha256 (--update: owner only)
-  settings            .claude/settings.json keeps attribution off and machine commands on ask
+  migrations [--update]
+                      committed migrations match scripts/migrations.sha256
+                      (--update adds new migrations, never changes listed ones)
+  settings            .claude/settings.json keeps attribution off, machine commands on ask
+                      and the write guard hook on
 
 The word lists are stored as short SHA-256 prefixes so that this file does not
 itself name the products it keeps out of the repository.
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import importlib.util
 import inspect
 import json
 import os
@@ -45,6 +50,7 @@ WEB_DIST_DIR = "web/dist"
 MIGRATIONS_DIR = "migrations/"
 DESIGN_DIR = "design/"
 DESIGN_LIST = "scripts/design.sha256"
+MIGRATIONS_LIST = "scripts/migrations.sha256"
 SETTINGS_FILE = ".claude/settings.json"
 
 REQUIRED = (
@@ -123,6 +129,8 @@ WEB_SOURCE_EXTS = (".ts", ".tsx", ".js", ".json", ".css", ".html")
 PROTOTYPE_HINT = "is a prototype-only control; build the role differences on the server and leave the prototype bar out"
 
 DESIGN_HINT = "design/ is read-only for the build; ask the owner, who runs checks.py design --update after the change"
+MIGRATIONS_HINT = "committed migrations never change; add a new numbered migration instead"
+MIGRATIONS_LIST_HINT = "run checks.py migrations --update to list it"
 UPDATE_FLAG = "--update"
 
 MACHINE_COMMANDS = (
@@ -138,6 +146,8 @@ MACHINE_COMMANDS = (
     "scp",
 )
 REQUIRED_ASK = tuple(f"Bash({command}:*)" for command in MACHINE_COMMANDS)
+GUARD_HOOK_SCRIPT = "scripts/hooks/guard-write.py"
+MATCH_EVERY_TOOL = ("", "*")
 
 
 def short_hash(text: str) -> str:
@@ -405,37 +415,75 @@ def check_prototype_only() -> int:
     )
 
 
-def design_hashes() -> dict[str, str]:
-    return {p: hashlib.sha256(read_bytes(p)).hexdigest() for p in sorted(files_under(DESIGN_DIR))}
+def file_hashes(prefix: str) -> dict[str, str]:
+    return {p: hashlib.sha256(read_bytes(p)).hexdigest() for p in sorted(files_under(prefix))}
 
 
-def saved_design_hashes() -> dict[str, str]:
-    pairs = (line.split(None, 1) for line in read_text(DESIGN_LIST).splitlines() if line.strip())
+def saved_hashes(list_path: str) -> dict[str, str]:
+    pairs = (line.split(None, 1) for line in read_text(list_path).splitlines() if line.strip())
     return {path: digest for digest, path in pairs}
 
 
-def write_design_hashes(hashes: dict[str, str]) -> None:
-    with open(DESIGN_LIST, "w", encoding=ENCODING) as f:
-        f.writelines(f"{digest}  {path}\n" for path, digest in hashes.items())
+def write_hashes(list_path: str, hashes: dict[str, str]) -> None:
+    with open(list_path, "w", encoding=ENCODING) as f:
+        f.writelines(f"{digest}  {path}\n" for path, digest in sorted(hashes.items()))
+
+
+def hash_differences(current: dict[str, str], saved: dict[str, str]) -> dict[str, set[str]]:
+    return {
+        "changed": {p for p in current.keys() & saved.keys() if current[p] != saved[p]},
+        "added": current.keys() - saved.keys(),
+        "removed": saved.keys() - current.keys(),
+    }
 
 
 def check_design(*args: str) -> int:
     if args and args != (UPDATE_FLAG,):
         return usage()
-    current = design_hashes()
+    current = file_hashes(DESIGN_DIR)
     if args:
-        write_design_hashes(current)
+        write_hashes(DESIGN_LIST, current)
         print(f"  design: {len(current)} file(s) written to {DESIGN_LIST}")
         return EXIT_OK
     if not os.path.isfile(DESIGN_LIST):
         return fail([f"missing {DESIGN_LIST}; the owner creates it with checks.py design {UPDATE_FLAG}"])
-    saved = saved_design_hashes()
-    differences = (
-        ("changed", {p for p in current.keys() & saved.keys() if current[p] != saved[p]}),
-        ("added", current.keys() - saved.keys()),
-        ("removed", saved.keys() - current.keys()),
-    )
-    return fail(f"{p}: {state}; {DESIGN_HINT}" for state, paths in differences for p in sorted(paths))
+    differences = hash_differences(current, saved_hashes(DESIGN_LIST))
+    return fail(f"{p}: {state}; {DESIGN_HINT}" for state, paths in differences.items() for p in sorted(paths))
+
+
+def check_migrations(*args: str) -> int:
+    if args and args != (UPDATE_FLAG,):
+        return usage()
+    current = file_hashes(MIGRATIONS_DIR)
+    saved = saved_hashes(MIGRATIONS_LIST) if os.path.isfile(MIGRATIONS_LIST) else {}
+    differences = hash_differences(current, saved)
+    broken = [f"{p}: {state}; {MIGRATIONS_HINT}" for state in ("changed", "removed") for p in sorted(differences[state])]
+    if args:
+        if broken:
+            return fail(broken)
+        write_hashes(MIGRATIONS_LIST, current)
+        print(f"  migrations: {len(differences['added'])} added to {MIGRATIONS_LIST}")
+        return EXIT_OK
+    return fail(broken + [f"{p}: not listed in {MIGRATIONS_LIST}; {MIGRATIONS_LIST_HINT}" for p in sorted(differences["added"])])
+
+
+def guarded_tools() -> list[str]:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hooks", os.path.basename(GUARD_HOOK_SCRIPT))
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location("guard_write", path)
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+    return sorted(guard.FILE_TOOLS | {guard.SHELL_TOOL})
+
+
+def has_guard_hook(data: dict, tools: list[str]) -> bool:
+    for entry in data.get("hooks", {}).get("PreToolUse", []):
+        matcher = entry.get("matcher", "")
+        runs_guard = any(GUARD_HOOK_SCRIPT in hook.get("command", "") for hook in entry.get("hooks", []))
+        covers_all = matcher in MATCH_EVERY_TOOL or all(re.fullmatch(matcher, tool) for tool in tools)
+        if runs_guard and covers_all:
+            return True
+    return False
 
 
 def check_settings(path: str = SETTINGS_FILE) -> int:
@@ -453,6 +501,13 @@ def check_settings(path: str = SETTINGS_FILE) -> int:
         bad.append(f"{path}: includeCoAuthoredBy must stay false")
     bad += [f"{path}: permissions.ask must keep {rule}; machine changes wait for the owner" for rule in REQUIRED_ASK if rule not in ask]
     bad += [f"{path}: {rule} must not be in permissions.allow" for rule in REQUIRED_ASK if rule in allow]
+    try:
+        tools = guarded_tools()
+        guarded = has_guard_hook(data, tools)
+    except (OSError, AttributeError, re.error) as e:
+        return fail(bad + [f"{path}: cannot check the write guard hook ({e})"])
+    if not guarded:
+        bad.append(f"{path}: hooks.PreToolUse must run {GUARD_HOOK_SCRIPT} for {', '.join(tools)}")
     return fail(bad)
 
 
@@ -467,6 +522,7 @@ CHECKS: dict[str, Callable[..., int]] = {
     "comments": check_comments,
     "prototype-only": check_prototype_only,
     "design": check_design,
+    "migrations": check_migrations,
     "settings": check_settings,
 }
 
