@@ -12,6 +12,7 @@ import { useLoad } from '@/ui/useLoad'
 import { useRun } from '@/projects/useRun'
 import { Tools } from '@/ui/Tools'
 import { saveSettings, useSettings, type Settings } from '@/settings/store'
+import { companyRoleLabel, isOwner } from '@/roles'
 
 export type SettingsTab = 'profile' | 'appearance' | 'sessions'
 
@@ -194,7 +195,7 @@ function Profile({ me, onSaved }: { me: Me; onSaved: () => void }) {
                     </div>
                   </td>
                   <td>
-                    <span className={`pill${c.role === 'owner' ? ' accent' : ''}`}>{t(c.role === 'owner' ? 'role.owner' : 'role.member')}</span>
+                    <span className={`pill${isOwner(c.role) ? ' accent' : ''}`}>{t(companyRoleLabel(c.role))}</span>
                   </td>
                 </tr>
               ))}

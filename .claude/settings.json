@@ -3,5 +3,19 @@
     "commit": "",
     "pr": ""
   },
-  "includeCoAuthoredBy": false
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "ask": [
+      "Bash(sudo:*)",
+      "Bash(systemctl:*)",
+      "Bash(cloudflared:*)",
+      "Bash(apt:*)",
+      "Bash(apt-get:*)",
+      "Bash(brew install:*)",
+      "Bash(useradd:*)",
+      "Bash(usermod:*)",
+      "Bash(ssh:*)",
+      "Bash(scp:*)"
+    ]
+  }
 }

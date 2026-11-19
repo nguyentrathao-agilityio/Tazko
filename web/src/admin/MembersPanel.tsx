@@ -7,6 +7,7 @@ import { AccountPill, Person } from '@/ui/people'
 import { useToast } from '@/ui/toast'
 import { displayName } from '@/ui/names'
 import type { Invite, Member } from '@/admin/types'
+import { companyRoleLabel } from '@/roles'
 
 export function MembersPanel({
   base,
@@ -41,7 +42,7 @@ export function MembersPanel({
   const setRole = async (m: Member, role: string) => {
     const name = displayName(m.name, m.email)
     if (!(await run(() => api('PATCH', `${base}/members/${m.id}`, { role })))) return
-    toast(t('toast.roleChanged', { name, role: t(role === 'owner' ? 'role.owner' : 'role.member').toLowerCase() }), () =>
+    toast(t('toast.roleChanged', { name, role: t(companyRoleLabel(role)).toLowerCase() }), () =>
       run(() => api('PATCH', `${base}/members/${m.id}`, { role: m.role })),
     )
   }

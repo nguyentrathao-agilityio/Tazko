@@ -1,7 +1,8 @@
-import { setCsrf } from '@/http'
+import { ACCEPT_JSON, CSRF_HEADER, setCsrf } from '@/http'
 import { initSettings } from '@/settings/store'
+import type { CompanyRole } from '@/roles'
 
-export type Company = { slug: string; name: string; role: 'owner' | 'member' }
+export type Company = { slug: string; name: string; role: CompanyRole }
 
 export type Me = {
   id: number
@@ -16,7 +17,7 @@ export type Me = {
 export class SignInNeeded extends Error {}
 
 export async function getMe(signal?: AbortSignal): Promise<Me> {
-  const res = await fetch('/api/v1/me', { signal, headers: { accept: 'application/json' } })
+  const res = await fetch('/api/v1/me', { signal, headers: ACCEPT_JSON })
   if (res.status === 401) throw new SignInNeeded()
   if (!res.ok) throw new Error(`me ${res.status}`)
   const me = (await res.json()) as Me
@@ -26,14 +27,14 @@ export async function getMe(signal?: AbortSignal): Promise<Me> {
 }
 
 export async function signOut(csrf: string): Promise<void> {
-  const res = await fetch('/auth/signout', { method: 'POST', headers: { 'x-csrf-token': csrf } })
+  const res = await fetch('/auth/signout', { method: 'POST', headers: { [CSRF_HEADER]: csrf } })
   if (!res.ok && res.status !== 401) throw new Error(`sign out ${res.status}`)
 }
 
 export type RefusalNote = { email: string; reason: string }
 
 export async function getRefusal(signal?: AbortSignal): Promise<RefusalNote | null> {
-  const res = await fetch('/auth/refusal', { signal, headers: { accept: 'application/json' } })
+  const res = await fetch('/auth/refusal', { signal, headers: ACCEPT_JSON })
   if (!res.ok) return null
   return (await res.json()) as RefusalNote
 }

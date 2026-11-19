@@ -6,6 +6,7 @@ import { Link, type Go } from '@/ui/Link'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { useToast } from '@/ui/toast'
+import { companyRoleLabel, isOwner } from '@/roles'
 
 function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
   const [open, setOpen] = useState(false)
@@ -41,7 +42,7 @@ function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
         <Avatar name={company.name} square />
         <span style={{ flex: 1, minWidth: 0 }}>
           <b>{company.name}</b>
-          <small>{t(company.role === 'owner' ? 'role.owner' : 'role.member')}</small>
+          <small>{t(companyRoleLabel(company.role))}</small>
         </span>
         <Icon name="chev" />
       </button>
@@ -90,7 +91,7 @@ export function CompanyShell({
 }) {
   const name = displayName(me.name, me.email)
   const base = `/c/${company.slug}`
-  const owner = company.role === 'owner'
+  const owner = isOwner(company.role)
 
   return (
     <div className="shell">

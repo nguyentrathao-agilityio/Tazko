@@ -10,8 +10,7 @@ import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { Can, ProjectInvite, ProjectMember, ProjectRole, ProjectView } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
-
-const roles: ProjectRole[] = ['owner', 'member', 'observer']
+import { PROJECT_ROLES } from '@/roles'
 
 export function ProjectMembers({ company, project, onChange }: { company: Company; project: ProjectView; onChange: () => void }) {
   const base = `/api/v1/c/${company.slug}/projects/${project.id}`
@@ -124,7 +123,7 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
                     <td>
                       {can.manage ? (
                         <select aria-label={t('project.roleOf', { name })} value={m.role} onChange={(e) => setRole(m, e.target.value)}>
-                          {roles.map((r) => (
+                          {PROJECT_ROLES.map((r) => (
                             <option key={r} value={r}>
                               {t(`projectRole.${r}`)}
                             </option>
