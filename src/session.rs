@@ -17,6 +17,7 @@ pub struct SessionUser {
     pub name: String,
     pub is_super_admin: bool,
     pub csrf_token: String,
+    pub token: Option<std::sync::Arc<crate::api::tokens::TokenLimits>>,
 }
 
 pub fn now() -> i64 {
@@ -91,6 +92,7 @@ pub async fn lookup(control: &Database, token: &str) -> DbResult<Option<SessionU
                                 name: r.get(2)?,
                                 is_super_admin: r.get(3)?,
                                 csrf_token: r.get(4)?,
+                                token: None,
                             },
                             r.get::<_, i64>(5)?,
                         ))

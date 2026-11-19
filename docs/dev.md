@@ -144,3 +144,15 @@ rm -rf ./data
 ```
 
 `.env.local` is kept, so the OAuth client does not need to be set up again.
+
+## API tokens
+
+The REST API lives under `/api/v1`; the reference is at `/api/docs` and the OpenAPI document at `/api/v1/openapi.json`.
+
+- Personal tokens act as you and never go beyond your access. Create one while signed in with `POST /api/v1/me/tokens` (`name`, `scope` read/write/manage, optional `projects` as `[{ "company": "slug", "project": 1 }]`, optional `expires_in_days`). The secret is shown once.
+- Company tokens are made by a company owner with `POST /api/v1/c/{company}/tokens` (`name`, `scope`, `projects` they belong to). They act as that owner on those projects only and stop working when the owner is no longer an owner.
+- Send `Authorization: Bearer <token>`; no CSRF header is needed. Each token may make 120 requests a minute (then 429 with `Retry-After`).
+
+```bash
+curl -H "Authorization: Bearer $TAZKO_TOKEN" http://localhost:8791/api/v1/c/tazko-demo/boards/1
+```

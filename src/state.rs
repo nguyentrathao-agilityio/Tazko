@@ -14,6 +14,7 @@ pub struct AppState {
     pub google: Arc<Google>,
     pub started: Instant,
     pub live: Arc<Hub>,
+    pub rate: Arc<crate::api::tokens::RateLimiter>,
 }
 
 impl AppState {
@@ -34,6 +35,7 @@ impl AppState {
             google: Arc::new(Google::new(endpoints)),
             started: Instant::now(),
             live: Arc::new(Hub::default()),
+            rate: Arc::new(crate::api::tokens::RateLimiter::default()),
         }
     }
 }

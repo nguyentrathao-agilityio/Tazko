@@ -33,7 +33,7 @@ impl FromRequestParts<AppState> for SuperAdmin {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         let CurrentUser(user) = CurrentUser::from_request_parts(parts, state).await?;
-        if user.is_super_admin {
+        if user.is_super_admin && user.token.is_none() {
             Ok(SuperAdmin(user))
         } else {
             Err(ApiError::NotFound)

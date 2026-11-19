@@ -23,10 +23,29 @@ impl FromRequestParts<AppState> for CurrentUser {
             return Ok(user.clone());
         }
 
-        let token = session::cookie_token(&parts.headers).ok_or(ApiError::SignIn)?;
-        let user = session::lookup(state.dbs.control(), &token)
-            .await?
-            .ok_or(ApiError::SignIn)?;
+        let user = if let Some(bearer) = crate::api::tokens::bearer(&parts.headers) {
+            let user = crate::api::tokens::resolve(state, &bearer).await?;
+            let limits = user.token.clone().ok_or(ApiError::SignIn)?;
+            state
+                .rate
+                .hit(&limits.key, session::now())
+                .map_err(ApiError::TooMany)?;
+            let route = parts
+                .extensions
+                .get::<axum::extract::MatchedPath>()
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default();
+            if !limits.allows_route(&parts.method, &route) {
+                return Err(ApiError::Forbidden);
+            }
+
+            user
+        } else {
+            let token = session::cookie_token(&parts.headers).ok_or(ApiError::SignIn)?;
+            session::lookup(state.dbs.control(), &token)
+                .await?
+                .ok_or(ApiError::SignIn)?
+        };
         let user = CurrentUser(user);
         parts.extensions.insert(user.clone());
         Ok(user)
@@ -73,6 +92,15 @@ impl FromRequestParts<AppState> for Company {
             return Err(ApiError::NotFound);
         }
 
+        if user
+            .0
+            .token
+            .as_ref()
+            .is_some_and(|t| !t.allows_company(&slug))
+        {
+            return Err(ApiError::NotFound);
+        }
+
         let user_id = user.0.user_id;
         let found = state
             .dbs
@@ -103,11 +131,43 @@ impl FromRequestParts<AppState> for Company {
         } else {
             CompanyRole::Member
         };
+        if role != CompanyRole::Owner && user.0.token.as_ref().is_some_and(|t| t.company.is_some())
+        {
+            return Err(ApiError::NotFound);
+        }
         let db = match state.dbs.tenant(&slug) {
             Ok(db) => db,
             Err(DbError::Missing(_)) => return Err(ApiError::NotFound),
             Err(e) => return Err(e.into()),
         };
+
+        if let Some(limits) = user.0.token.as_ref().filter(|t| t.projects.is_some()) {
+            let id = |k: &str| params.get(k).and_then(|v| v.parse::<i64>().ok());
+            let project = match (id("project"), id("board")) {
+                (Some(p), _) => Some(p),
+                (None, Some(b)) => {
+                    db.read(move |c| {
+                        Ok(
+                            c.query_row("SELECT project_id FROM boards WHERE id = ?1", [b], |r| {
+                                r.get(0)
+                            })
+                            .optional()?,
+                        )
+                    })
+                    .await?
+                }
+                (None, None) => None,
+            };
+            if let Some(p) = project
+                && !limits.allows_project(&slug, p)
+            {
+                return Err(ApiError::NotFound);
+            }
+
+            if project.is_none() && (id("project").is_some() || id("board").is_some()) {
+                return Err(ApiError::NotFound);
+            }
+        }
 
         Ok(Company {
             org_id,

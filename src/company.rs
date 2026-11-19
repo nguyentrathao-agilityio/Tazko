@@ -36,6 +36,16 @@ impl FromRequestParts<AppState> for CompanyOwner {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         let company = Company::from_request_parts(parts, state).await?;
+        if company
+            .user
+            .0
+            .token
+            .as_ref()
+            .is_some_and(|t| t.scope != crate::api::tokens::Scope::Manage || t.projects.is_some())
+        {
+            return Err(ApiError::Forbidden);
+        }
+
         if company.role == CompanyRole::Owner {
             Ok(CompanyOwner(company))
         } else {

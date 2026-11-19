@@ -13,6 +13,7 @@ pub enum ApiError {
     Conflict(String),
     TooLarge(String),
     Unsupported(String),
+    TooMany(i64),
     Internal(String),
 }
 
@@ -26,6 +27,17 @@ impl IntoResponse for ApiError {
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::TooLarge(m) => (StatusCode::PAYLOAD_TOO_LARGE, m),
             ApiError::Unsupported(m) => (StatusCode::UNSUPPORTED_MEDIA_TYPE, m),
+            ApiError::TooMany(wait) => {
+                let mut res = (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({ "error": "too many requests for this token; wait a minute and try again" })),
+                )
+                    .into_response();
+                if let Ok(v) = axum::http::HeaderValue::from_str(&wait.to_string()) {
+                    res.headers_mut().insert(axum::http::header::RETRY_AFTER, v);
+                }
+                return res;
+            }
             ApiError::Internal(m) => {
                 eprintln!("tazko: internal error: {m}");
                 (

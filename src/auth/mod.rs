@@ -284,6 +284,10 @@ async fn refusal(
 }
 
 pub fn check_csrf(user: &CurrentUser, headers: &HeaderMap) -> Result<(), ApiError> {
+    if user.0.token.is_some() {
+        return Ok(());
+    }
+
     let sent = headers
         .get(CSRF_HEADER)
         .and_then(|v| v.to_str().ok())
