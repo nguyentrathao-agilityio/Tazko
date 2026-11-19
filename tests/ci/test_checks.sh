@@ -118,6 +118,10 @@ printf '{"MIT":[{"name":"react"}],"0BSD":[{"name":"other"}]}' > prod6.json
 expect fail "an unlisted 0BSD package" checks js-licenses prod6.json all.json
 printf '{"MIT AND GPL-3.0":[{"name":"mixed"}]}' > prod4.json
 expect fail "an AND with a disallowed licence" checks js-licenses prod4.json all.json
+printf '{"(MIT OR Apache-2.0) AND BSD-3-Clause":[{"name":"grouped"}]}' > prod7.json
+expect pass "a grouped OR inside an AND" checks js-licenses prod7.json all.json
+printf '{"(MIT) AND (GPL-3.0)":[{"name":"grouped-bad"}]}' > prod8.json
+expect fail "a grouped AND with a disallowed licence" checks js-licenses prod8.json all.json
 new_repo envfile; echo "X=1" > tazko.env; git add -f tazko.env
 expect fail "settings file tracked" checks secrets
 
