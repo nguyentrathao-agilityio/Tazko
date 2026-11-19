@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
 import { Toaster } from '@/ui/Toaster'
 import type { ListData } from '@/board/types'
-import { csv, fromDay, nextSort, rows, sortRows } from '@/table/table'
+import { csv, nextSort, rows, sortRows } from '@/table/table'
+import { fromInputs, toTimeInput } from '@/card/dates'
 
 type Call = { url: string; method: string; body?: unknown }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -84,12 +85,15 @@ describe('table helpers', () => {
   })
 
   it('keeps the time of day when a date changes and writes quoted CSV', () => {
-    const at = fromDay('2026-12-01', new Date(2026, 10, 3, 15, 30).getTime() / 1000)!
+    const at = fromInputs('2026-12-01', toTimeInput(new Date(2026, 10, 3, 15, 30).getTime() / 1000))!
     expect(new Date(at * 1000).getHours()).toBe(15)
     const b = board() as never
     const text = csv(rows(board().lists as unknown as ListData[]), [{ key: 'title', name: 'Card' }, { key: 'labels', name: 'Labels' }], b)
     expect(text.split('\n')[0]).toBe('"Card","Labels"')
     expect(text.split('\n')[1]).toBe('"Write copy","Bug"')
+    const bad = { ...(board() as object), lists: [{ id: 1, title: 'L', position: 'V', cards: [{ id: 9, title: '=HYPERLINK("x")', position: 'V', labels: [] }] }] } as never
+    const out = csv(rows((bad as { lists: ListData[] }).lists), [{ key: 'title', name: 'Card' }], bad)
+    expect(out.split('\n')[1]).toBe('"\'=HYPERLINK(""x"")"')
   })
 })
 

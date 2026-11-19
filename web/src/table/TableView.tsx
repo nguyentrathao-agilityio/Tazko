@@ -11,8 +11,11 @@ import { useToast } from '@/ui/toast'
 import type { BoardData, CardData, ListData } from '@/board/types'
 import { dueState, labelStyle } from '@/card/look'
 import { LabelsPop, MembersPop } from '@/card/Pops'
-import type { FieldDef, FieldValue } from '@/card/fieldTypes'
-import { columns, csv, dayValue, fromDay, nextSort, rows as toRows, shownByDefault, sortRows, type Column, type Row, type Sort } from '@/table/table'
+import { fieldText, type FieldDef, type FieldValue } from '@/card/fieldTypes'
+import { FieldControl } from '@/card/Fields'
+import { fromInputs, toDateInput, toTimeInput } from '@/card/dates'
+import { appendAfter } from '@/board/order'
+import { columns, csv, nextSort, rows as toRows, shownByDefault, sortRows, type Column, type Row, type Sort } from '@/table/table'
 
 type Run = (fn: () => Promise<unknown>) => Promise<boolean>
 type Pop = { kind: 'labels' | 'members'; card: CardData; at: Anchor } | { kind: 'columns'; at: Anchor } | null
@@ -72,30 +75,35 @@ export function TableView({
   const [group, setGroup] = useState(false)
   const [selected, setSelected] = useState<number[]>([])
   const [pop, setPop] = useState<Pop>(null)
-  const [title, setTitle] = useState('')
-  const [addTo, setAddTo] = useState<number | null>(null)
+  const listOptions = board.lists.map((l) => (
+    <option key={l.id} value={l.id}>
+      {l.title}
+    </option>
+  ))
   const fresh = (card: CardData) => board.lists.flatMap((l) => l.cards).find((c) => c.id === card.id) ?? card
   const isShown = (c: Column) => c.key === 'title' || (shown[c.key] ?? shownByDefault(c))
   const cols = all.filter(isShown)
   const sorted = useMemo(() => sortRows(toRows(lists), sort), [lists, sort])
   const ids = sorted.map((r) => r.card.id)
-  const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id))
+  const chosen = useMemo(() => new Set(selected), [selected])
+  const allSelected = ids.length > 0 && ids.every((id) => chosen.has(id))
 
   const patch = (card: CardData, body: Record<string, unknown>) => run(() => api('PATCH', `${base}/cards/${card.id}`, body))
-  const move = (card: CardData, list: number) => run(() => api('POST', `${base}/cards/${card.id}/move`, { list_id: list, after: lastOf(list, card.id) }))
-  const lastOf = (list: number, except: number) => {
-    const target = board.lists.find((l) => l.id === list)
-    const others = (target?.cards ?? []).filter((c) => c.id !== except)
-    return others.length ? others[others.length - 1].id : null
-  }
+  const move = (card: CardData, list: number) => run(() => api('POST', `${base}/cards/${card.id}/move`, { list_id: list, after: appendAfter(board.lists, list, card.id) }))
   const setField = (card: CardData, f: FieldDef, value: FieldValue | null) => run(() => api('PUT', `${base}/cards/${card.id}/fields/${f.id}`, { value }))
+  const moveAll = async (cards: CardData[], list: number) => {
+    let after = appendAfter(board.lists, list, -1)
+    for (const c of cards) {
+      await api('POST', `${base}/cards/${c.id}/move`, { list_id: list, after })
+      after = c.id
+    }
+  }
+  const eachAtOnce = (cards: CardData[], call: (c: CardData) => Promise<unknown>) => Promise.all(cards.map(call))
   const toggle = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
 
-  const bulk = async (label: MessageKey, fn: (card: CardData) => Promise<unknown>) => {
-    const cards = sorted.filter((r) => selected.includes(r.card.id)).map((r) => r.card)
-    const ok = await run(async () => {
-      for (const c of cards) await fn(c)
-    })
+  const bulk = async (label: MessageKey, fn: (cards: CardData[]) => Promise<unknown>) => {
+    const cards = sorted.filter((r) => chosen.has(r.card.id)).map((r) => r.card)
+    const ok = await run(() => fn(cards))
     if (ok) {
       toast(t(label, { n: cards.length }))
       setSelected([])
@@ -110,15 +118,6 @@ export function TableView({
     )
   }
 
-  const add = () => {
-    const v = title.trim()
-    const list = addTo ?? board.lists[0]?.id
-    if (!v || !list) return
-    void run(() => api('POST', `${base}/cards`, { list_id: list, title: v })).then((ok) => {
-      if (ok) setTitle('')
-    })
-  }
-
   const header = (c: Column) => {
     const on = sort.key === c.key
     const onKey = (e: KeyboardEvent) => {
@@ -130,7 +129,7 @@ export function TableView({
     return (
       <th key={c.key} tabIndex={0} aria-sort={on ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'} onClick={() => setSort(nextSort(sort, c.key))} onKeyDown={onKey}>
         {c.key === 'title' ? (
-          <span className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
+          <span className="row">
             <input
               type="checkbox"
               aria-label={t('table.selectAll')}
@@ -154,8 +153,8 @@ export function TableView({
       case 'title':
         return (
           <td key="title" className="tt">
-            <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
-              <input type="checkbox" aria-label={t('table.select', { title: card.title })} checked={selected.includes(card.id)} onChange={() => toggle(card.id)} />
+            <div className="row">
+              <input type="checkbox" aria-label={t('table.select', { title: card.title })} checked={chosen.has(card.id)} onChange={() => toggle(card.id)} />
               <button type="button" className="chk" role="checkbox" aria-checked={Boolean(card.done)} aria-label={t('card.markComplete')} disabled={!edit} onClick={() => void patch(card, { done: !card.done })}>
                 {card.done && <Icon name="check" />}
               </button>
@@ -170,11 +169,7 @@ export function TableView({
           <td key="list">
             {edit ? (
               <select aria-label={t('table.listOf', { title: card.title })} value={r.list.id} onChange={(e) => void move(card, Number(e.target.value))}>
-                {board.lists.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.title}
-                  </option>
-                ))}
+                {listOptions}
               </select>
             ) : (
               r.list.title
@@ -233,11 +228,11 @@ export function TableView({
                 type="date"
                 aria-label={t(c.key === 'due' ? 'table.dueOf' : 'table.startOf', { title: card.title })}
                 className={st ? `d-${st}` : undefined}
-                value={dayValue(card[k])}
-                onChange={(e) => void patch(card, { [k]: fromDay(e.target.value, card[k]) })}
+                value={toDateInput(card[k])}
+                onChange={(e) => void patch(card, { [k]: fromInputs(e.target.value, toTimeInput(card[k])) })}
               />
             ) : (
-              dayValue(card[k])
+              toDateInput(card[k])
             )}
           </td>
         )
@@ -246,7 +241,7 @@ export function TableView({
         return (
           <td key="check">
             {card.items ? (
-              <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
+              <div className="row">
                 <div className="bar2" style={{ width: 64, flex: 'none' }}>
                   <i className={card.items_done === card.items ? 'ok' : undefined} style={{ width: `${Math.round(((card.items_done ?? 0) / card.items) * 100)}%` }} />
                 </div>
@@ -272,44 +267,22 @@ export function TableView({
           </td>
         )
       case 'last':
-        return <td key="last">{dayValue(card.updated_at)}</td>
+        return <td key="last">{toDateInput(card.updated_at)}</td>
       default: {
         const f = c.field
         if (!f) return <td key={c.key} />
         const v = card.fields?.[String(f.id)]
-        let control
-        if (!edit) control = v === undefined ? '' : String(v === true ? t('fields.yes') : v)
-        else if (f.type === 'select')
-          control = (
-            <select aria-label={`${f.name}: ${card.title}`} value={typeof v === 'string' ? v : ''} onChange={(e) => void setField(card, f, e.target.value || null)}>
-              <option value="">—</option>
-              {f.options.map((o) => (
-                <option key={o}>{o}</option>
-              ))}
-            </select>
-          )
-        else if (f.type === 'check')
-          control = <input type="checkbox" aria-label={`${f.name}: ${card.title}`} checked={v === true} onChange={(e) => void setField(card, f, e.target.checked)} />
-        else
-          control = (
-            <input
-              key={`${card.id}:${String(v ?? '')}`}
-              type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'}
-              aria-label={`${f.name}: ${card.title}`}
-              defaultValue={v === undefined ? '' : String(v)}
-              onBlur={(e) => {
-                const next = e.target.value.trim()
-                if (next !== String(v ?? '')) void setField(card, f, next === '' ? null : f.type === 'number' ? Number(next) : next)
-              }}
-            />
-          )
-        return <td key={c.key}>{control}</td>
+        return (
+          <td key={c.key}>
+            {edit ? <FieldControl def={f} value={v} edit label={`${f.name}: ${card.title}`} onSet={(value) => void setField(card, f, value)} /> : fieldText(f, v)}
+          </td>
+        )
       }
     }
   }
 
   const line = (r: Row) => (
-    <tr key={r.card.id} className={selected.includes(r.card.id) ? 'sel' : undefined}>
+    <tr key={r.card.id} className={chosen.has(r.card.id) ? 'sel' : undefined}>
       {cols.map((c) => cell(r, c))}
     </tr>
   )
@@ -322,7 +295,7 @@ export function TableView({
             <b>{t('table.selected', { n: selected.length })}</b>
             {edit && (
               <>
-                <select aria-label={t('table.moveSelected')} value="" onChange={(e) => e.target.value && void bulk('table.moved', (c) => move(c, Number(e.target.value)))}>
+                <select aria-label={t('table.moveSelected')} value="" onChange={(e) => e.target.value && void bulk('table.moved', (cards) => moveAll(cards, Number(e.target.value)))}>
                   <option value="">{t('table.moveTo')}</option>
                   {board.lists.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -330,10 +303,10 @@ export function TableView({
                     </option>
                   ))}
                 </select>
-                <button type="button" className="btn sm" onClick={() => void bulk('table.assigned', (c) => run(() => api('PUT', `${base}/cards/${c.id}/members/${me}`, { on: true })))}>
+                <button type="button" className="btn sm" onClick={() => void bulk('table.assigned', (cards) => eachAtOnce(cards, (c) => api('PUT', `${base}/cards/${c.id}/members/${me}`, { on: true })))}>
                   {t('table.assignMe')}
                 </button>
-                <button type="button" className="btn sm" onClick={() => void bulk('table.archived', (c) => run(() => api('POST', `${base}/cards/${c.id}/archive`)))}>
+                <button type="button" className="btn sm" onClick={() => void bulk('table.archived', (cards) => eachAtOnce(cards, (c) => api('POST', `${base}/cards/${c.id}/archive`)))}>
                   {t('card.archive')}
                 </button>
               </>
@@ -385,33 +358,7 @@ export function TableView({
                   ]
                 })
               : sorted.map(line)}
-            {edit && (
-              <tr className="addrow">
-                <td colSpan={cols.length}>
-                  <div className="row" style={{ flexWrap: 'nowrap', gap: 8 }}>
-                    <input
-                      type="text"
-                      placeholder={t('table.addPlaceholder')}
-                      aria-label={t('card.title')}
-                      style={{ maxWidth: 340 }}
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      onKeyDown={(e) => e.key === ENTER && add()}
-                    />
-                    <select aria-label={t('table.list')} value={addTo ?? board.lists[0]?.id ?? ''} onChange={(e) => setAddTo(Number(e.target.value))}>
-                      {board.lists.map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.title}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="button" className="btn sm primary" onClick={add}>
-                      {t('common.add')}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )}
+            {edit && <AddRow board={board} span={cols.length} base={base} run={run} />}
           </tbody>
         </table>
       </div>
@@ -456,5 +403,38 @@ export function TableView({
         </Popover>
       )}
     </div>
+  )
+}
+
+function AddRow({ board, span, base, run }: { board: BoardData; span: number; base: string; run: Run }) {
+  const [title, setTitle] = useState('')
+  const [addTo, setAddTo] = useState<number | null>(null)
+  const list = addTo ?? board.lists[0]?.id
+  const add = () => {
+    const v = title.trim()
+    if (!v || !list) return
+    void run(() => api('POST', `${base}/cards`, { list_id: list, title: v })).then((ok) => {
+      if (ok) setTitle('')
+    })
+  }
+
+  return (
+    <tr className="addrow">
+      <td colSpan={span}>
+        <div className="row">
+          <input type="text" placeholder={t('table.addPlaceholder')} aria-label={t('card.title')} style={{ maxWidth: 340 }} value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === ENTER && add()} />
+          <select aria-label={t('table.list')} value={list ?? ''} onChange={(e) => setAddTo(Number(e.target.value))}>
+            {board.lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.title}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn sm primary" onClick={add}>
+            {t('common.add')}
+          </button>
+        </div>
+      </td>
+    </tr>
   )
 }

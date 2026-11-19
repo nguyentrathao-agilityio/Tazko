@@ -209,22 +209,8 @@
     height: 24px;
   }
 
-  .bar2 {
-    flex: 1;
-    height: 7px;
-    border-radius: 99px;
-    background: var(--sunken);
-    overflow: hidden;
-  }
-
-  .bar2 i {
-    display: block;
-    height: 100%;
-    background: var(--accent);
-    border-radius: 99px;
-  }
-
-  .bar2 i.ok {
-    background: var(--ok);
+  .tb .row {
+    flex-wrap: nowrap;
+    gap: 8px;
   }
 }

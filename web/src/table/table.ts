@@ -3,13 +3,11 @@ import { fieldText, type FieldDef } from '@/card/fieldTypes'
 import { shortDate } from '@/card/look'
 import { displayName } from '@/ui/names'
 
-export type ColumnKey = string
-
-export type Column = { key: ColumnKey; name: string; field?: FieldDef }
+export type Column = { key: string; name: string; field?: FieldDef }
 
 export type Row = { card: CardData; list: ListData; listIndex: number }
 
-export type Sort = { key: ColumnKey | null; dir: 1 | -1 }
+export type Sort = { key: string | null; dir: 1 | -1 }
 
 export function columns(board: BoardData, names: Record<string, string>): Column[] {
   const base: Column[] = ['title', 'list', 'labels', 'members', 'start', 'due', 'check', 'att', 'cm', 'last'].map((key) => ({ key, name: names[key] ?? key }))
@@ -26,7 +24,7 @@ export function rows(lists: ListData[]): Row[] {
   return lists.flatMap((list, listIndex) => list.cards.map((card) => ({ card, list, listIndex })))
 }
 
-function key(r: Row, k: ColumnKey): string | number {
+function key(r: Row, k: string): string | number {
   const c = r.card
   if (k === 'title') return c.title.toLowerCase()
   if (k === 'list') return r.listIndex
@@ -57,13 +55,13 @@ export function sortRows(list: Row[], sort: Sort): Row[] {
   })
 }
 
-export function nextSort(sort: Sort, k: ColumnKey): Sort {
+export function nextSort(sort: Sort, k: string): Sort {
   if (sort.key !== k) return { key: k, dir: 1 }
   if (sort.dir === 1) return { key: k, dir: -1 }
   return { key: null, dir: 1 }
 }
 
-export function plain(r: Row, col: Column, board: BoardData): string {
+function plain(r: Row, col: Column, board: BoardData): string {
   const c = r.card
   switch (col.key) {
     case 'title':
@@ -95,21 +93,9 @@ export function plain(r: Row, col: Column, board: BoardData): string {
 }
 
 export function csv(list: Row[], cols: Column[], board: BoardData): string {
-  const q = (s: string) => `"${s.replace(/"/g, '""')}"`
+  const q = (raw: string) => {
+    const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+    return `"${s.replace(/"/g, '""')}"`
+  }
   return [cols.map((c) => q(c.name)).join(','), ...list.map((r) => cols.map((c) => q(plain(r, c, board))).join(','))].join('\n')
-}
-
-export function dayValue(unix: number | null | undefined): string {
-  if (!unix) return ''
-  const d = new Date(unix * 1000)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-export function fromDay(value: string, keep: number | null | undefined): number | null {
-  if (!value) return null
-  const [y, m, d] = value.split('-').map(Number)
-  const old = keep ? new Date(keep * 1000) : null
-  const at = new Date(y, m - 1, d, old ? old.getHours() : 12, old ? old.getMinutes() : 0)
-  return Math.floor(at.getTime() / 1000)
 }

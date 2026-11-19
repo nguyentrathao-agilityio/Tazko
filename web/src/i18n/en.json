@@ -722,7 +722,7 @@
   "table.list": "List",
   "table.files": "Files",
   "table.comments": "Comments",
-  "table.last": "Last activity",
+  "table.last": "Last updated",
   "table.selectAll": "Select all",
   "table.select": "Select {title}",
   "table.listOf": "List of {title}",
