@@ -1,7 +1,8 @@
+import { useMemo } from 'react'
 import type { BoardData, ListData } from '@/board/types'
 import { t } from '@/i18n'
 import { Avatar } from '@/ui/people'
-import { type Bar, boardStats, dueBuckets } from '@/dashboard/stats'
+import { type Bar, boardStats } from '@/dashboard/stats'
 
 function Bars({ rows }: { rows: Bar[] }) {
   const most = Math.max(1, ...rows.map((r) => r.value))
@@ -24,9 +25,7 @@ function Bars({ rows }: { rows: Bar[] }) {
 }
 
 export function Dashboard({ board, lists }: { board: BoardData; lists: ListData[] }) {
-  const s = boardStats(lists, board.people, board.labels)
-  const members = s.members.map((m) => (m.key === 'none' ? { ...m, name: t('dash.unassigned') } : m))
-  const due = dueBuckets.map((b) => ({ key: b.key, name: t(`dash.due.${b.key}`), value: s.due[b.key], color: b.color }))
+  const s = useMemo(() => boardStats(lists, board.people, board.labels, (b) => t(`dash.due.${b}`), t('dash.unassigned')), [lists, board.people, board.labels])
   const stat = (label: string, value: number, color?: string) => (
     <div className="dstat">
       <small>{label}</small>
@@ -49,7 +48,7 @@ export function Dashboard({ board, lists }: { board: BoardData; lists: ListData[
         </section>
         <section className="dcard" aria-label={t('dash.perMember')}>
           <h3>{t('dash.perMember')}</h3>
-          <Bars rows={members} />
+          <Bars rows={s.members} />
         </section>
         <section className="dcard" aria-label={t('dash.perLabel')}>
           <h3>{t('dash.perLabel')}</h3>
@@ -57,7 +56,7 @@ export function Dashboard({ board, lists }: { board: BoardData; lists: ListData[
         </section>
         <section className="dcard" aria-label={t('dash.dueDates')}>
           <h3>{t('dash.dueDates')}</h3>
-          <Bars rows={due} />
+          <Bars rows={s.due} />
         </section>
       </div>
     </div>

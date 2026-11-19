@@ -10,7 +10,7 @@ import { lastCompany, rememberCompany } from '@/company/lastCompany'
 import { ManageProjects } from '@/company/ManageProjects'
 import { MyCardsPage } from '@/mycards/MyCardsPage'
 import { ProjectPage } from '@/projects/ProjectPage'
-import { BoardPage } from '@/board/BoardPage'
+import { BoardPage, type BoardView } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
 import { SearchHost } from '@/search/Search'
 import { SettingsPage } from '@/settings/SettingsPage'
@@ -73,7 +73,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
   if (g.board)
     return (
       <MeContext.Provider value={me}>
-        <BoardPage key={`${company.slug}:b${g.board}`} company={company} id={Number(g.board)} cardId={g.card ? Number(g.card) : null} me={me.id} go={go} view={g.view === '/table' ? 'table' : g.view === '/dashboard' ? 'dashboard' : 'board'} />
+        <BoardPage key={`${company.slug}:b${g.board}`} company={company} id={Number(g.board)} cardId={g.card ? Number(g.card) : null} me={me.id} go={go} view={(g.view?.slice(1) as BoardView | undefined) ?? 'board'} />
         <SearchHost company={company} go={go} />
       </MeContext.Provider>
     )

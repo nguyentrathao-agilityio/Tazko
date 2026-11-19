@@ -84,7 +84,7 @@ describe('my cards groups', () => {
   it('orders groups by urgency and puts done cards last', () => {
     expect(groupCards([...here, there], NOW).map(([g, l]) => [g, l.map((c) => c.id)])).toEqual([
       ['overdue', [21]],
-      ['today', [22]],
+      ['day', [22]],
       ['week', [31]],
       ['none', [23]],
       ['done', [24]],

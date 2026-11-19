@@ -781,7 +781,7 @@
   "mycards.noneTitle": "Nothing here",
   "mycards.noneBody": "Cards assigned to you show up here, grouped by when they are due.",
   "mycards.group.overdue": "Overdue",
-  "mycards.group.today": "Today",
+  "mycards.group.day": "Today",
   "mycards.group.week": "This week",
   "mycards.group.later": "Later",
   "mycards.group.none": "No date",

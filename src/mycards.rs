@@ -6,6 +6,7 @@ use rusqlite::{Connection, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::boards::VISIBLE;
 use crate::db::valid_slug;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -23,25 +24,24 @@ struct Scope {
 }
 
 pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
-    let mut stmt = c.prepare(
+    let mut stmt = c.prepare(&format!(
         "SELECT k.id, k.title, k.done, k.due_at, l.title, b.id, b.name, p.id, p.name,
-                (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id),
-                (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id AND i.done = 1)
+                coalesce(n.total, 0), coalesce(n.done, 0)
          FROM card_members cm
          JOIN cards k ON k.id = cm.card_id
          JOIN lists l ON l.id = k.list_id
          JOIN boards b ON b.id = k.board_id
          JOIN projects p ON p.id = b.project_id
-         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?1
-         WHERE cm.user_id = ?1 AND k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
-           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL
-           AND (b.restricted = 0 OR EXISTS (SELECT 1 FROM board_access a WHERE a.board_id = b.id AND a.user_id = ?1))
-         ORDER BY k.due_at IS NULL, k.due_at, k.id LIMIT ?2",
-    )?;
-    let rows: Vec<(Value, i64, i64)> = stmt
-        .query_map(params![user, LIMIT], |r| {
+         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?2
+         LEFT JOIN (SELECT x.card_id, count(*) AS total, sum(i.done) AS done
+                    FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id GROUP BY x.card_id) n ON n.card_id = k.id
+         WHERE cm.user_id = ?2 AND k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
+           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL AND {VISIBLE}
+         ORDER BY k.due_at IS NULL, k.due_at, k.id LIMIT ?1"
+    ))?;
+    let rows: Vec<(Value, i64)> = stmt
+        .query_map(params![LIMIT, user], |r| {
             let card: i64 = r.get(0)?;
-            let board: i64 = r.get(5)?;
             Ok((
                 json!({
                     "id": card,
@@ -49,13 +49,12 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
                     "done": r.get::<_, bool>(2)?,
                     "due_at": r.get::<_, Option<i64>>(3)?,
                     "list": r.get::<_, String>(4)?,
-                    "board": { "id": board, "name": r.get::<_, String>(6)? },
+                    "board": { "id": r.get::<_, i64>(5)?, "name": r.get::<_, String>(6)? },
                     "project": { "id": r.get::<_, i64>(7)?, "name": r.get::<_, String>(8)? },
                     "items": r.get::<_, i64>(9)?,
                     "items_done": r.get::<_, i64>(10)?,
                 }),
                 card,
-                board,
             ))
         })?
         .collect::<Result<_, _>>()?;
@@ -64,7 +63,7 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
          WHERE cl.card_id = ?1 ORDER BY lb.position, lb.id LIMIT 2",
     )?;
     let mut out = Vec::with_capacity(rows.len());
-    for (mut v, card, _) in rows {
+    for (mut v, card) in rows {
         let ls: Vec<Value> = labels
             .query_map([card], |r| {
                 Ok(json!({ "name": r.get::<_, String>(0)?, "color": r.get::<_, i64>(1)? }))
@@ -113,8 +112,9 @@ async fn mine(
             continue;
         };
         let found = db.read(move |c| Ok(assigned(c, id)?)).await?;
+        let company = json!({ "slug": slug, "name": name });
         for mut v in found {
-            v["company"] = json!({ "slug": slug, "name": name });
+            v["company"] = company.clone();
             cards.push(v);
         }
     }

@@ -1,10 +1,10 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
 import { dueState, labelStyle, shortDate } from '@/card/look'
 import { ENTER } from '@/keys/keyNames'
-import { boardApiOf, ME_API } from '@/paths'
+import { boardApiOf, cardRoute, ME_API } from '@/paths'
 import { useRun } from '@/projects/useRun'
 import { EmptyState } from '@/ui/EmptyState'
 import { ErrorNote } from '@/ui/ErrorNote'
@@ -70,7 +70,10 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
   const { data, error: loadError, reload } = useLoad(() => api<{ cards: MyCard[] }>('GET', url), url)
   const { error, run } = useRun(reload)
   const cards = data?.cards ?? []
-  const projects = [...new Map(cards.map((c) => [projectKey(c), all ? `${c.project.name} · ${c.company.name}` : c.project.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  const projects = useMemo(
+    () => [...new Map(cards.map((c) => [projectKey(c), all ? `${c.project.name} · ${c.company.name}` : c.project.name])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
+    [cards, all],
+  )
   const needle = q.trim().toLowerCase()
   const shown = cards.filter((c) => (!project || projectKey(c) === project) && (!hide || !c.done) && (!needle || c.title.toLowerCase().includes(needle)))
 
@@ -130,7 +133,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
                 key={`${c.company.slug}:${c.id}`}
                 card={c}
                 all={all}
-                onOpen={() => go(`/c/${c.company.slug}/b/${c.board.id}/c/${c.id}`)}
+                onOpen={() => go(cardRoute(c.company.slug, c.board.id, c.id))}
                 onDone={() => void run(() => api('PATCH', `${boardApiOf(c.company.slug, c.board.id)}/cards/${c.id}`, { done: !c.done }))}
               />
             ))}

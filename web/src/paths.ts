@@ -8,3 +8,4 @@ export const projectApi = (slug: string, project: number): string => `${companyA
 export const boardApiOf = (slug: string, board: number): string => `${companyApi(slug)}/boards/${board}`
 
 export const companyRoute = (slug: string): string => `/c/${slug}`
+export const cardRoute = (slug: string, board: number, card: number): string => `${companyRoute(slug)}/b/${board}/c/${card}`

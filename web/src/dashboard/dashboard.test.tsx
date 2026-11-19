@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
 import { Toaster } from '@/ui/Toaster'
 import type { BoardPerson, Label, ListData } from '@/board/types'
-import { boardStats, dueBucket } from '@/dashboard/stats'
+import { boardStats } from '@/dashboard/stats'
+import { dueBucket } from '@/card/look'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 const NOW = 1_800_000_000
@@ -28,20 +29,20 @@ const board = () => ({ id: 7, name: 'Sprint 15', description: '', background: 's
 describe('dashboard numbers', () => {
   it('adds up to the board in every chart', () => {
     const ls = lists() as unknown as ListData[]
-    const s = boardStats(ls, people as BoardPerson[], labels as Label[], NOW)
+    const s = boardStats(ls, people as BoardPerson[], labels as Label[], (b) => b, 'Unassigned', NOW)
     const total = ls.reduce((n, l) => n + l.cards.length, 0)
     expect(s.cards).toBe(total)
     expect(s.lists.map((b) => b.value)).toEqual([3, 1, 2])
     expect(s.lists.reduce((n, b) => n + b.value, 0)).toBe(total)
-    expect(Object.values(s.due).reduce((n, v) => n + v, 0)).toBe(total)
-    expect(s.due).toEqual({ overdue: 1, day: 1, week: 1, later: 1, none: 0, done: 2 })
+    expect(s.due.reduce((n, b) => n + b.value, 0)).toBe(total)
+    expect(Object.fromEntries(s.due.map((b) => [b.key, b.value]))).toEqual({ overdue: 1, day: 1, week: 1, later: 1, none: 0, done: 2 })
     expect(s.done).toBe(2)
     expect(s.overdue).toBe(1)
     expect(s.soon).toBe(1)
     expect(s.members.map((b) => [b.name, b.value])).toEqual([
       ['Mai Tran', 2],
       ['Jo Lee', 2],
-      ['', 3],
+      ['Unassigned', 3],
     ])
     expect(s.labels.map((b) => [b.name, b.value])).toEqual([
       ['Bug', 2],
@@ -50,8 +51,8 @@ describe('dashboard numbers', () => {
   })
 
   it('puts a done card under complete even when it is late', () => {
-    expect(dueBucket(card(1, 'x', { done: true, due_at: NOW - DAY }), NOW)).toBe('done')
-    expect(dueBucket(card(1, 'x'), NOW)).toBe('none')
+    expect(dueBucket(NOW - DAY, true, NOW)).toBe('done')
+    expect(dueBucket(null, false, NOW)).toBe('none')
   })
 })
 

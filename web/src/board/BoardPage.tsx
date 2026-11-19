@@ -82,6 +82,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   const settings = useSettings()
   const [tick, setTick] = useState(0)
   const pending = useRef<number | undefined>(undefined)
+  const shownCount = shownLists.reduce((n, l) => n + l.cards.length, 0)
   const live = useLive(company.slug, id, board ? (board.last_event ?? 0) : null, () => {
     window.clearTimeout(pending.current)
     pending.current = window.setTimeout(() => {
@@ -334,10 +335,10 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         <div className="fbar" role="status">
           <Icon name="filter" />
           {view === 'dashboard' ? (
-            t('dash.filtered', { n: shownLists.reduce((n, l) => n + l.cards.length, 0) })
+            t('dash.filtered', { n: shownCount })
           ) : (
             <>
-              <b>{shownLists.reduce((n, l) => n + l.cards.length, 0)}</b> {t('filter.matching')}
+              <b>{shownCount}</b> {t('filter.matching')}
             </>
           )}
           <button type="button" onClick={() => setFilter(emptyFilter)}>
