@@ -82,6 +82,17 @@ pub struct Project {
 
 impl Project {
     pub fn can(&self, act: Act) -> bool {
+        if self
+            .company
+            .user
+            .0
+            .token
+            .as_ref()
+            .is_some_and(|t| !t.allows(act))
+        {
+            return false;
+        }
+
         match (self.role, act) {
             (_, Act::Read) => true,
             (ProjectRole::Owner, _) => true,
@@ -148,6 +159,16 @@ pub fn project_info(c: &Connection, id: i64) -> rusqlite::Result<Option<ProjectI
 
 impl Project {
     pub async fn load(company: Company, id: i64) -> Result<Project, ApiError> {
+        if company
+            .user
+            .0
+            .token
+            .as_ref()
+            .is_some_and(|t| !t.allows_project(&company.slug, id))
+        {
+            return Err(ApiError::NotFound);
+        }
+
         let user_id = company.user.0.user_id;
         let found = company
             .db
@@ -372,6 +393,8 @@ pub fn board_count(c: &Connection, project_id: i64) -> rusqlite::Result<i64> {
 async fn mine(State(state): State<AppState>, company: Company) -> Result<Json<Value>, ApiError> {
     sync_person(&state, &company).await?;
     let user_id = company.user.0.user_id;
+    let limits = company.user.0.token.clone();
+    let slug = company.slug.clone();
     let projects = company
         .db
         .read(move |c| {
@@ -394,6 +417,13 @@ async fn mine(State(state): State<AppState>, company: Company) -> Result<Json<Va
                 .collect::<Result<Vec<_>, _>>()?;
             let mut out = Vec::new();
             for (id, name, description, color, role) in rows {
+                if limits
+                    .as_ref()
+                    .is_some_and(|t| !t.allows_project(&slug, id))
+                {
+                    continue;
+                }
+
                 out.push(json!({
                     "id": id,
                     "name": name,

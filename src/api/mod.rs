@@ -1,3 +1,6 @@
+pub mod docs;
+pub mod tokens;
+
 use axum::Router;
 use axum::extract::State;
 use axum::response::Json;
@@ -18,6 +21,8 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/me", get(me))
         .route(COMPANY_PREFIX, get(company_home))
+        .merge(tokens::routes())
+        .merge(docs::routes())
 }
 
 async fn me(
@@ -41,7 +46,7 @@ async fn me(
             }
         })
         .await?;
-    if pending {
+    if pending && user.token.is_none() {
         state
             .dbs
             .control()
@@ -54,6 +59,7 @@ async fn me(
             .await?;
     }
 
+    let limits = user.token.clone();
     let companies = state
         .dbs
         .control()
@@ -67,7 +73,10 @@ async fn me(
                     Ok(json!({ "slug": r.get::<_, String>(0)?, "name": r.get::<_, String>(1)?, "role": r.get::<_, String>(2)? }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
+            Ok(rows
+                .into_iter()
+                .filter(|c| limits.as_ref().is_none_or(|t| t.allows_company(c["slug"].as_str().unwrap_or(""))))
+                .collect::<Vec<_>>())
         })
         .await?;
 

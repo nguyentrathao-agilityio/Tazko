@@ -1,0 +1,1219 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Tazko API",
+  "version": "1",
+  "description": "Send a token as Authorization: Bearer <token>. Personal tokens act as you and never go beyond your access; company tokens act as the owner who made them, only on the chosen projects. Scopes: read (GET only), write (cards, lists, comments, attachments), manage (also boards and project settings). Each token may make 120 requests a minute; over that the API answers 429 with Retry-After. Requests with a token need no CSRF header."
+ },
+ "servers": [
+  {
+   "url": "/"
+  }
+ ],
+ "components": {
+  "securitySchemes": {
+   "token": {
+    "type": "http",
+    "scheme": "bearer"
+   }
+  },
+  "schemas": {
+   "NewBoard": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "background": {
+      "type": "string"
+     },
+     "restricted": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   },
+   "BoardChange": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "background": {
+      "type": "string"
+     }
+    }
+   },
+   "NewList": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "title"
+    ]
+   },
+   "ListChange": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     }
+    }
+   },
+   "Move": {
+    "type": "object",
+    "properties": {
+     "list_id": {
+      "type": "integer"
+     },
+     "after": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     }
+    }
+   },
+   "NewCards": {
+    "type": "object",
+    "properties": {
+     "list_id": {
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     },
+     "titles": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "top": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "list_id"
+    ]
+   },
+   "CardChange": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "markdown": {
+      "type": "string"
+     },
+     "start_at": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "due_at": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "done": {
+      "type": "boolean"
+     },
+     "cover": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "On": {
+    "type": "object",
+    "properties": {
+     "on": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "on"
+    ]
+   },
+   "Comment": {
+    "type": "object",
+    "properties": {
+     "body": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "body"
+    ]
+   },
+   "FieldValue": {
+    "type": "object",
+    "properties": {
+     "value": {}
+    }
+   },
+   "Reaction": {
+    "type": "object",
+    "properties": {
+     "emoji": {
+      "enum": [
+       "👍",
+       "❤️",
+       "🎉",
+       "👀",
+       "🚀",
+       "✅"
+      ]
+     },
+     "on": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "emoji",
+     "on"
+    ]
+   },
+   "NewPersonalToken": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "scope": {
+      "enum": [
+       "read",
+       "write",
+       "manage"
+      ]
+     },
+     "projects": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "company": {
+         "type": "string"
+        },
+        "project": {
+         "type": "integer"
+        }
+       }
+      }
+     },
+     "expires_in_days": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name",
+     "scope"
+    ]
+   },
+   "NewCompanyToken": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "scope": {
+      "enum": [
+       "read",
+       "write",
+       "manage"
+      ]
+     },
+     "projects": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "expires_in_days": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name",
+     "scope",
+     "projects"
+    ]
+   }
+  }
+ },
+ "security": [
+  {
+   "token": []
+  }
+ ],
+ "paths": {
+  "/api/v1/me": {
+   "get": {
+    "summary": "Who you are and your companies",
+    "tags": [
+     "Account"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/my-projects": {
+   "get": {
+    "summary": "Projects you belong to",
+    "tags": [
+     "Projects"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/projects/{project}": {
+   "get": {
+    "summary": "A project",
+    "tags": [
+     "Projects"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/projects/{project}/boards": {
+   "get": {
+    "summary": "Boards of a project",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "post": {
+    "summary": "Create a board",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewBoard"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}": {
+   "get": {
+    "summary": "A board with its lists, cards, labels, custom fields and people",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "patch": {
+    "summary": "Rename or describe a board, change its background",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BoardChange"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/lists": {
+   "post": {
+    "summary": "Add a list",
+    "tags": [
+     "Lists"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewList"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/lists/{list}": {
+   "patch": {
+    "summary": "Rename a list",
+    "tags": [
+     "Lists"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ListChange"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/lists/{list}/move": {
+   "post": {
+    "summary": "Move a list",
+    "tags": [
+     "Lists"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Move"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/lists/{list}/archive": {
+   "post": {
+    "summary": "Archive a list",
+    "tags": [
+     "Lists"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards": {
+   "post": {
+    "summary": "Add one or more cards to a list",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewCards"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}": {
+   "get": {
+    "summary": "A card with checklists, comments, attachments, custom fields and activity",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "patch": {
+    "summary": "Change title, description, dates, done or cover",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CardChange"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/move": {
+   "post": {
+    "summary": "Move a card",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Move"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/archive": {
+   "post": {
+    "summary": "Archive a card",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/restore": {
+   "post": {
+    "summary": "Restore a card",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/members/{user}": {
+   "put": {
+    "summary": "Add or remove a card member",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/On"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/labels/{label}": {
+   "put": {
+    "summary": "Add or remove a label",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/On"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/fields/{field}": {
+   "put": {
+    "summary": "Set a custom field value",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/FieldValue"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/comments": {
+   "post": {
+    "summary": "Add a comment",
+    "tags": [
+     "Comments"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Comment"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/comments/{comment}": {
+   "patch": {
+    "summary": "Edit your comment",
+    "tags": [
+     "Comments"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Comment"
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "summary": "Delete your comment",
+    "tags": [
+     "Comments"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/comments/{comment}/reactions": {
+   "put": {
+    "summary": "Add or remove a reaction",
+    "tags": [
+     "Comments"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Reaction"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/attachments": {
+   "post": {
+    "summary": "Upload a file (raw body, ?name=)",
+    "tags": [
+     "Attachments"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/attachments/{attachment}": {
+   "get": {
+    "summary": "Download a file",
+    "tags": [
+     "Attachments"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "delete": {
+    "summary": "Remove an attachment",
+    "tags": [
+     "Attachments"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/tokens": {
+   "get": {
+    "summary": "Company API tokens (company owners, signed in)",
+    "tags": [
+     "Tokens"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "post": {
+    "summary": "Create a company API token; the secret is shown once",
+    "tags": [
+     "Tokens"
+    ],
+    "x-scope": "session",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewCompanyToken"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/me/tokens": {
+   "get": {
+    "summary": "Your personal tokens (signed in)",
+    "tags": [
+     "Tokens"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "post": {
+    "summary": "Create a personal token; the secret is shown once",
+    "tags": [
+     "Tokens"
+    ],
+    "x-scope": "session",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewPersonalToken"
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
