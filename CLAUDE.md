@@ -9,6 +9,8 @@ Tazko is a self-hosted kanban work tracker for several companies: one Rust binar
 - `design/` is read-only. Ask the owner to change it. `design/CHANGELOG.md` lists what changed per prototype version (D2 is v2).
 - Write a test for every "Done when" check and for every permission rule.
 - Small commits. Run `scripts/ci.sh` before every commit; do not commit while it fails.
+- No comments in `src/`, `web/src/` or `migrations/`: name things so the code reads on its own, and put reasons in the commit message or `docs/`.
+- When the owner corrects the same mistake twice, turn it into a check in `scripts/checks.py` with a test, not into another line here.
 - When something is ambiguous, ask the owner; record unanswered questions in `docs/open-questions.md` and progress in `docs/progress.md`.
 
 ## Data layout
@@ -49,4 +51,4 @@ Tazko is a self-hosted kanban work tracker for several companies: one Rust binar
 
 ## Checks
 
-`scripts/ci.sh` runs the repository checks (required files, clean-room names, secrets, commit authorship and messages, JavaScript budget) and their tests, then the Rust and web checks once those projects exist. To check messages as you commit, run `git config core.hooksPath scripts/hooks` once.
+`scripts/ci.sh` runs the repository checks and their tests, then the Rust and web checks. The repository checks are: required files, clean-room names, secrets, commit authorship and messages, no comments in source, no prototype-only controls in the web app, `design/` unchanged against `scripts/design.sha256`, `.claude/settings.json` keeping attribution off and machine commands on ask, and the JavaScript budget. `tests/tenant_schema.rs` migrates a fresh company file and fails if any column names a company. Without `TAZKO_OWNER_EMAIL` set, the commits check accepts only the owner's email as stored by hash in `scripts/checks.py`, not the local git identity. After an approved design change the owner runs `scripts/checks.py design --update`. To check messages as you commit, run `git config core.hooksPath scripts/hooks` once.

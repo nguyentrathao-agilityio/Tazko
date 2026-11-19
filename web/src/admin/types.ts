@@ -1,3 +1,5 @@
+import type { CompanyRole } from '@/roles'
+
 export type CompanyRow = {
   slug: string
   name: string
@@ -13,7 +15,7 @@ export type Member = {
   id: number
   name: string
   email: string
-  role: 'owner' | 'member'
+  role: CompanyRole
   last_seen: number | null
   disabled: boolean
 }
@@ -21,7 +23,7 @@ export type Member = {
 export type Invite = {
   id: number
   email: string
-  role: 'owner' | 'member'
+  role: CompanyRole
   invited_by: string | null
   created_at: number
   company_slug: string

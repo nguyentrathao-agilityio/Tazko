@@ -6,6 +6,7 @@ import { useToast } from '@/ui/toast'
 import { backgroundNames, background, colors } from '@/projects/look'
 import type { ProjectView } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
+import { isOwner } from '@/roles'
 
 function Switch({ label, hint, on, onChange }: { label: string; hint: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -96,7 +97,7 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
       <section className="box danger-zone">
         <h2>{t('project.archiveOrDelete')}</h2>
         <p className="muted">
-          {company.role === 'owner' ? t('project.archiveOwner') : t('project.archiveAsk', { company: company.name })}
+          {isOwner(company.role) ? t('project.archiveOwner') : t('project.archiveAsk', { company: company.name })}
         </p>
       </section>
     </>

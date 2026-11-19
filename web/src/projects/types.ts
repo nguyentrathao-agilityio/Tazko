@@ -1,4 +1,5 @@
-export type ProjectRole = 'owner' | 'member' | 'observer'
+import type { ProjectRole } from '@/roles'
+export type { ProjectRole }
 
 export type Person = { id: number; name: string; email: string; role: string }
 

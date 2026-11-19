@@ -10,11 +10,12 @@ import { useLoad } from '@/ui/useLoad'
 import { NoAccess } from '@/company/CompanyHome'
 import type { ManagedProject, Person } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
+import { companyRoleLabel, isOwner } from '@/roles'
 
 type Dialog = { kind: 'new' } | { kind: 'owner'; project: ManagedProject } | { kind: 'delete'; project: ManagedProject } | null
 
 export function ManageProjects({ company }: { company: Company }) {
-  if (company.role !== 'owner') return <NoAccess company={company} />
+  if (!isOwner(company.role)) return <NoAccess company={company} />
   return <ProjectList company={company} />
 }
 
@@ -162,7 +163,7 @@ function PersonOptions({ people }: { people: Person[] }) {
     <>
       {people.map((m) => (
         <option key={m.id} value={m.id}>
-          {displayName(m.name, m.email)} ({m.name ? m.email : t(m.role === 'owner' ? 'role.owner' : 'role.member')})
+          {displayName(m.name, m.email)} ({m.name ? m.email : t(companyRoleLabel(m.role))})
         </option>
       ))}
     </>

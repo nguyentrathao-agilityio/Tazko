@@ -5,6 +5,7 @@ import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import type { BoardPerson, Label, ListData } from '@/board/types'
 import { labelColors, labelStyle } from '@/card/look'
+import { isObserver } from '@/roles'
 
 function search(q: string, text: string) {
   return !q || text.toLowerCase().includes(q.toLowerCase())
@@ -21,7 +22,7 @@ export function MembersPop({ people, chosen, onToggle }: { people: BoardPerson[]
           .map((p) => {
             const name = displayName(p.name, p.email)
             const on = chosen.includes(p.id)
-            const observer = p.role === 'observer'
+            const observer = isObserver(p.role)
             return (
               <button
                 key={p.id}

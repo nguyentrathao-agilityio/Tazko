@@ -10,11 +10,12 @@ import { ProjectBoards } from '@/projects/ProjectBoards'
 import { ProjectMembers } from '@/projects/ProjectMembers'
 import { ProjectSettings } from '@/projects/ProjectSettings'
 import type { ProjectView } from '@/projects/types'
+import { isOwner } from '@/roles'
 
 export type ProjectTab = 'boards' | 'members' | 'settings'
 
 export function RoleChip({ role }: { role: ProjectView['role'] }) {
-  return <span className={`pill${role === 'owner' ? ' accent' : ''}`}>{t(`projectRole.chip.${role}`)}</span>
+  return <span className={`pill${isOwner(role) ? ' accent' : ''}`}>{t(`projectRole.chip.${role}`)}</span>
 }
 
 export function ProjectPage({ company, id, tab, go }: { company: Company; id: number; tab: ProjectTab; go: Go }) {
