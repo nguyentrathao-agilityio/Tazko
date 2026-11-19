@@ -6,6 +6,7 @@ import { Icon } from '@/ui/Icon'
 import { Avatar } from '@/ui/people'
 import { Popover } from '@/ui/Popover'
 import { ago } from '@/card/look'
+import { keepAlive, socketUrl } from '@/live/useLive'
 import { noteText, type Note } from '@/notify/notes'
 
 const delays = [1000, 2000, 5000, 10000]
@@ -20,11 +21,10 @@ function useUnread(slug: string): number {
     let ping: number | undefined
     let attempt = 0
     let stopped = false
-    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
 
     const connect = () => {
       if (stopped) return
-      const ws = new WebSocket(`${scheme}://${window.location.host}/api/v1/c/${slug}/notifications/live`)
+      const ws = new WebSocket(socketUrl(`/api/v1/c/${slug}/notifications/live`))
       socket = ws
       ws.onmessage = (e) => {
         try {
@@ -38,7 +38,7 @@ function useUnread(slug: string): number {
         }
       }
       ws.onopen = () => {
-        ping = window.setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('ping'), 30_000)
+        ping = keepAlive(ws)
       }
       ws.onclose = () => {
         if (socket !== ws) return
@@ -67,7 +67,7 @@ function kindLabel(kind: Note['kind']): string {
 }
 
 export function Bell({ slug }: { slug: string }) {
-  const live = useUnread(slug)
+  const unread = useUnread(slug)
   const [pop, setPop] = useState<Anchor | null>(null)
   const [tab, setTab] = useState<'all' | 'unread'>('all')
   const [notes, setNotes] = useState<Note[] | null>(null)
@@ -82,7 +82,7 @@ export function Bell({ slug }: { slug: string }) {
 
   useEffect(() => {
     if (pop) load()
-  }, [pop, live, load])
+  }, [pop, unread, load])
 
   const close = useCallback(() => setPop(null), [])
 
@@ -98,7 +98,6 @@ export function Bell({ slug }: { slug: string }) {
   }
 
   const shown = (notes ?? []).filter((n) => tab === 'all' || !n.read)
-  const unread = live
   const label = unread ? t('notify.bellUnread', { n: unread }) : t('notify.bell')
   return (
     <>

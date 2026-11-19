@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::http::{HeaderMap, header};
+use axum::http::HeaderMap;
 use rusqlite::{OptionalExtension, params};
 use sha2::{Digest, Sha256};
 
@@ -26,28 +26,22 @@ pub fn now() -> i64 {
         .map_or(0, |d| d.as_secs() as i64)
 }
 
-pub fn random_token() -> String {
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).expect("system random source");
+pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+pub fn random_token() -> String {
+    let mut bytes = [0u8; 32];
+    getrandom::fill(&mut bytes).expect("system random source");
+    hex(&bytes)
+}
+
 pub fn hash_token(token: &str) -> String {
-    Sha256::digest(token.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    hex(&Sha256::digest(token.as_bytes()))
 }
 
 pub fn cookie_token(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get_all(header::COOKIE)
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(';'))
-        .filter_map(|pair| pair.trim().split_once('='))
-        .find(|(name, _)| *name == COOKIE)
-        .map(|(_, value)| value.trim().to_string())
+    crate::auth::cookies::read(headers, COOKIE)
         .filter(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 

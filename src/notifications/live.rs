@@ -1,17 +1,13 @@
-use std::time::Duration;
-
 use axum::extract::State;
-use axum::extract::ws::{Message, Utf8Bytes, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::HeaderMap;
 use axum::response::Response;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::error::ApiError;
-use crate::realtime::{origin_allowed, signed_in};
+use crate::realtime::{PING_EVERY, say_signed_out, send, still_signed_in, upgrade_session};
 use crate::state::AppState;
 use crate::tenant::Company;
-
-const PING_EVERY: Duration = Duration::from_secs(25);
 
 pub async fn live(
     State(state): State<AppState>,
@@ -19,21 +15,8 @@ pub async fn live(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    if !origin_allowed(&headers, &state.settings.public_url) {
-        return Err(ApiError::Forbidden);
-    }
-
-    let session = crate::session::cookie_token(&headers)
-        .map(|t| crate::session::hash_token(&t))
-        .ok_or(ApiError::SignIn)?;
+    let session = upgrade_session(&headers, &state.settings.public_url)?;
     Ok(ws.on_upgrade(move |socket| run(state, co, session, socket)))
-}
-
-async fn send(socket: &mut WebSocket, v: Value) -> bool {
-    socket
-        .send(Message::Text(Utf8Bytes::from(v.to_string())))
-        .await
-        .is_ok()
 }
 
 async fn run(state: AppState, co: Company, session: String, mut socket: WebSocket) {
@@ -41,15 +24,7 @@ async fn run(state: AppState, co: Company, session: String, mut socket: WebSocke
     let org = co.org_id;
     let db = co.db.clone();
     let control = state.dbs.control().clone();
-    let still_in = || {
-        let (control, session) = (control.clone(), session.clone());
-        async move {
-            control
-                .read(move |c| Ok(signed_in(c, &session, org, user)?))
-                .await
-                .unwrap_or(false)
-        }
-    };
+    let still_in = || still_signed_in(&control, &session, org, user);
     let count = || {
         let db = db.clone();
         async move { db.read(move |c| Ok(super::unread(c, user)?)).await.ok() }
@@ -63,7 +38,7 @@ async fn run(state: AppState, co: Company, session: String, mut socket: WebSocke
         tokio::select! {
             changed = changes.changed() => {
                 if changed.is_err() || !still_in().await {
-                    let _ = send(&mut socket, json!({ "type": "closed", "reason": "signed out" })).await;
+                    say_signed_out(&mut socket).await;
                     break;
                 }
                 if let Some(n) = count().await
@@ -84,7 +59,7 @@ async fn run(state: AppState, co: Company, session: String, mut socket: WebSocke
             }
             _ = ping.tick() => {
                 if !still_in().await {
-                    let _ = send(&mut socket, json!({ "type": "closed", "reason": "signed out" })).await;
+                    say_signed_out(&mut socket).await;
                     break;
                 }
                 open = socket.send(Message::Ping(Default::default())).await.is_ok();

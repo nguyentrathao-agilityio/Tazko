@@ -10,16 +10,18 @@ import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { Can, ProjectInvite, ProjectMember, ProjectRole, ProjectView } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
-import { PROJECT_ROLES } from '@/roles'
+import { MEMBER, OBSERVER, OWNER, PROJECT_ROLES } from '@/roles'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { projectApi } from '@/paths'
 
 export function ProjectMembers({ company, project, onChange }: { company: Company; project: ProjectView; onChange: () => void }) {
-  const base = `/api/v1/c/${company.slug}/projects/${project.id}`
+  const base = projectApi(company.slug, project.id)
   const { data, reload } = useLoad(
     () => api<{ members: ProjectMember[]; invites: ProjectInvite[]; can: Can }>('GET', `${base}/members`),
     `${base}/members`,
   )
   const toast = useToast()
-  const { error, run } = useRun(() => {
+  const { error, run, runAndToast } = useRun(() => {
     reload()
     onChange()
   })
@@ -31,34 +33,26 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
     const f = new FormData(form)
     const email = String(f.get('email') ?? '').trim()
     void run(async () => {
-      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? 'member') })
+      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? MEMBER) })
       form.reset()
       toast(t(res?.result === 'added' ? 'project.toastAdded' : 'toast.invited', { email: email.toLowerCase() }))
     })
   }
 
   const setRole = (m: ProjectMember, role: string) =>
-    void run(() => api('PATCH', `${base}/members/${m.id}`, { role })).then((ok) => {
-      if (ok) toast(t('toast.roleChanged', { name: displayName(m.name, m.email), role: t(`projectRole.${role as ProjectRole}`).toLowerCase() }))
-    })
+    void runAndToast(
+      () => api('PATCH', `${base}/members/${m.id}`, { role }),
+      t('toast.roleChanged', { name: displayName(m.name, m.email), role: t(`projectRole.${role as ProjectRole}`).toLowerCase() }),
+    )
 
   const remove = (m: ProjectMember) =>
-    void run(() => api('DELETE', `${base}/members/${m.id}`)).then((ok) => {
-      if (ok) toast(t('toast.removed', { name: displayName(m.name, m.email) }))
-    })
+    void runAndToast(() => api('DELETE', `${base}/members/${m.id}`), t('toast.removed', { name: displayName(m.name, m.email) }))
 
-  const revoke = (v: ProjectInvite) =>
-    void run(() => api('DELETE', `${base}/invites/${v.id}`)).then((ok) => {
-      if (ok) toast(t('toast.revoked', { email: v.email }))
-    })
+  const revoke = (v: ProjectInvite) => void runAndToast(() => api('DELETE', `${base}/invites/${v.id}`), t('toast.revoked', { email: v.email }))
 
   return (
     <>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       {can.invite ? (
         <section className="box">
           <h2>{t('project.invite')}</h2>
@@ -66,10 +60,10 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
             <div className="grow">
               <input type="email" name="email" placeholder="name@example.com" aria-label={t('members.email')} />
             </div>
-            <select name="role" aria-label={t('members.role')} defaultValue="member">
-              <option value="member">{t('projectRole.member')}</option>
-              <option value="observer">{t('projectRole.observer')}</option>
-              {can.manage && <option value="owner">{t('projectRole.owner')}</option>}
+            <select name="role" aria-label={t('members.role')} defaultValue={MEMBER}>
+              <option value={MEMBER}>{t('projectRole.member')}</option>
+              <option value={OBSERVER}>{t('projectRole.observer')}</option>
+              {can.manage && <option value={OWNER}>{t('projectRole.owner')}</option>}
             </select>
             <button className="btn primary" type="submit">
               <Icon name="plus" />

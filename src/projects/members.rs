@@ -7,12 +7,14 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{Act, Project, ProjectRole, path_id, upsert_person};
+use super::{Act, Project, ProjectRole, drop_member, path_id, role_of, upsert_person};
 use crate::admin::{audit, validate};
 use crate::error::{ApiError, bad, conflict};
 use crate::events::{self, At};
 use crate::session::now;
 use crate::state::AppState;
+
+const LAST_OWNER: &str = "a project needs at least one owner";
 
 pub async fn list(
     State(state): State<AppState>,
@@ -256,15 +258,6 @@ fn owners(c: &Connection, project: i64) -> rusqlite::Result<i64> {
     )
 }
 
-fn role_of(c: &Connection, project: i64, user: i64) -> rusqlite::Result<Option<String>> {
-    c.query_row(
-        "SELECT role FROM project_members WHERE project_id = ?1 AND user_id = ?2",
-        params![project, user],
-        |r| r.get(0),
-    )
-    .optional()
-}
-
 #[derive(Deserialize)]
 pub struct RoleChange {
     role: String,
@@ -292,7 +285,7 @@ pub async fn change(
             }
 
             if old == "owner" && owners(&tx, id)? <= 1 {
-                return Ok(Err(bad("a project needs at least one owner")));
+                return Ok(Err(bad(LAST_OWNER)));
             }
 
             tx.execute(
@@ -329,17 +322,10 @@ pub async fn remove(
                 return Ok(Err(ApiError::NotFound));
             };
             if old == "owner" && owners(&tx, id)? <= 1 {
-                return Ok(Err(bad("a project needs at least one owner")));
+                return Ok(Err(bad(LAST_OWNER)));
             }
 
-            tx.execute(
-                "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2",
-                params![id, user],
-            )?;
-            tx.execute(
-                "DELETE FROM board_access WHERE user_id = ?1 AND board_id IN (SELECT id FROM boards WHERE project_id = ?2)",
-                params![user, id],
-            )?;
+            drop_member(&tx, id, user)?;
             events::record(
                 &tx,
                 by,

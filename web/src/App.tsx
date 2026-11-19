@@ -7,6 +7,9 @@ import { CompanyRoutes } from '@/company/CompanyRoutes'
 import { t } from '@/i18n'
 import { useApplySettings } from '@/settings/apply'
 
+const SIGN_IN = '/signin'
+const REFUSED = '/signin/refused'
+
 function current() {
   return { path: window.location.pathname, search: window.location.search }
 }
@@ -17,7 +20,7 @@ export function App() {
   const [loc, setLoc] = useState(current)
   const [session, setSession] = useState<Session>({ kind: 'loading' })
   useApplySettings()
-  const publicPage = loc.path === '/signin' || loc.path === '/signin/refused'
+  const publicPage = loc.path === SIGN_IN || loc.path === REFUSED
 
   useEffect(() => {
     const onPop = () => setLoc(current())
@@ -42,7 +45,7 @@ export function App() {
         if (ctrl.signal.aborted) return
         if (e instanceof SignInNeeded) {
           const here = window.location.pathname + window.location.search
-          go(here === '/' ? '/signin' : `/signin?next=${encodeURIComponent(here)}`)
+          go(here === '/' ? SIGN_IN : `${SIGN_IN}?next=${encodeURIComponent(here)}`)
           return
         }
 
@@ -55,11 +58,11 @@ export function App() {
   const onSignOut = useCallback(async () => {
     if (session.kind === 'in') await signOut(session.me.csrf_token).catch(() => undefined)
     setSession({ kind: 'loading' })
-    go('/signin')
+    go(SIGN_IN)
   }, [session, go])
 
-  if (loc.path === '/signin') return <SignIn search={loc.search} />
-  if (loc.path === '/signin/refused') return <Refused />
+  if (loc.path === SIGN_IN) return <SignIn search={loc.search} />
+  if (loc.path === REFUSED) return <Refused />
   if (session.kind === 'down') return <p className="p-8 text-center text-muted">{t('app.status.down')}</p>
   if (session.kind === 'loading') return <p role="status" className="p-8 text-center text-muted">{t('app.status.checking')}</p>
   if (loc.path === '/admin' || loc.path.startsWith('/admin/'))

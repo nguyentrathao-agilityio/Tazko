@@ -21,6 +21,10 @@ export class HttpError extends Error {
   }
 }
 
+export function errorMessage(e: unknown): string {
+  return e instanceof HttpError ? e.message : String(e)
+}
+
 async function errorFrom(res: Response, fallback: string): Promise<HttpError> {
   const data = (await res.json().catch(() => ({}))) as { error?: string }
   return new HttpError(res.status, data.error ?? fallback)

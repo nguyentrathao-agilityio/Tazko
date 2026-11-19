@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 pub const MAX_INPUT: usize = 100_000;
 
 const ALLOWED: &[&str] = &[
@@ -132,7 +134,7 @@ fn parse_tag(s: &str, start: usize) -> Option<Tag> {
     }
 
     let name_start = i;
-    while i < b.len() && (b[i].is_ascii_alphanumeric()) {
+    while i < b.len() && b[i].is_ascii_alphanumeric() {
         i += 1;
     }
     if i == name_start || !b[name_start].is_ascii_alphabetic() {
@@ -284,9 +286,8 @@ pub fn clean_html(input: &str) -> String {
 
         if tag.closing {
             if let Some(pos) = stack.iter().rposition(|t| *t == tag.name) {
-                while stack.len() > pos {
-                    let t = stack.pop().unwrap_or_default();
-                    out.push_str(&format!("</{t}>"));
+                for t in stack.drain(pos..).rev() {
+                    let _ = write!(out, "</{t}>");
                 }
             }
             continue;
@@ -306,13 +307,13 @@ pub fn clean_html(input: &str) -> String {
                 None => out.push_str("<a>"),
             }
         } else {
-            out.push_str(&format!("<{}>", tag.name));
+            let _ = write!(out, "<{}>", tag.name);
         }
         stack.push(tag.name);
     }
     flush(&mut out, text_start, input.len());
-    while let Some(t) = stack.pop() {
-        out.push_str(&format!("</{t}>"));
+    for t in stack.into_iter().rev() {
+        let _ = write!(out, "</{t}>");
     }
     out
 }

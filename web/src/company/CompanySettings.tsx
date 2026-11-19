@@ -7,6 +7,8 @@ import { MembersPanel } from '@/admin/MembersPanel'
 import type { Invite, Member } from '@/admin/types'
 import { NoAccess } from '@/company/CompanyHome'
 import { isOwner } from '@/roles'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { companyApi } from '@/paths'
 
 type Settings = {
   members: Member[]
@@ -21,7 +23,7 @@ export function CompanySettings({ company }: { company: Company }) {
 }
 
 function OwnerSettings({ company }: { company: Company }) {
-  const base = `/api/v1/c/${company.slug}`
+  const base = companyApi(company.slug)
   const { data, error, reload } = useLoad(() => api<Settings>('GET', `${base}/settings`), base)
 
   return (
@@ -32,11 +34,7 @@ function OwnerSettings({ company }: { company: Company }) {
           <p className="muted">{t('companySettings.lead', { company: company.name })}</p>
         </div>
       </div>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       {data && (
         <>
           <MembersPanel

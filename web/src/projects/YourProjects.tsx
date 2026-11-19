@@ -13,31 +13,31 @@ import type { BoardTileData } from '@/board/types'
 import { Tools } from '@/ui/Tools'
 import type { MyProject } from '@/projects/types'
 import { isOwner } from '@/roles'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { boardApiOf, companyApi, companyRoute } from '@/paths'
 
 export function YourProjects({ company, go }: { company: Company; go: Go }) {
-  const path = `/api/v1/c/${company.slug}/my-projects`
+  const companyPath = companyApi(company.slug)
+  const home = companyRoute(company.slug)
+  const path = `${companyPath}/my-projects`
   const { data, error } = useLoad(() => api<{ projects: MyProject[] }>('GET', path), path)
-  const starredPath = `/api/v1/c/${company.slug}/starred`
+  const starredPath = `${companyPath}/starred`
   const starred = useLoad(() => api<{ boards: BoardTileData[] }>('GET', starredPath), starredPath)
   const unstar = (id: number) =>
-    void api('PUT', `/api/v1/c/${company.slug}/boards/${id}/star`, { starred: false }).then(starred.reload, starred.reload)
+    void api('PUT', `${boardApiOf(company.slug, id)}/star`, { starred: false }).then(starred.reload, starred.reload)
 
   return (
     <>
       <PageHead title={t('nav.projects')} lead={t('projects.lead', { company: company.name })}>
         {isOwner(company.role) && (
-          <button type="button" className="btn" onClick={() => go(`/c/${company.slug}/projects`)}>
+          <button type="button" className="btn" onClick={() => go(`${home}/projects`)}>
             <Icon name="building" />
             {t('nav.manageProjects')}
           </button>
         )}
         <Tools />
       </PageHead>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       {!data && !error && (
         <p role="status" className="muted">
           {t('common.loading')}
@@ -56,7 +56,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
               </div>
               <div className="pgrid">
                 {starred.data.boards.map((b) => (
-                  <BoardTile key={b.id} board={b} onOpen={() => go(`/c/${company.slug}/b/${b.id}`)} onStar={() => unstar(b.id)} />
+                  <BoardTile key={b.id} board={b} onOpen={() => go(`${home}/b/${b.id}`)} onStar={() => unstar(b.id)} />
                 ))}
               </div>
             </>
@@ -67,7 +67,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
           </div>
           <div className="pgrid">
             {data.projects.map((p) => (
-              <button key={p.id} type="button" className="ptile" onClick={() => go(`/c/${company.slug}/p/${p.id}`)}>
+              <button key={p.id} type="button" className="ptile" onClick={() => go(`${home}/p/${p.id}`)}>
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
                   <span className={`av sq ${p.color}`} style={{ width: 36, height: 36 }} aria-hidden="true">
                     {initials(p.name)}

@@ -2,7 +2,7 @@ pub mod kind;
 pub mod store;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 
 use axum::Router;
 use axum::body::Body;
@@ -85,9 +85,7 @@ pub async fn storage_limit(state: &AppState, org: i64) -> Result<Option<u64>, Ap
 async fn storage(State(state): State<AppState>, co: Company) -> Result<Json<Value>, ApiError> {
     let limit = storage_limit(&state, co.org_id).await?;
     let dir = org_dir(&state, &co.slug);
-    let used = tokio::task::spawn_blocking(move || dir_size(&dir))
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let used = joined(tokio::task::spawn_blocking(move || dir_size(&dir)).await)?;
     Ok(Json(json!({
         "max_file": max_bytes(&state),
         "used": used,
@@ -117,6 +115,43 @@ pub fn attachments_of(c: &Connection, card: i64) -> rusqlite::Result<Vec<Value>>
         "SELECT {COLUMNS} FROM attachments WHERE card_id = ?1 ORDER BY id"
     ))?;
     stmt.query_map([card], attachment_json)?.collect()
+}
+
+pub fn declared_length(headers: &HeaderMap) -> Option<u64> {
+    headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+}
+
+pub fn is_stored(c: &Connection, hash: &str) -> rusqlite::Result<bool> {
+    c.query_row(STORED, [hash], |r| r.get(0))
+}
+
+pub fn quota_error(dir: &FsPath, limit: Option<u64>, adding: u64) -> Option<ApiError> {
+    let limit = limit?;
+    let used = dir_size(dir);
+    (used + adding > limit).then(|| {
+        ApiError::TooLarge(format!(
+            "this company has used {} of its {} storage; delete old files or ask an admin for more space",
+            size_text(used),
+            size_text(limit)
+        ))
+    })
+}
+
+fn joined<T>(r: Result<T, tokio::task::JoinError>) -> Result<T, ApiError> {
+    r.map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+pub async fn hash_off_thread(bytes: Vec<u8>) -> Result<(String, Vec<u8>), ApiError> {
+    joined(tokio::task::spawn_blocking(move || (store::hash(&bytes), bytes)).await)
+}
+
+pub async fn read_stored(dir: &FsPath, hash: &str) -> Result<Vec<u8>, ApiError> {
+    let path = store::path_of(dir, hash).ok_or(ApiError::NotFound)?;
+    joined(tokio::task::spawn_blocking(move || std::fs::read(path)).await)?
+        .map_err(|_| ApiError::NotFound)
 }
 
 #[derive(Deserialize)]
@@ -158,11 +193,7 @@ async fn upload(
     let by = board.writing(&headers, Act::Edit)?;
     let card = path_id(&params, "card")?;
     let max = max_bytes(&state);
-    let declared = headers
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok());
-    if declared.is_some_and(|n| n > max) {
+    if declared_length(&headers).is_some_and(|n| n > max) {
         return Err(too_large(max));
     }
 
@@ -178,9 +209,7 @@ async fn upload(
     let (id, pid) = (board.id, board.project.id);
     let size = bytes.len() as i64;
     let mime = found.mime.to_string();
-    let (hash, bytes) = tokio::task::spawn_blocking(move || (store::hash(&bytes), bytes))
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let (hash, bytes) = hash_off_thread(bytes).await?;
     let saved = board
         .project
         .db()
@@ -190,20 +219,10 @@ async fn upload(
                 return Ok(Err(ApiError::NotFound));
             }
 
-            let stored: bool = tx.query_row(
-                STORED,
-                [&hash],
-                |r| r.get(0),
-            )?;
-            if !stored && let Some(limit) = limit {
-                let used = dir_size(&dir);
-                if used + bytes.len() as u64 > limit {
-                    return Ok(Err(ApiError::TooLarge(format!(
-                        "this company has used {} of its {} storage; delete old files or ask an admin for more space",
-                        size_text(used),
-                        size_text(limit)
-                    ))));
-                }
+            if !is_stored(&tx, &hash)?
+                && let Some(e) = quota_error(&dir, limit, bytes.len() as u64)
+            {
+                return Ok(Err(e));
             }
 
             let written = match store::put(&dir, &hash, &bytes) {
@@ -231,8 +250,7 @@ async fn upload(
                 )?;
                 Ok(v)
             })();
-            let done = result.and_then(|v| tx.commit().map(|_| v));
-            match done {
+            match result.and_then(|v| tx.commit().map(|_| v)) {
                 Ok(v) => Ok(Ok(v)),
                 Err(e) => {
                     if written {
@@ -402,11 +420,7 @@ async fn download(
         return Err(ApiError::NotFound);
     };
     let dir = org_dir(&state, &board.project.company.slug);
-    let path = store::path_of(&dir, &hash).ok_or(ApiError::NotFound)?;
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .map_err(|_| ApiError::NotFound)?;
+    let bytes = read_stored(&dir, &hash).await?;
     let image = found.mime.starts_with("image/");
     let inline = image && q.download.is_none();
     Ok(file_response(bytes, &found.mime, &found.name, inline))
@@ -473,7 +487,7 @@ async fn remove(
                 json!({ "attachment": attachment, "name": found.name }),
             )?;
             let orphan = match &found.hash {
-                Some(h) => !tx.query_row(STORED, [h], |r| r.get::<_, bool>(0))?,
+                Some(h) => !is_stored(&tx, h)?,
                 None => false,
             };
             tx.commit()?;

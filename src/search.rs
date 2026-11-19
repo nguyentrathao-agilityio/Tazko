@@ -29,6 +29,19 @@ pub struct Parsed {
     pub unknown: Vec<String>,
 }
 
+impl Parsed {
+    fn filtered(&self) -> bool {
+        !self.members.is_empty()
+            || !self.labels.is_empty()
+            || self.overdue
+            || self.archived
+            || self.open
+            || self.done
+            || self.attachments
+            || self.mine
+    }
+}
+
 fn clean(term: &str) -> String {
     term.chars()
         .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.' || *c == '@')
@@ -105,11 +118,7 @@ async fn search(
     crate::projects::sync_person(&state, &company).await?;
     let p = parse(&query.q);
     let user = company.user.0.user_id;
-    let nothing = p.words.is_empty()
-        && p.members.is_empty()
-        && p.labels.is_empty()
-        && !(p.overdue || p.archived || p.open || p.done || p.attachments || p.mine);
-    if nothing {
+    if p.words.is_empty() && !p.filtered() {
         return Ok(Json(json!({ "boards": [], "cards": [], "total": 0 })));
     }
 
@@ -198,8 +207,7 @@ async fn search(
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let only_words = p.members.is_empty() && p.labels.is_empty() && !p.overdue && !p.archived
-                && !p.open && !p.done && !p.attachments && !p.mine && p.unknown.is_empty();
+            let only_words = !p.filtered() && p.unknown.is_empty();
             let mut boards = Vec::new();
             if only_words && !p.words.is_empty() {
                 let phrase = like(&p.words.join(" "));

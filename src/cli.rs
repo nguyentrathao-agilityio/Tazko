@@ -2,6 +2,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+const DATA_HELP: &str = "Data folder (default: TAZKO_DATA_DIR from the settings file)";
+const ENV_FILE_HELP: &str = "Settings file, used when --data is not given";
+const SNAPSHOTS_HELP: &str = "Folder that holds the snapshots";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "tazko",
@@ -31,13 +35,13 @@ pub enum Command {
         #[arg(
             long,
             value_name = "DIR",
-            help = "Data folder (default: TAZKO_DATA_DIR from the settings file)"
+            help = DATA_HELP
         )]
         data: Option<PathBuf>,
         #[arg(
             long,
             value_name = "PATH",
-            help = "Settings file, used when --data is not given"
+            help = ENV_FILE_HELP
         )]
         env_file: Option<PathBuf>,
     },
@@ -48,21 +52,21 @@ pub enum Command {
         #[arg(
             long,
             value_name = "DIR",
-            help = "Data folder (default: TAZKO_DATA_DIR from the settings file)"
+            help = DATA_HELP
         )]
         data: Option<PathBuf>,
-        #[arg(long, value_name = "DIR", help = "Folder that holds the snapshots")]
+        #[arg(long, value_name = "DIR", help = SNAPSHOTS_HELP)]
         to: Option<PathBuf>,
         #[arg(
             long,
-            default_value_t = 30,
+            default_value_t = crate::backup::DEFAULT_KEEP_DAYS,
             help = "Remove snapshots older than this many days"
         )]
         keep_days: i64,
         #[arg(
             long,
             value_name = "PATH",
-            help = "Settings file, used when --data is not given"
+            help = ENV_FILE_HELP
         )]
         env_file: Option<PathBuf>,
     },
@@ -76,13 +80,13 @@ pub enum Command {
         #[arg(
             long,
             value_name = "DIR",
-            help = "Data folder (default: TAZKO_DATA_DIR from the settings file)"
+            help = DATA_HELP
         )]
         data: Option<PathBuf>,
         #[arg(
             long,
             value_name = "PATH",
-            help = "Settings file, used when --data is not given"
+            help = ENV_FILE_HELP
         )]
         env_file: Option<PathBuf>,
     },
@@ -107,7 +111,7 @@ pub enum DevAction {
 pub enum BackupAction {
     #[command(about = "Restore a snapshot into a new, empty folder and check it")]
     Restore {
-        #[arg(long, value_name = "DIR", help = "Folder that holds the snapshots")]
+        #[arg(long, value_name = "DIR", help = SNAPSHOTS_HELP)]
         from: PathBuf,
         #[arg(
             long,
@@ -122,7 +126,7 @@ pub enum BackupAction {
         about = "Restore the newest snapshot into a scratch folder, check it and record the result"
     )]
     Verify {
-        #[arg(long, value_name = "DIR", help = "Folder that holds the snapshots")]
+        #[arg(long, value_name = "DIR", help = SNAPSHOTS_HELP)]
         from: PathBuf,
         #[arg(
             long,
@@ -139,7 +143,7 @@ pub enum BackupAction {
         #[arg(
             long,
             value_name = "PATH",
-            help = "Settings file, used when --data is not given"
+            help = ENV_FILE_HELP
         )]
         env_file: Option<PathBuf>,
     },

@@ -1,8 +1,10 @@
 import { useCallback, useState } from 'react'
-import { HttpError } from '@/http'
+import { errorMessage } from '@/http'
+import { useToast } from '@/ui/toast'
 
 export function useRun(onDone?: () => void) {
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   const run = useCallback(
     async (fn: () => Promise<unknown>) => {
@@ -12,12 +14,21 @@ export function useRun(onDone?: () => void) {
         onDone?.()
         return true
       } catch (e) {
-        setError(e instanceof HttpError ? e.message : String(e))
+        setError(errorMessage(e))
         return false
       }
     },
     [onDone],
   )
 
-  return { error, run, setError }
+  const runAndToast = useCallback(
+    (fn: () => Promise<unknown>, message: string) =>
+      run(fn).then((ok) => {
+        if (ok) toast(message)
+        return ok
+      }),
+    [run, toast],
+  )
+
+  return { error, run, runAndToast, setError }
 }

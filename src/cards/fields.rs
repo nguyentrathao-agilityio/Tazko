@@ -21,6 +21,8 @@ pub const TYPES: &[&str] = &["text", "number", "date", "select", "check"];
 pub const MAX_FIELDS: i64 = 20;
 const MAX_OPTIONS: usize = 20;
 const MAX_TEXT: usize = 200;
+const MAX_NAME: usize = 40;
+const NO_OPTIONS: &str = "a dropdown needs at least one option";
 
 pub fn routes() -> Router<AppState> {
     let p = |s: &str| format!("{COMPANY_PREFIX}/boards/{{board}}{s}");
@@ -154,10 +156,14 @@ fn clean_text(raw: &str, what: &str, max: usize) -> Result<String, ApiError> {
     Ok(t.to_string())
 }
 
+fn field_name(raw: &str) -> Result<String, ApiError> {
+    clean_text(raw, "a field name", MAX_NAME)
+}
+
 fn clean_options(raw: &[String]) -> Result<Vec<String>, ApiError> {
     let mut out: Vec<String> = Vec::new();
     for o in raw {
-        let o = clean_text(o, "an option", 40)?;
+        let o = clean_text(o, "an option", MAX_NAME)?;
         if !out.iter().any(|x| x.eq_ignore_ascii_case(&o)) {
             out.push(o);
         }
@@ -245,7 +251,7 @@ async fn create(
     Json(body): Json<NewField>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
-    let name = clean_text(&body.name, "a field name", 40)?;
+    let name = field_name(&body.name)?;
     if !TYPES.contains(&body.kind.as_str()) {
         return Err(bad("choose text, number, date, dropdown or checkbox"));
     }
@@ -253,7 +259,7 @@ async fn create(
     let options = if body.kind == "select" {
         let o = clean_options(&body.options)?;
         if o.is_empty() {
-            return Err(bad("a dropdown needs at least one option"));
+            return Err(bad(NO_OPTIONS));
         }
 
         o
@@ -305,11 +311,7 @@ async fn change(
 ) -> Result<Json<Value>, ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
     let field = path_id(&params, "field")?;
-    let name = body
-        .name
-        .as_deref()
-        .map(|n| clean_text(n, "a field name", 40))
-        .transpose()?;
+    let name = body.name.as_deref().map(field_name).transpose()?;
     let options = body.options.as_deref().map(clean_options).transpose()?;
     let (id, at) = (board.id, board.at());
     let saved = board
@@ -330,7 +332,7 @@ async fn change(
                 }
 
                 if o.is_empty() {
-                    return Ok(Err(bad("a dropdown needs at least one option")));
+                    return Ok(Err(bad(NO_OPTIONS)));
                 }
 
                 d.options = o;

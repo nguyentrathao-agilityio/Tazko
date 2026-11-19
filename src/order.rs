@@ -57,12 +57,10 @@ pub fn after(last: Option<&str>) -> String {
 }
 
 pub fn spread(count: usize) -> Vec<String> {
-    let mut keys = Vec::with_capacity(count);
-    let mut last: Option<String> = None;
+    let mut keys: Vec<String> = Vec::with_capacity(count);
     for _ in 0..count {
-        let next = after(last.as_deref());
-        keys.push(next.clone());
-        last = Some(next);
+        let next = after(keys.last().map(String::as_str));
+        keys.push(next);
     }
     keys
 }

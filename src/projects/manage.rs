@@ -1,11 +1,11 @@
 use axum::extract::{Path as UrlPath, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Json;
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{board_count, company_person, member_names, purge, upsert_person};
+use super::{board_count, company_person, member_names, purge, role_of, upsert_person};
 use crate::admin::{audit, validate};
 use crate::auth::check_csrf;
 use crate::company::CompanyOwner;
@@ -17,6 +17,15 @@ use crate::state::AppState;
 fn writing(owner: &CompanyOwner, headers: &HeaderMap) -> Result<i64, ApiError> {
     check_csrf(&owner.0.user, headers)?;
     Ok(owner.0.user.0.user_id)
+}
+
+fn live_name(c: &Connection, id: i64) -> rusqlite::Result<Option<String>> {
+    c.query_row(
+        "SELECT name FROM projects WHERE id = ?1 AND deleted_at IS NULL",
+        [id],
+        |r| r.get(0),
+    )
+    .optional()
 }
 
 async fn audit_project(
@@ -124,7 +133,7 @@ pub async fn create(
         .write(move |c| {
             let tx = c.transaction()?;
             upsert_person(&tx, owner_id, &person_name, &person_email)?;
-            let color = super::COLORS[(stored.len()) % super::COLORS.len()];
+            let color = super::COLORS[stored.len() % super::COLORS.len()];
             tx.execute(
                 "INSERT INTO projects (name, color) VALUES (?1, ?2)",
                 params![stored, color],
@@ -166,18 +175,16 @@ async fn set_archived(
 ) -> Result<StatusCode, ApiError> {
     let by = writing(&owner, &headers)?;
     let co = owner.0;
+    let action = if archive {
+        "project_archived"
+    } else {
+        "project_restored"
+    };
     let name = co
         .db
         .write(move |c| {
             let tx = c.transaction()?;
-            let name: Option<String> = tx
-                .query_row(
-                    "SELECT name FROM projects WHERE id = ?1 AND deleted_at IS NULL",
-                    [id],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            let Some(name) = name else {
+            let Some(name) = live_name(&tx, id)? else {
                 return Ok(None);
             };
             let at = archive.then(now);
@@ -185,22 +192,12 @@ async fn set_archived(
                 "UPDATE projects SET archived_at = ?2 WHERE id = ?1",
                 params![id, at],
             )?;
-            let kind = if archive {
-                "project_archived"
-            } else {
-                "project_restored"
-            };
-            events::record(&tx, by, kind, At::project(id), json!({ "name": name }))?;
+            events::record(&tx, by, action, At::project(id), json!({ "name": name }))?;
             tx.commit()?;
             Ok(Some(name))
         })
         .await?
         .ok_or(ApiError::NotFound)?;
-    let action = if archive {
-        "project_archived"
-    } else {
-        "project_restored"
-    };
     audit_project(
         &state,
         by,
@@ -250,14 +247,7 @@ pub async fn delete(
         .db
         .write(move |c| {
             let tx = c.transaction()?;
-            let name: Option<String> = tx
-                .query_row(
-                    "SELECT name FROM projects WHERE id = ?1 AND deleted_at IS NULL",
-                    [id],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            let Some(name) = name else {
+            let Some(name) = live_name(&tx, id)? else {
                 return Ok(Err(ApiError::NotFound));
             };
             if name != typed {
@@ -326,23 +316,10 @@ pub async fn add_owner(
         .db
         .write(move |c| {
             let tx = c.transaction()?;
-            let project: Option<String> = tx
-                .query_row(
-                    "SELECT name FROM projects WHERE id = ?1 AND deleted_at IS NULL",
-                    [id],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            let Some(project) = project else {
+            let Some(project) = live_name(&tx, id)? else {
                 return Ok(Err(ApiError::NotFound));
             };
-            let role: Option<String> = tx
-                .query_row(
-                    "SELECT role FROM project_members WHERE project_id = ?1 AND user_id = ?2",
-                    params![id, user_id],
-                    |r| r.get(0),
-                )
-                .optional()?;
+            let role = role_of(&tx, id, user_id)?;
             if role.as_deref() == Some("owner") {
                 return Ok(Err(conflict("this person already owns the project")));
             }

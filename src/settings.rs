@@ -43,8 +43,7 @@ const KEYS: &[(&str, Kind)] = &[
 ];
 
 pub fn defaults() -> Map<String, Value> {
-    let mut m = Map::new();
-    for (k, v) in [
+    [
         ("job_title", json!("")),
         ("avatar", json!("google")),
         ("language", json!("en")),
@@ -60,10 +59,10 @@ pub fn defaults() -> Map<String, Value> {
         ("date_format", json!("MDY")),
         ("time_format", json!("12")),
         ("week_start", json!("mon")),
-    ] {
-        m.insert(k.into(), v);
-    }
-    m
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect()
 }
 
 pub fn valid_time_zone(tz: &str) -> bool {

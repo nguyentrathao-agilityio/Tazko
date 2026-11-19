@@ -173,14 +173,7 @@ impl Project {
         let found = company
             .db
             .read(move |c| {
-                let role: Option<String> = c
-                    .query_row(
-                        "SELECT role FROM project_members WHERE project_id = ?1 AND user_id = ?2",
-                        params![id, user_id],
-                        |r| r.get(0),
-                    )
-                    .optional()?;
-                let Some(role) = role else {
+                let Some(role) = role_of(c, id, user_id)? else {
                     return Ok(None);
                 };
                 Ok(project_info(c, id)?.map(|info| (role, info)))
@@ -211,6 +204,27 @@ impl FromRequestParts<AppState> for Project {
         let id = path_id(&params, "project")?;
         Project::load(company, id).await
     }
+}
+
+pub(crate) fn role_of(c: &Connection, project: i64, user: i64) -> rusqlite::Result<Option<String>> {
+    c.query_row(
+        "SELECT role FROM project_members WHERE project_id = ?1 AND user_id = ?2",
+        params![project, user],
+        |r| r.get(0),
+    )
+    .optional()
+}
+
+pub(crate) fn drop_member(c: &Connection, project: i64, user: i64) -> rusqlite::Result<()> {
+    c.execute(
+        "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2",
+        params![project, user],
+    )?;
+    c.execute(
+        "DELETE FROM board_access WHERE user_id = ?1 AND board_id IN (SELECT id FROM boards WHERE project_id = ?2)",
+        params![user, project],
+    )?;
+    Ok(())
 }
 
 pub fn upsert_person(c: &Connection, id: i64, name: &str, email: &str) -> rusqlite::Result<()> {
@@ -258,6 +272,7 @@ pub async fn sync_person(state: &AppState, company: &Company) -> Result<(), ApiE
             .optional()?)
         })
         .await?;
+    let fresh = stored.is_some_and(|(name, email)| name == user.name && email == user.email);
     let email = user.email.clone();
     let pending: Vec<(i64, i64, String)> = state
         .dbs
@@ -276,7 +291,6 @@ pub async fn sync_person(state: &AppState, company: &Company) -> Result<(), ApiE
             Ok(rows)
         })
         .await?;
-    let fresh = stored.as_ref() == Some(&(user.name.clone(), user.email.clone()));
     if fresh && pending.is_empty() {
         return Ok(());
     }
@@ -288,8 +302,7 @@ pub async fn sync_person(state: &AppState, company: &Company) -> Result<(), ApiE
             let tx = c.transaction()?;
             upsert_person(&tx, user_id, &user.name, &user.email)?;
             for (_, project_id, role) in &pending {
-                let open = project_info(&tx, *project_id)?.is_some();
-                if !open {
+                if project_info(&tx, *project_id)?.is_none() {
                     continue;
                 }
 
@@ -596,14 +609,7 @@ pub async fn forget_member(
                 .collect::<Result<_, _>>()?
         };
         for (project, role) in projects {
-            tx.execute(
-                "DELETE FROM project_members WHERE project_id = ?1 AND user_id = ?2",
-                params![project, user_id],
-            )?;
-            tx.execute(
-                "DELETE FROM board_access WHERE user_id = ?1 AND board_id IN (SELECT id FROM boards WHERE project_id = ?2)",
-                params![user_id, project],
-            )?;
+            drop_member(&tx, project, user_id)?;
             events::record(
                 &tx,
                 user_id,

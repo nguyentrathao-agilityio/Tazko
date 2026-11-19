@@ -1,5 +1,5 @@
 use rusqlite::{Connection, params};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct At {
@@ -18,9 +18,8 @@ impl At {
 
     pub fn board(project: i64, board: i64) -> Self {
         At {
-            project: Some(project),
             board: Some(board),
-            card: None,
+            ..At::project(project)
         }
     }
 
@@ -52,7 +51,7 @@ pub fn board_activity(
     board: i64,
     before: Option<i64>,
     limit: i64,
-) -> rusqlite::Result<Vec<serde_json::Value>> {
+) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = c.prepare(
         "SELECT e.id, e.type, e.payload, e.created_at, e.card_id, k.title,
                 p.id, p.name, p.email
@@ -64,19 +63,19 @@ pub fn board_activity(
     )?;
     stmt.query_map(params![board, before.unwrap_or(i64::MAX), limit], |r| {
         let actor = match r.get::<_, Option<i64>>(6)? {
-            Some(id) => serde_json::json!({
+            Some(id) => json!({
                 "id": id,
                 "name": r.get::<_, String>(7)?,
                 "email": r.get::<_, String>(8)?,
             }),
-            None => serde_json::Value::Null,
+            None => Value::Null,
         };
-        Ok(serde_json::json!({
+        Ok(json!({
             "id": r.get::<_, i64>(0)?,
             "type": r.get::<_, String>(1)?,
-            "payload": serde_json::from_str::<serde_json::Value>(&r.get::<_, String>(2)?).unwrap_or(serde_json::Value::Null),
+            "payload": serde_json::from_str::<Value>(&r.get::<_, String>(2)?).unwrap_or(Value::Null),
             "created_at": r.get::<_, i64>(3)?,
-            "card": r.get::<_, Option<i64>>(4)?.map(|id| serde_json::json!({ "id": id, "title": r.get::<_, Option<String>>(5).ok().flatten() })),
+            "card": r.get::<_, Option<i64>>(4)?.map(|id| json!({ "id": id, "title": r.get::<_, Option<String>>(5).ok().flatten() })),
             "actor": actor,
         }))
     })?

@@ -2,50 +2,31 @@ import { useState } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
-import { useToast } from '@/ui/toast'
 import { backgroundNames, background, colors } from '@/projects/look'
 import type { ProjectView } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
 import { isOwner } from '@/roles'
-
-function Switch({ label, hint, on, onChange }: { label: string; hint: string; on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="switchrow">
-      <div>
-        <b>{label}</b>
-        <small>{hint}</small>
-      </div>
-      <button type="button" className="switchbtn" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} />
-    </div>
-  )
-}
+import { ErrorNote } from '@/ui/ErrorNote'
+import { SwitchRow } from '@/ui/SwitchRow'
+import { projectApi } from '@/paths'
 
 export function ProjectSettings({ company, project, onSaved }: { company: Company; project: ProjectView; onSaved: () => void }) {
-  const path = `/api/v1/c/${company.slug}/projects/${project.id}`
+  const path = projectApi(company.slug, project.id)
   const [name, setName] = useState(project.name)
   const [description, setDescription] = useState(project.description)
   const [color, setColor] = useState(project.color)
   const [bg, setBg] = useState(project.background)
-  const toast = useToast()
-  const { error, run } = useRun(onSaved)
+  const { error, runAndToast } = useRun(onSaved)
 
-  const save = () =>
-    void run(() => api('PATCH', path, { name, description, color, background: bg })).then((ok) => {
-      if (ok) toast(t('toast.saved'))
-    })
+  const patch = (change: Record<string, unknown>) => void runAndToast(() => api('PATCH', path, change), t('toast.saved'))
 
-  const flip = (key: 'members_create_boards' | 'members_invite', value: boolean) =>
-    void run(() => api('PATCH', path, { [key]: value })).then((ok) => {
-      if (ok) toast(t('toast.saved'))
-    })
+  const save = () => patch({ name, description, color, background: bg })
+
+  const flip = (key: 'members_create_boards' | 'members_invite', value: boolean) => patch({ [key]: value })
 
   return (
     <>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       <section className="box">
         <h2>{t('project.general')}</h2>
         <div className="field">
@@ -86,13 +67,13 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
       </section>
       <section className="box">
         <h2>{t('project.permissions')}</h2>
-        <Switch
+        <SwitchRow
           label={t('project.membersCreateBoards')}
           hint={t('project.membersCreateBoardsHint')}
           on={project.members_create_boards}
           onChange={(v) => flip('members_create_boards', v)}
         />
-        <Switch label={t('project.membersInvite')} hint={t('project.membersInviteHint')} on={project.members_invite} onChange={(v) => flip('members_invite', v)} />
+        <SwitchRow label={t('project.membersInvite')} hint={t('project.membersInviteHint')} on={project.members_invite} onChange={(v) => flip('members_invite', v)} />
       </section>
       <section className="box danger-zone">
         <h2>{t('project.archiveOrDelete')}</h2>

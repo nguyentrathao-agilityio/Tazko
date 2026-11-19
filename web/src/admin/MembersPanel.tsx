@@ -1,13 +1,29 @@
-import { useState, type FormEvent } from 'react'
-import { api, HttpError } from '@/http'
+import type { FormEvent } from 'react'
+import { api } from '@/http'
 import { t } from '@/i18n'
 import { when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
+import { ErrorNote } from '@/ui/ErrorNote'
 import { AccountPill, Person } from '@/ui/people'
 import { useToast } from '@/ui/toast'
 import { displayName } from '@/ui/names'
 import type { Invite, Member } from '@/admin/types'
-import { companyRoleLabel } from '@/roles'
+import { useRun } from '@/projects/useRun'
+import { companyRoleLabel, MEMBER, OWNER } from '@/roles'
+
+const roleChoices = [MEMBER, OWNER] as const
+
+function RoleOptions() {
+  return (
+    <>
+      {roleChoices.map((r) => (
+        <option key={r} value={r}>
+          {t(companyRoleLabel(r))}
+        </option>
+      ))}
+    </>
+  )
+}
 
 export function MembersPanel({
   base,
@@ -22,20 +38,8 @@ export function MembersPanel({
   invites: Invite[]
   onChange: () => void
 }) {
-  const [error, setError] = useState<string | null>(null)
+  const { error, run } = useRun(onChange)
   const toast = useToast()
-
-  const run = async (fn: () => Promise<unknown>) => {
-    setError(null)
-    try {
-      await fn()
-      onChange()
-      return true
-    } catch (e) {
-      setError(e instanceof HttpError ? e.message : String(e))
-      return false
-    }
-  }
 
   const reinvite = (email: string, role: string) => run(() => api('POST', `${base}/invites`, { email, role }))
 
@@ -62,7 +66,7 @@ export function MembersPanel({
     const f = new FormData(form)
     const email = String(f.get('email') ?? '').trim()
     void run(async () => {
-      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? 'member') })
+      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? MEMBER) })
       form.reset()
       toast(t(res?.result === 'added' ? 'toast.added' : 'toast.invited', { email: email.toLowerCase() }))
     })
@@ -70,20 +74,15 @@ export function MembersPanel({
 
   return (
     <>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       <section className="box">
         <h2>{t('members.invite')}</h2>
         <form className="row" onSubmit={onInvite} noValidate>
           <div className="grow">
             <input type="email" name="email" placeholder="name@example.com" aria-label={t('members.email')} required />
           </div>
-          <select name="role" aria-label={t('members.role')} defaultValue="member">
-            <option value="member">{t('role.member')}</option>
-            <option value="owner">{t('role.owner')}</option>
+          <select name="role" aria-label={t('members.role')} defaultValue={MEMBER}>
+            <RoleOptions />
           </select>
           <button className="btn primary" type="submit">
             <Icon name="plus" />
@@ -131,8 +130,7 @@ export function MembersPanel({
                       value={m.role}
                       onChange={(e) => void setRole(m, e.target.value)}
                     >
-                      <option value="member">{t('role.member')}</option>
-                      <option value="owner">{t('role.owner')}</option>
+                      <RoleOptions />
                     </select>
                   </td>
                   <td className="muted">{when(m.last_seen)}</td>
@@ -160,10 +158,7 @@ export function MembersPanel({
         {invites.length === 0 ? (
           <p className="muted">{t('invites.none')}</p>
         ) : (
-          <InviteTable invites={invites} withCompany={false} onRevoke={(id) => {
-              const v = invites.find((i) => i.id === id)
-              if (v) void revoke(v)
-            }} />
+          <InviteTable invites={invites} withCompany={false} onRevoke={(v) => void revoke(v)} />
         )}
       </section>
     </>
@@ -177,7 +172,7 @@ export function InviteTable({
 }: {
   invites: Invite[]
   withCompany: boolean
-  onRevoke: (id: number) => void
+  onRevoke: (invite: Invite) => void
 }) {
   return (
     <div className="tw">
@@ -207,7 +202,7 @@ export function InviteTable({
               <td className="muted">{v.invited_by ?? '—'}</td>
               <td className="muted">{when(v.created_at)}</td>
               <td>
-                <button type="button" className="btn sm" onClick={() => onRevoke(v.id)}>
+                <button type="button" className="btn sm" onClick={() => onRevoke(v)}>
                   {t('common.revoke')}
                 </button>
               </td>

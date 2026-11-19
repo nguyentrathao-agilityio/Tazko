@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 use crate::auth::check_csrf;
 use crate::db::{Database, DbError};
-use crate::error::ApiError;
+use crate::error::{ApiError, bad};
 use crate::session::{SessionUser, now};
 use crate::state::AppState;
 use crate::tenant::CurrentUser;
@@ -81,12 +81,13 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/server", get(server))
 }
 
-pub(crate) fn bad(message: &str) -> ApiError {
-    ApiError::BadRequest(message.to_string())
-}
+pub(crate) const INVALID_EMAIL: &str = "enter a valid email address";
+const NAME_RULE: &str = "enter a company name of up to 80 characters";
+const STORAGE_RULE: &str = "the storage limit must be between 1 and 10000 GB";
+const LAST_OWNER: &str = "a company needs at least one owner";
 
 pub(crate) fn conflict(message: &str) -> Response {
-    (StatusCode::CONFLICT, Json(json!({ "error": message }))).into_response()
+    crate::error::conflict(message).into_response()
 }
 
 enum Outcome<T> {
@@ -115,22 +116,28 @@ pub(crate) struct Org {
     pub(crate) created_at: i64,
 }
 
+fn org_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Org> {
+    Ok(Org {
+        id: r.get(0)?,
+        slug: r.get(1)?,
+        name: r.get(2)?,
+        status: r.get(3)?,
+        storage_limit: r.get(4)?,
+        created_at: r.get(5)?,
+    })
+}
+
 pub(crate) fn org(c: &Connection, slug: &str) -> rusqlite::Result<Option<Org>> {
     c.query_row(
         "SELECT id, slug, name, status, storage_limit, created_at FROM orgs WHERE slug = ?1 AND status != 'deleted'",
         params![slug],
-        |r| {
-            Ok(Org {
-                id: r.get(0)?,
-                slug: r.get(1)?,
-                name: r.get(2)?,
-                status: r.get(3)?,
-                storage_limit: r.get(4)?,
-                created_at: r.get(5)?,
-            })
-        },
+        org_from_row,
     )
     .optional()
+}
+
+pub(crate) fn org_storage_used(state: &AppState, slug: &str) -> u64 {
+    dir_size(&state.dbs.layout().orgs.join(slug))
 }
 
 pub fn dir_size(path: &Path) -> u64 {
@@ -155,10 +162,18 @@ fn table_exists(c: &Connection, name: &str) -> rusqlite::Result<bool> {
     )
 }
 
+#[derive(Default)]
 struct TenantSummary {
     boards: i64,
     last_event: Option<i64>,
     projects: Vec<Value>,
+}
+
+async fn summary_of(state: &AppState, slug: &str) -> Result<TenantSummary, ApiError> {
+    match state.dbs.tenant(slug) {
+        Ok(db) => tenant_summary(&db).await,
+        Err(_) => Ok(TenantSummary::default()),
+    }
 }
 
 async fn tenant_summary(db: &Database) -> Result<TenantSummary, ApiError> {
@@ -224,19 +239,7 @@ async fn list_companies(
                  FROM orgs o WHERE o.status != 'deleted' ORDER BY o.name COLLATE NOCASE",
             )?;
             let rows = stmt
-                .query_map([], |r| {
-                    Ok((
-                        Org {
-                            id: r.get(0)?,
-                            slug: r.get(1)?,
-                            name: r.get(2)?,
-                            status: r.get(3)?,
-                            storage_limit: r.get(4)?,
-                            created_at: r.get(5)?,
-                        },
-                        r.get::<_, i64>(6)?,
-                    ))
-                })?
+                .query_map([], |r| Ok((org_from_row(r)?, r.get::<_, i64>(6)?)))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })
@@ -244,21 +247,14 @@ async fn list_companies(
 
     let mut out = Vec::new();
     for (o, members) in orgs {
-        let summary = match state.dbs.tenant(&o.slug) {
-            Ok(db) => tenant_summary(&db).await?,
-            Err(_) => TenantSummary {
-                boards: 0,
-                last_event: None,
-                projects: Vec::new(),
-            },
-        };
+        let summary = summary_of(&state, &o.slug).await?;
         out.push(json!({
             "slug": o.slug,
             "name": o.name,
             "status": o.status,
             "members": members,
             "boards": summary.boards,
-            "storage_used": dir_size(&state.dbs.layout().orgs.join(&o.slug)),
+            "storage_used": org_storage_used(&state, &o.slug),
             "storage_limit": o.storage_limit,
             "last_activity": summary.last_event.unwrap_or(o.created_at),
         }));
@@ -351,15 +347,13 @@ async fn create_company(
     Json(body): Json<NewCompany>,
 ) -> Result<Response, ApiError> {
     let by = admin.writing(&headers)?;
-    let name = validate::name(&body.name)
-        .ok_or_else(|| bad("enter a company name of up to 80 characters"))?;
+    let name = validate::name(&body.name).ok_or_else(|| bad(NAME_RULE))?;
     let slug = validate::slug(body.slug.as_deref(), &name).ok_or_else(|| {
         bad("the short name may use a to z, 0 to 9 and inner hyphens, up to 40 characters")
     })?;
     let email = validate::email(&body.owner_email)
         .ok_or_else(|| bad("enter a valid email address for the first owner"))?;
-    let gb = validate::storage_gb(body.storage_gb)
-        .ok_or_else(|| bad("the storage limit must be between 1 and 10000 GB"))?;
+    let gb = validate::storage_gb(body.storage_gb).ok_or_else(|| bad(STORAGE_RULE))?;
     if state.dbs.layout().orgs.join(&slug).exists() {
         return Ok(conflict(
             "a folder for that short name is already on disk; move it away or choose another short name",
@@ -452,21 +446,14 @@ async fn company_detail(
         })
         .await?;
     let (o, members, invites) = found.ok_or(ApiError::NotFound)?;
-    let summary = match state.dbs.tenant(&o.slug) {
-        Ok(db) => tenant_summary(&db).await?,
-        Err(_) => TenantSummary {
-            boards: 0,
-            last_event: None,
-            projects: Vec::new(),
-        },
-    };
+    let summary = summary_of(&state, &o.slug).await?;
 
     Ok(Json(json!({
         "slug": o.slug,
         "name": o.name,
         "status": o.status,
         "storage_limit": o.storage_limit,
-        "storage_used": dir_size(&state.dbs.layout().orgs.join(&o.slug)),
+        "storage_used": org_storage_used(&state, &o.slug),
         "boards": summary.boards,
         "members": members,
         "invites": invites,
@@ -510,19 +497,15 @@ async fn update_company(
     Json(body): Json<CompanyChange>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
-    let name = match body.name.as_deref() {
-        Some(n) => Some(
-            validate::name(n).ok_or_else(|| bad("enter a company name of up to 80 characters"))?,
-        ),
-        None => None,
-    };
-    let gb = match body.storage_gb {
-        Some(g) => Some(
-            validate::storage_gb(Some(g))
-                .ok_or_else(|| bad("the storage limit must be between 1 and 10000 GB"))?,
-        ),
-        None => None,
-    };
+    let name = body
+        .name
+        .as_deref()
+        .map(|n| validate::name(n).ok_or_else(|| bad(NAME_RULE)))
+        .transpose()?;
+    let gb = body
+        .storage_gb
+        .map(|g| validate::storage_gb(Some(g)).ok_or_else(|| bad(STORAGE_RULE)))
+        .transpose()?;
     let outcome = state
         .dbs
         .control()
@@ -709,7 +692,7 @@ async fn invite(
     Json(body): Json<NewInvite>,
 ) -> Result<Response, ApiError> {
     let by = admin.writing(&headers)?;
-    let email = validate::email(&body.email).ok_or_else(|| bad("enter a valid email address"))?;
+    let email = validate::email(&body.email).ok_or_else(|| bad(INVALID_EMAIL))?;
     let role = company_role(&body.role)?;
     let outcome = state
         .dbs
@@ -719,24 +702,20 @@ async fn invite(
             let Some(o) = org(&tx, &slug)? else {
                 return refuse(ApiError::NotFound);
             };
-            match invite_or_add(&tx, &o, &email, role, by, true)? {
-                Ok(done) => {
-                    tx.commit()?;
-                    Ok(Outcome::Done(Ok(done)))
-                }
-                Err(msg) => Ok(Outcome::Done(Err(msg))),
+            let invited = invite_or_add(&tx, &o, &email, role, by, true)?;
+            if invited.is_ok() {
+                tx.commit()?;
             }
+
+            Ok(Outcome::Done(invited))
         })
         .await?;
-    Ok(match finish(outcome)? {
-        Ok(Invited::Added) => {
-            (StatusCode::CREATED, Json(json!({ "result": "added" }))).into_response()
-        }
-        Ok(Invited::Invited) => {
-            (StatusCode::CREATED, Json(json!({ "result": "invited" }))).into_response()
-        }
-        Err(msg) => conflict(msg),
-    })
+    let result = match finish(outcome)? {
+        Ok(Invited::Added) => "added",
+        Ok(Invited::Invited) => "invited",
+        Err(msg) => return Ok(conflict(msg)),
+    };
+    Ok((StatusCode::CREATED, Json(json!({ "result": result }))).into_response())
 }
 
 async fn revoke_invite(
@@ -746,32 +725,55 @@ async fn revoke_invite(
     UrlPath(id): UrlPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
-    let outcome = state
+    let revoked = state
         .dbs
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let found: Option<(i64, String)> = tx
-                .query_row(
-                    "SELECT org_id, email FROM invites WHERE id = ?1 AND accepted_at IS NULL AND revoked_at IS NULL",
-                    [id],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )
-                .optional()?;
-            let Some((org_id, email)) = found else {
-                return refuse(ApiError::NotFound);
-            };
-            tx.execute("UPDATE invites SET revoked_at = ?2 WHERE id = ?1", params![id, now()])?;
-            audit::record(&tx, Some(by), "invite_revoked", Some(org_id), &email, json!({ "invite": id }))?;
+            let revoked = revoke_pending_invite(&tx, id, None, by)?;
             tx.commit()?;
-            Ok(Outcome::Done(()))
+            Ok(revoked)
         })
         .await?;
-    finish(outcome)?;
-    Ok(StatusCode::NO_CONTENT)
+    if revoked {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::NotFound)
+    }
 }
 
-pub(crate) fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
+pub(crate) fn revoke_pending_invite(
+    tx: &Connection,
+    id: i64,
+    org_id: Option<i64>,
+    by: i64,
+) -> rusqlite::Result<bool> {
+    let found: Option<(i64, String)> = tx
+        .query_row(
+            "SELECT org_id, email FROM invites WHERE id = ?1 AND (?2 IS NULL OR org_id = ?2) AND accepted_at IS NULL AND revoked_at IS NULL",
+            params![id, org_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((org_id, email)) = found else {
+        return Ok(false);
+    };
+    tx.execute(
+        "UPDATE invites SET revoked_at = ?2 WHERE id = ?1",
+        params![id, now()],
+    )?;
+    audit::record(
+        tx,
+        Some(by),
+        "invite_revoked",
+        Some(org_id),
+        &email,
+        json!({ "invite": id }),
+    )?;
+    Ok(true)
+}
+
+fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
     c.query_row(
         "SELECT count(*) FROM org_members WHERE org_id = ?1 AND role = 'owner'",
         [org_id],
@@ -779,17 +781,90 @@ pub(crate) fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
     )
 }
 
-pub(crate) fn member(
-    c: &Connection,
-    org_id: i64,
-    user_id: i64,
-) -> rusqlite::Result<Option<(String, String)>> {
+fn member(c: &Connection, org_id: i64, user_id: i64) -> rusqlite::Result<Option<(String, String)>> {
     c.query_row(
         "SELECT m.role, u.email FROM org_members m JOIN users u ON u.id = m.user_id WHERE m.org_id = ?1 AND m.user_id = ?2",
         params![org_id, user_id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )
     .optional()
+}
+
+pub(crate) enum MemberChange {
+    Done,
+    NotMember,
+    LastOwner,
+}
+
+impl MemberChange {
+    pub(crate) fn into_result(self) -> Result<(), ApiError> {
+        match self {
+            MemberChange::Done => Ok(()),
+            MemberChange::NotMember => Err(ApiError::NotFound),
+            MemberChange::LastOwner => Err(bad(LAST_OWNER)),
+        }
+    }
+}
+
+pub(crate) fn change_member_role(
+    tx: &Connection,
+    org_id: i64,
+    user_id: i64,
+    role: &str,
+    by: i64,
+) -> rusqlite::Result<MemberChange> {
+    let Some((old, email)) = member(tx, org_id, user_id)? else {
+        return Ok(MemberChange::NotMember);
+    };
+    if old == role {
+        return Ok(MemberChange::Done);
+    }
+
+    if old == "owner" && owners(tx, org_id)? <= 1 {
+        return Ok(MemberChange::LastOwner);
+    }
+
+    tx.execute(
+        "UPDATE org_members SET role = ?3 WHERE org_id = ?1 AND user_id = ?2",
+        params![org_id, user_id, role],
+    )?;
+    audit::record(
+        tx,
+        Some(by),
+        "role_changed",
+        Some(org_id),
+        &email,
+        json!({ "from": old, "to": role }),
+    )?;
+    Ok(MemberChange::Done)
+}
+
+pub(crate) fn remove_org_member(
+    tx: &Connection,
+    org_id: i64,
+    user_id: i64,
+    by: i64,
+) -> rusqlite::Result<MemberChange> {
+    let Some((role, email)) = member(tx, org_id, user_id)? else {
+        return Ok(MemberChange::NotMember);
+    };
+    if role == "owner" && owners(tx, org_id)? <= 1 {
+        return Ok(MemberChange::LastOwner);
+    }
+
+    tx.execute(
+        "DELETE FROM org_members WHERE org_id = ?1 AND user_id = ?2",
+        params![org_id, user_id],
+    )?;
+    audit::record(
+        tx,
+        Some(by),
+        "member_removed",
+        Some(org_id),
+        &email,
+        json!({ "role": role }),
+    )?;
+    Ok(MemberChange::Done)
 }
 
 #[derive(Deserialize)]
@@ -814,34 +889,12 @@ async fn change_role(
             let Some(o) = org(&tx, &slug)? else {
                 return refuse(ApiError::NotFound);
             };
-            let Some((old, email)) = member(&tx, o.id, user_id)? else {
-                return refuse(ApiError::NotFound);
-            };
-            if old == role {
-                return Ok(Outcome::Done(()));
-            }
-
-            if old == "owner" && owners(&tx, o.id)? <= 1 {
-                return refuse(bad("a company needs at least one owner"));
-            }
-
-            tx.execute(
-                "UPDATE org_members SET role = ?3 WHERE org_id = ?1 AND user_id = ?2",
-                params![o.id, user_id, role],
-            )?;
-            audit::record(
-                &tx,
-                Some(by),
-                "role_changed",
-                Some(o.id),
-                &email,
-                json!({ "from": old, "to": role }),
-            )?;
+            let change = change_member_role(&tx, o.id, user_id, role, by)?;
             tx.commit()?;
-            Ok(Outcome::Done(()))
+            Ok(Outcome::Done(change))
         })
         .await?;
-    finish(outcome)?;
+    finish(outcome)?.into_result()?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -861,30 +914,13 @@ async fn remove_member(
             let Some(o) = org(&tx, &slug)? else {
                 return refuse(ApiError::NotFound);
             };
-            let Some((role, email)) = member(&tx, o.id, user_id)? else {
-                return refuse(ApiError::NotFound);
-            };
-            if role == "owner" && owners(&tx, o.id)? <= 1 {
-                return refuse(bad("a company needs at least one owner"));
-            }
-
-            tx.execute(
-                "DELETE FROM org_members WHERE org_id = ?1 AND user_id = ?2",
-                params![o.id, user_id],
-            )?;
-            audit::record(
-                &tx,
-                Some(by),
-                "member_removed",
-                Some(o.id),
-                &email,
-                json!({ "role": role }),
-            )?;
+            let change = remove_org_member(&tx, o.id, user_id, by)?;
             tx.commit()?;
-            Ok(Outcome::Done(o.id))
+            Ok(Outcome::Done((o.id, change)))
         })
         .await?;
-    let org_id = finish(outcome)?;
+    let (org_id, change) = finish(outcome)?;
+    change.into_result()?;
     crate::projects::forget_member(&state, &slug_for_projects, org_id, user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

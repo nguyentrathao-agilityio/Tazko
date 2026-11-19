@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { matches, mentionQuery, type Person } from '@/card/mention'
+import { ESCAPE, ENTER, ARROW_UP, ARROW_DOWN } from '@/keys/keyNames'
 
 export function MentionBox({
   value,
@@ -48,19 +49,19 @@ export function MentionBox({
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (list.length) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (e.key === ARROW_DOWN || e.key === ARROW_UP) {
         e.preventDefault()
-        setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length)
+        setActive((a) => (a + (e.key === ARROW_DOWN ? 1 : list.length - 1)) % list.length)
         return
       }
 
-      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+      if (e.key === ENTER && !e.ctrlKey && !e.metaKey) {
         e.preventDefault()
         pick(list[Math.min(active, list.length - 1)])
         return
       }
 
-      if (e.key === 'Escape' && q) {
+      if (e.key === ESCAPE && q) {
         e.preventDefault()
         e.stopPropagation()
         setDismissed(q.start)
@@ -68,7 +69,7 @@ export function MentionBox({
       }
     }
 
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === ENTER && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       onSubmit()
     }

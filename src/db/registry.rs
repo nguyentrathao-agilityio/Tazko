@@ -88,9 +88,7 @@ impl Databases {
     }
 
     pub fn forget(&self, slug: &str) {
-        if let Some(db) = self.tenants.lock().unwrap().remove(slug) {
-            db.close();
-        }
+        self.retire(slug, || ());
     }
 
     pub fn close(&self) {

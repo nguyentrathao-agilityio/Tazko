@@ -3,8 +3,9 @@ import type { Me } from '@/api'
 import { t, type MessageKey } from '@/i18n'
 import { Icon, type IconName } from '@/ui/Icon'
 import { Link, type Go } from '@/ui/Link'
-import { Avatar} from '@/ui/people'
+import { Avatar } from '@/ui/people'
 import { displayName } from '@/ui/names'
+import { companyRoute } from '@/paths'
 
 const sections: [string, IconName, MessageKey][] = [
   ['/admin/companies', 'building', 'rail.companies'],
@@ -13,6 +14,18 @@ const sections: [string, IconName, MessageKey][] = [
   ['/admin/audit', 'log', 'rail.audit'],
   ['/admin/server', 'server', 'rail.server'],
 ]
+
+function Who({ name, role }: { name: string; role: string }) {
+  return (
+    <>
+      <Avatar name={name} />
+      <div>
+        <b>{name}</b>
+        <small>{role}</small>
+      </div>
+    </>
+  )
+}
 
 export function AdminShell({
   me,
@@ -28,6 +41,7 @@ export function AdminShell({
   children: ReactNode
 }) {
   const name = displayName(me.name, me.email)
+  const home = me.companies[0]
   return (
     <div className="shell">
       <aside className="rail">
@@ -45,23 +59,13 @@ export function AdminShell({
           ))}
         </nav>
         <div className="grow" />
-        {me.companies[0] ? (
-          <Link to={`/c/${me.companies[0].slug}/me`} go={go} className="nav me">
-            <Avatar name={name} />
-            <div>
-              <b>{name}</b>
-              <small>
-                {t('rail.superAdmin')} · {t('settings.title')}
-              </small>
-            </div>
+        {home ? (
+          <Link to={`${companyRoute(home.slug)}/me`} go={go} className="nav me">
+            <Who name={name} role={`${t('rail.superAdmin')} · ${t('settings.title')}`} />
           </Link>
         ) : (
           <div className="nav me">
-            <Avatar name={name} />
-            <div>
-              <b>{name}</b>
-              <small>{t('rail.superAdmin')}</small>
-            </div>
+            <Who name={name} role={t('rail.superAdmin')} />
           </div>
         )}
         <button type="button" className="nav" onClick={onSignOut}>

@@ -64,12 +64,7 @@ impl Hub {
             }
         }
         let mut list: Vec<Viewer> = seen.into_values().collect();
-        list.sort_by(|a, b| {
-            a.name
-                .to_lowercase()
-                .cmp(&b.name.to_lowercase())
-                .then(a.id.cmp(&b.id))
-        });
+        list.sort_by_cached_key(|v| (v.name.to_lowercase(), v.id));
         list
     }
 }

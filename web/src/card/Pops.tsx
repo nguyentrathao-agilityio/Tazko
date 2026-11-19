@@ -166,17 +166,18 @@ export function LabelsPop({
   )
 }
 
+const pad = (n: number) => String(n).padStart(2, '0')
+
 function toDateInput(unix: number | null) {
   if (!unix) return ''
   const d = new Date(unix * 1000)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 function toTimeInput(unix: number | null) {
   if (!unix) return '12:00'
   const d = new Date(unix * 1000)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function fromInputs(date: string, time: string): number | null {
