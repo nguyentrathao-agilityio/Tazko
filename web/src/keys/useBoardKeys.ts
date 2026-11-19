@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CardData, ListData } from '@/board/types'
 import { isTyping } from '@/ui/typing'
+import { ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ENTER, ESCAPE } from '@/keys/keyNames'
 
 export type KeyActions = {
   open: (card: CardData) => void
@@ -16,6 +17,14 @@ export type KeyActions = {
   leaveZen: () => boolean
   goToCard: (card: CardData) => void
 }
+
+type Move = [number, number]
+type PopKind = Parameters<KeyActions['pop']>[0]
+
+const arrowMoves: Record<string, Move> = { [ARROW_DOWN]: [0, 1], [ARROW_UP]: [0, -1], [ARROW_LEFT]: [-1, 0], [ARROW_RIGHT]: [1, 0] }
+const letterMoves: Record<string, Move> = { j: [0, 1], k: [0, -1], h: [-1, 0], l: [1, 0] }
+const letterAndArrowMoves: Record<string, Move> = { ...letterMoves, ...arrowMoves }
+const popKeys: Record<string, PopKind> = { a: 'members', d: 'dates', t: 'labels', m: 'move' }
 
 type Opts = { lists: ListData[]; edit: boolean; cardOpen: number | null; zen: boolean; actions: KeyActions }
 
@@ -92,9 +101,7 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         return
       }
 
-      const arrowKeys: Record<string, number[]> = { ArrowDown: [0, 1], ArrowUp: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }
-      const arrows: Record<string, number[]> = s.zen ? arrowKeys : {}
-      const moves: Record<string, number[]> = { j: [0, 1], k: [0, -1], h: [-1, 0], l: [1, 0], ...arrows }
+      const moves = s.zen ? letterAndArrowMoves : letterMoves
       const move = moves[lower]
 
       if (s.cardOpen) {
@@ -106,8 +113,7 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         return
       }
 
-      const boardKeys: Record<string, number[]> = s.selected !== null ? { ...moves, ...arrowKeys } : moves
-      const nav = boardKeys[lower]
+      const nav = (s.selected !== null ? letterAndArrowMoves : moves)[lower]
       if (nav) {
         handled()
         const next = step(s.lists, s.selected ?? hover.current, nav[0], nav[1])
@@ -118,7 +124,7 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         return
       }
 
-      if (key === 'Escape') {
+      if (key === ESCAPE) {
         if (s.selected !== null) {
           handled()
           setSelected(null)
@@ -145,7 +151,7 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
 
       const card = target()
       if (!card) return
-      if (key === 'Enter') {
+      if (key === ENTER) {
         const active = document.activeElement
         if (active && active !== document.body && !active.classList.contains('cd')) return
         handled()
@@ -164,9 +170,9 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         handled()
         s.actions.archive(card)
         setSelected(null)
-      } else if (lower === 'a' || lower === 'd' || lower === 't' || lower === 'm') {
+      } else if (Object.hasOwn(popKeys, lower)) {
         handled()
-        s.actions.pop(lower === 'a' ? 'members' : lower === 'd' ? 'dates' : lower === 't' ? 'labels' : 'move', card)
+        s.actions.pop(popKeys[lower], card)
       } else if (/^[1-8]$/.test(key)) {
         handled()
         s.actions.label(card, Number(key) - 1)

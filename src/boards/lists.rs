@@ -30,10 +30,6 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/lists/{list}/copy"), post(copy))
 }
 
-pub fn copy_cards(tx: &Connection, from: i64, to: i64) -> rusqlite::Result<()> {
-    crate::cards::copy_cards(tx, from, to, None)
-}
-
 fn title(raw: &str) -> Result<String, ApiError> {
     validate::name(raw).ok_or_else(|| bad("enter a list title"))
 }
@@ -321,7 +317,7 @@ async fn copy(
                 params![id, title, pos],
             )?;
             let new = tx.last_insert_rowid();
-            copy_cards(&tx, list, new)?;
+            crate::cards::copy_cards(&tx, list, new, None)?;
             events::record(
                 &tx,
                 by,

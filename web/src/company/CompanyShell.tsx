@@ -7,6 +7,8 @@ import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { useToast } from '@/ui/toast'
 import { companyRoleLabel, isOwner } from '@/roles'
+import { ESCAPE } from '@/keys/keyNames'
+import { companyRoute } from '@/paths'
 
 function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
   const [open, setOpen] = useState(false)
@@ -19,7 +21,7 @@ function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
       if (!box.current?.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === ESCAPE) setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
@@ -49,7 +51,7 @@ function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
       {open && (
         <div className="menu" role="menu">
           {me.companies.map((c) => (
-            <button key={c.slug} type="button" role="menuitem" className="item" onClick={() => pick(`/c/${c.slug}`, c.slug === company.slug ? undefined : c.name)}>
+            <button key={c.slug} type="button" role="menuitem" className="item" onClick={() => pick(companyRoute(c.slug), c.slug === company.slug ? undefined : c.name)}>
               <Avatar name={c.name} square />
               {c.name}
               {c.slug === company.slug && (
@@ -90,7 +92,7 @@ export function CompanyShell({
   children: ReactNode
 }) {
   const name = displayName(me.name, me.email)
-  const base = `/c/${company.slug}`
+  const base = companyRoute(company.slug)
   const owner = isOwner(company.role)
 
   return (

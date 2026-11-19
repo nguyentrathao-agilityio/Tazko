@@ -1,3 +1,5 @@
+import { boardApiOf } from '@/paths'
+
 export const backgrounds: Record<string, string> = {
   dusk: 'linear-gradient(135deg,#4b4fd8,#8b5cf6 60%,#c084fc)',
   sea: 'linear-gradient(135deg,#0ea5a4,#2563eb)',
@@ -24,5 +26,5 @@ export function background(name: string, board?: string): string {
 
 export function boardApi(board: number): string | undefined {
   const m = /^\/c\/([a-z0-9-]+)(\/|$)/.exec(window.location.pathname)
-  return m ? `/api/v1/c/${m[1]}/boards/${board}` : undefined
+  return m ? boardApiOf(m[1], board) : undefined
 }

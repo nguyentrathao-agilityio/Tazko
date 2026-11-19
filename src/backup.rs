@@ -5,10 +5,10 @@ use std::time::Duration;
 
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::config::DataLayout;
 use crate::db::{CONTROL, Migrations, TENANT, schema_version, valid_slug};
+use crate::files::store;
 use crate::session::now;
 
 pub const DEFAULT_KEEP_DAYS: i64 = 30;
@@ -39,6 +39,20 @@ pub struct CheckReport {
     pub databases: usize,
     pub files: usize,
     pub problems: Vec<String>,
+}
+
+impl Status {
+    fn failed(at: i64) -> Self {
+        Status {
+            at,
+            ok: false,
+            snapshot: None,
+            databases: 0,
+            files: 0,
+            bytes: 0,
+            problems: Vec::new(),
+        }
+    }
 }
 
 impl CheckReport {
@@ -105,9 +119,10 @@ fn copy_tree(from: &Path, to: &Path, files: &mut usize, bytes: &mut u64) -> io::
     for entry in fs::read_dir(from)? {
         let entry = entry?;
         let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
             copy_tree(&entry.path(), &target, files, bytes)?;
-        } else if entry.file_type()?.is_file() {
+        } else if kind.is_file() {
             *bytes += fs::copy(entry.path(), &target)?;
             *files += 1;
         }
@@ -328,13 +343,6 @@ fn check_db(path: &Path, migrations: &Migrations, problems: &mut Vec<String>) {
     }
 }
 
-fn is_hash_name(name: &str) -> bool {
-    name.len() == 64
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-}
-
 pub fn check(data: &Path) -> CheckReport {
     let layout = DataLayout::new(data);
     let mut report = CheckReport::default();
@@ -373,7 +381,7 @@ pub fn check(data: &Path) -> CheckReport {
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    if !is_hash_name(&name) {
+                    if !store::valid_hash(&name) {
                         report
                             .problems
                             .push(format!("{}: file name is not a content hash", f.display()));
@@ -382,11 +390,7 @@ pub fn check(data: &Path) -> CheckReport {
 
                     match fs::read(&f) {
                         Ok(bytes) => {
-                            let hash: String = Sha256::digest(&bytes)
-                                .iter()
-                                .map(|b| format!("{b:02x}"))
-                                .collect();
-                            if hash != name {
+                            if store::hash(&bytes) != name {
                                 report.problems.push(format!(
                                     "{}: content does not match its hash",
                                     f.display()
@@ -427,15 +431,7 @@ pub fn read_status(data: &Path, kind: &str) -> Option<Status> {
 
 pub fn run_backup(data: &Path, to: &Path, keep_days: i64) -> Status {
     let at = now();
-    let mut status = Status {
-        at,
-        ok: false,
-        snapshot: None,
-        databases: 0,
-        files: 0,
-        bytes: 0,
-        problems: Vec::new(),
-    };
+    let mut status = Status::failed(at);
     match snapshot(data, to, at) {
         Ok((path, manifest)) => {
             status.snapshot = path.file_name().map(|n| n.to_string_lossy().to_string());
@@ -458,15 +454,7 @@ pub fn run_backup(data: &Path, to: &Path, keep_days: i64) -> Status {
 }
 
 pub fn run_restore_test(from: &Path, scratch: &Path) -> Status {
-    let mut status = Status {
-        at: now(),
-        ok: false,
-        snapshot: None,
-        databases: 0,
-        files: 0,
-        bytes: 0,
-        problems: Vec::new(),
-    };
+    let mut status = Status::failed(now());
     let dir = match tempfile::Builder::new()
         .prefix("tazko-restore-test-")
         .tempdir_in(scratch)

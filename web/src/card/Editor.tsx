@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
+import { ESCAPE, ENTER } from '@/keys/keyNames'
 
 export type DescriptionSave = { description_html: string } | { description_markdown: string }
 
@@ -40,12 +41,12 @@ export function Editor({ initial, onSave, onCancel }: { initial: string; onSave:
   }
 
   const key = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    if (e.key === ENTER && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
       save()
     }
 
-    if (e.key === 'Escape') {
+    if (e.key === ESCAPE) {
       e.stopPropagation()
       onCancel()
     }

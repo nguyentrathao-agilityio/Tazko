@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api } from '@/http'
+import { ME_API } from '@/paths'
 
 export type Settings = {
   job_title: string
@@ -68,7 +69,7 @@ export async function saveSettings(change: Partial<Settings>): Promise<void> {
   current = { ...current, ...change }
   emit()
   try {
-    const saved = await api<Settings>('PATCH', '/api/v1/me/settings', change)
+    const saved = await api<Settings>('PATCH', `${ME_API}/settings`, change)
     if (saved) {
       current = { ...current, ...saved }
       emit()

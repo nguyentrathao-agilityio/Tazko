@@ -15,7 +15,7 @@ use crate::company::CompanyOwner;
 use crate::db::valid_slug;
 use crate::error::{ApiError, bad};
 use crate::projects::{Act, path_id};
-use crate::session::{SessionUser, hash_token, now};
+use crate::session::{SessionUser, hash_token, now, random_token};
 use crate::state::AppState;
 use crate::tenant::CurrentUser;
 
@@ -23,6 +23,7 @@ pub const RATE_PER_MINUTE: u32 = 120;
 const PERSONAL: &str = "tzk_p_";
 const COMPANY: &str = "tzk_c_";
 const MAX_DAYS: i64 = 366;
+const NOT_YOUR_PROJECTS: &str = "choose projects you belong to";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
@@ -59,8 +60,12 @@ pub struct TokenLimits {
 }
 
 impl TokenLimits {
+    fn other_company(&self, slug: &str) -> bool {
+        self.company.as_deref().is_some_and(|c| c != slug)
+    }
+
     pub fn allows_project(&self, slug: &str, project: i64) -> bool {
-        if self.company.as_deref().is_some_and(|c| c != slug) {
+        if self.other_company(slug) {
             return false;
         }
 
@@ -71,7 +76,7 @@ impl TokenLimits {
     }
 
     pub fn allows_company(&self, slug: &str) -> bool {
-        if self.company.as_deref().is_some_and(|c| c != slug) {
+        if self.other_company(slug) {
             return false;
         }
 
@@ -326,12 +331,6 @@ fn by_session(user: &CurrentUser, headers: &HeaderMap) -> Result<i64, ApiError> 
     Ok(user.0.user_id)
 }
 
-fn secret() -> String {
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).expect("system random source");
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
 #[derive(Deserialize)]
 struct ProjectRef {
     company: String,
@@ -344,6 +343,10 @@ struct NewPersonal {
     scope: String,
     projects: Option<Vec<ProjectRef>>,
     expires_in_days: Option<i64>,
+}
+
+fn parse_scope(raw: &str) -> Result<Scope, ApiError> {
+    Scope::parse(raw).ok_or_else(|| bad("choose read, write or manage"))
 }
 
 fn token_name(raw: &str) -> Result<String, ApiError> {
@@ -415,7 +418,7 @@ async fn create_personal(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let id = by_session(&user, &headers)?;
     let name = token_name(&body.name)?;
-    let scope = Scope::parse(&body.scope).ok_or_else(|| bad("choose read, write or manage"))?;
+    let scope = parse_scope(&body.scope)?;
     let expires = expiry(body.expires_in_days)?;
     let projects = match body.projects {
         None => None,
@@ -427,19 +430,19 @@ async fn create_personal(
         Some(list) => {
             for p in &list {
                 if !valid_slug(&p.company) {
-                    return Err(bad("choose projects you belong to"));
+                    return Err(bad(NOT_YOUR_PROJECTS));
                 }
 
                 let db = state
                     .dbs
                     .tenant(&p.company)
-                    .map_err(|_| bad("choose projects you belong to"))?;
+                    .map_err(|_| bad(NOT_YOUR_PROJECTS))?;
                 let project = p.project;
                 let ok = db
                     .read(move |c| Ok(member_project(c, id, project)?))
                     .await?;
                 if !ok {
-                    return Err(bad("choose projects you belong to"));
+                    return Err(bad(NOT_YOUR_PROJECTS));
                 }
             }
             Some(
@@ -452,7 +455,7 @@ async fn create_personal(
             )
         }
     };
-    let token = format!("{PERSONAL}{}", secret());
+    let token = format!("{PERSONAL}{}", random_token());
     let hash = hash_token(&token);
     let row = state
         .dbs
@@ -534,16 +537,16 @@ async fn create_company(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = by_session(&co.user, &headers)?;
     let name = token_name(&body.name)?;
-    let scope = Scope::parse(&body.scope).ok_or_else(|| bad("choose read, write or manage"))?;
+    let scope = parse_scope(&body.scope)?;
     let expires = expiry(body.expires_in_days)?;
-    let mut projects = body.projects.clone();
+    let mut projects = body.projects;
     projects.sort_unstable();
     projects.dedup();
     if projects.is_empty() {
         return Err(bad("choose at least one project"));
     }
 
-    let token = format!("{COMPANY}{}_{}", co.slug, secret());
+    let token = format!("{COMPANY}{}_{}", co.slug, random_token());
     let hash = hash_token(&token);
     let list = json!(projects).to_string();
     let row = co
@@ -551,7 +554,7 @@ async fn create_company(
         .write(move |c| {
             for p in &projects {
                 if !member_project(c, by, *p)? {
-                    return Ok(Err(bad("choose projects you belong to")));
+                    return Ok(Err(bad(NOT_YOUR_PROJECTS)));
                 }
             }
             c.execute(
@@ -566,24 +569,14 @@ async fn create_company(
             )?))
         })
         .await??;
-    let (org, detail) = (
+    record_token_audit(
+        &state,
+        by,
         co.org_id,
+        "api_token_created",
         json!({ "token": row["id"], "name": row["name"], "scope": row["scope"] }),
-    );
-    state
-        .dbs
-        .control()
-        .write(move |c| {
-            Ok(crate::admin::audit::record(
-                c,
-                Some(by),
-                "api_token_created",
-                Some(org),
-                "token",
-                detail,
-            )?)
-        })
-        .await?;
+    )
+    .await?;
     let mut v = row;
     v["token"] = json!(token);
     Ok((StatusCode::CREATED, Json(v)))
@@ -610,7 +603,24 @@ async fn revoke_company(
         return Err(ApiError::NotFound);
     }
 
-    let org = co.org_id;
+    record_token_audit(
+        &state,
+        by,
+        co.org_id,
+        "api_token_revoked",
+        json!({ "token": token }),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn record_token_audit(
+    state: &AppState,
+    by: i64,
+    org: i64,
+    action: &'static str,
+    detail: Value,
+) -> Result<(), ApiError> {
     state
         .dbs
         .control()
@@ -618,14 +628,14 @@ async fn revoke_company(
             Ok(crate::admin::audit::record(
                 c,
                 Some(by),
-                "api_token_revoked",
+                action,
                 Some(org),
                 "token",
-                json!({ "token": token }),
+                detail,
             )?)
         })
         .await?;
-    Ok(StatusCode::NO_CONTENT)
+    Ok(())
 }
 
 #[cfg(test)]

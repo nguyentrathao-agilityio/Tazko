@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { t, type MessageKey } from '@/i18n'
 import { Icon } from '@/ui/Icon'
+import { ESCAPE } from '@/keys/keyNames'
 
 const keys: [string, MessageKey][] = [
   ['` ?', 'keys.help'],
@@ -29,7 +30,7 @@ const keys: [string, MessageKey][] = [
 export function Shortcuts({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === '`' || e.key === '?') {
+      if (e.key === ESCAPE || e.key === '`' || e.key === '?') {
         e.preventDefault()
         e.stopPropagation()
         onClose()

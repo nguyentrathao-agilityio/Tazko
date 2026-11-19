@@ -20,7 +20,7 @@ use crate::state::AppState;
 use hub::Viewer;
 
 pub const CATCH_UP_LIMIT: i64 = 500;
-const PING_EVERY: Duration = Duration::from_secs(25);
+pub(crate) const PING_EVERY: Duration = Duration::from_secs(25);
 
 pub fn routes() -> Router<AppState> {
     Router::new().route(
@@ -54,6 +54,29 @@ pub fn origin_allowed(headers: &HeaderMap, public_url: &str) -> bool {
     !host.is_empty() && bare.eq_ignore_ascii_case(host)
 }
 
+pub(crate) fn upgrade_session(headers: &HeaderMap, public_url: &str) -> Result<String, ApiError> {
+    if !origin_allowed(headers, public_url) {
+        return Err(ApiError::Forbidden);
+    }
+
+    crate::session::cookie_token(headers)
+        .map(|t| crate::session::hash_token(&t))
+        .ok_or(ApiError::SignIn)
+}
+
+pub(crate) async fn still_signed_in(
+    control: &Database,
+    session: &str,
+    org: i64,
+    user: i64,
+) -> bool {
+    let session = session.to_string();
+    control
+        .read(move |c| Ok(signed_in(c, &session, org, user)?))
+        .await
+        .unwrap_or(false)
+}
+
 async fn live(
     State(state): State<AppState>,
     board: Board,
@@ -61,13 +84,7 @@ async fn live(
     Query(q): Query<After>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    if !origin_allowed(&headers, &state.settings.public_url) {
-        return Err(ApiError::Forbidden);
-    }
-
-    let session = crate::session::cookie_token(&headers)
-        .map(|t| crate::session::hash_token(&t))
-        .ok_or(ApiError::SignIn)?;
+    let session = upgrade_session(&headers, &state.settings.public_url)?;
     Ok(ws.on_upgrade(move |socket| run(state, board, session, q.after, socket)))
 }
 
@@ -124,11 +141,15 @@ pub fn last_event(c: &Connection) -> rusqlite::Result<i64> {
     c.query_row("SELECT coalesce(max(id), 0) FROM events", [], |r| r.get(0))
 }
 
-async fn send(socket: &mut WebSocket, v: Value) -> bool {
+pub(crate) async fn send(socket: &mut WebSocket, v: Value) -> bool {
     socket
         .send(Message::Text(Utf8Bytes::from(v.to_string())))
         .await
         .is_ok()
+}
+
+pub(crate) async fn say_signed_out(socket: &mut WebSocket) {
+    let _ = send(socket, json!({ "type": "closed", "reason": "signed out" })).await;
 }
 
 enum Step {
@@ -176,15 +197,7 @@ async fn run(
     };
     let org = board.project.company.org_id;
     let control = state.dbs.control().clone();
-    let still_in = move || {
-        let (control, session) = (control.clone(), session.clone());
-        async move {
-            control
-                .read(move |c| Ok(signed_in(c, &session, org, user)?))
-                .await
-                .unwrap_or(false)
-        }
-    };
+    let still_in = || still_signed_in(&control, &session, org, user);
     let mut changes = db.subscribe();
     let (conn, mut presence) = state.live.join(&slug, id, viewer);
 
@@ -225,7 +238,7 @@ async fn run(
                         break;
                     }
                     if !still_in().await {
-                        let _ = send(&mut socket, json!({ "type": "closed", "reason": "signed out" })).await;
+                        say_signed_out(&mut socket).await;
                         break;
                     }
                     match fetch(&db, id, user, last).await {
@@ -268,10 +281,10 @@ async fn run(
                     }
                 }
                 _ = ping.tick() => {
-                if !still_in().await {
-                    let _ = send(&mut socket, json!({ "type": "closed", "reason": "signed out" })).await;
-                    break;
-                }
+                    if !still_in().await {
+                        say_signed_out(&mut socket).await;
+                        break;
+                    }
                     if socket.send(Message::Ping(Default::default())).await.is_err() {
                         break;
                     }

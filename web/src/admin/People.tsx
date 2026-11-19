@@ -1,18 +1,21 @@
 import { useState } from 'react'
-import { api, HttpError } from '@/http'
+import { api } from '@/http'
 import { t } from '@/i18n'
 import { when } from '@/ui/format'
+import { ErrorNote } from '@/ui/ErrorNote'
 import { AccountPill, Person } from '@/ui/people'
 import { displayName } from '@/ui/names'
 import { PageHead } from '@/ui/PageHead'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { PersonRow } from '@/admin/types'
+import { useRun } from '@/projects/useRun'
+import { ADMIN_API } from '@/paths'
 
 export function People() {
-  const { data, error, reload } = useLoad(() => api<{ people: PersonRow[] }>('GET', '/api/v1/admin/people'), 'people')
+  const { data, error, reload } = useLoad(() => api<{ people: PersonRow[] }>('GET', `${ADMIN_API}/people`), 'people')
   const [q, setQ] = useState('')
-  const [problem, setProblem] = useState<string | null>(null)
+  const { error: problem, run } = useRun(reload)
   const toast = useToast()
   const needle = q.trim().toLowerCase()
   const list = (data?.people ?? []).filter(
@@ -20,14 +23,7 @@ export function People() {
   )
 
   const change = async (p: PersonRow, body: Partial<Pick<PersonRow, 'is_super_admin' | 'disabled'>>, undoable = true) => {
-    setProblem(null)
-    try {
-      await api('PATCH', `/api/v1/admin/people/${p.id}`, body)
-      reload()
-    } catch (e) {
-      setProblem(e instanceof HttpError ? e.message : String(e))
-      return
-    }
+    if (!(await run(() => api('PATCH', `${ADMIN_API}/people/${p.id}`, body)))) return
 
     const name = displayName(p.name, p.email)
     const message =
@@ -45,11 +41,7 @@ export function People() {
           <input type="search" placeholder={t('people.search')} aria-label={t('people.search')} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </PageHead>
-      {(error || problem) && (
-        <p className="error" role="alert">
-          {error ?? problem}
-        </p>
-      )}
+      <ErrorNote message={error ?? problem} />
       <div className="tw">
         <table>
           <thead>

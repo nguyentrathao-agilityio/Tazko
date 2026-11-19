@@ -71,15 +71,17 @@ const FORMATS: &[Format] = &[
     },
 ];
 
+const PLAIN: &str = "text/plain; charset=utf-8";
+
 const TEXT: &[(&str, &str)] = &[
-    ("txt", "text/plain; charset=utf-8"),
-    ("md", "text/plain; charset=utf-8"),
-    ("log", "text/plain; charset=utf-8"),
+    ("txt", PLAIN),
+    ("md", PLAIN),
+    ("log", PLAIN),
     ("csv", "text/csv; charset=utf-8"),
     ("tsv", "text/tab-separated-values; charset=utf-8"),
     ("json", "application/json"),
-    ("yaml", "text/plain; charset=utf-8"),
-    ("yml", "text/plain; charset=utf-8"),
+    ("yaml", PLAIN),
+    ("yml", PLAIN),
 ];
 
 const IMAGE_NAMES: &[&str] = &[
@@ -112,18 +114,14 @@ pub fn check(name: &str, bytes: &[u8]) -> Result<Kind, String> {
 
     if let Some(f) = FORMATS.iter().find(|f| (f.magic)(bytes)) {
         return match ext {
-            None => Ok(Kind {
-                mime: f.mime,
-                image: f.image,
-            }),
-            Some(e) if f.exts.contains(&e) => Ok(Kind {
-                mime: f.mime,
-                image: f.image,
-            }),
-            Some(e) => Err(format!(
+            Some(e) if !f.exts.contains(&e) => Err(format!(
                 "this file is named .{e} but it is really {}; rename it or upload another file",
                 f.what
             )),
+            _ => Ok(Kind {
+                mime: f.mime,
+                image: f.image,
+            }),
         };
     }
 
@@ -137,7 +135,7 @@ pub fn check(name: &str, bytes: &[u8]) -> Result<Kind, String> {
             None => Err(format!(".{e} files cannot be uploaded")),
         },
         None if is_text(bytes) => Ok(Kind {
-            mime: "text/plain; charset=utf-8",
+            mime: PLAIN,
             image: false,
         }),
         None => Err("this type of file cannot be uploaded".into()),

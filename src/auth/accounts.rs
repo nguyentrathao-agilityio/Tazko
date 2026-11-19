@@ -27,7 +27,7 @@ impl Refusal {
 pub fn sign_in(c: &mut Connection, claims: &Claims) -> DbResult<Result<i64, Refusal>> {
     let email = claims
         .email
-        .clone()
+        .as_deref()
         .unwrap_or_default()
         .trim()
         .to_lowercase();

@@ -3,6 +3,7 @@ import { api } from '@/http'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import type { FieldDef, FieldType, FieldValue } from '@/card/fieldTypes'
+import { ENTER } from '@/keys/keyNames'
 
 type Run = (fn: () => Promise<unknown>) => Promise<boolean>
 
@@ -62,7 +63,7 @@ export function FieldsSection({
                   if (next !== String(v ?? '')) set(d.id, next === '' ? null : d.type === 'number' ? Number(next) : next)
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === ENTER) e.currentTarget.blur()
                 }}
               />
             )

@@ -1,6 +1,7 @@
 import { ACCEPT_JSON, CSRF_HEADER, setCsrf } from '@/http'
 import { initSettings } from '@/settings/store'
 import type { CompanyRole } from '@/roles'
+import { ME_API } from '@/paths'
 
 export type Company = { slug: string; name: string; role: CompanyRole }
 
@@ -17,7 +18,7 @@ export type Me = {
 export class SignInNeeded extends Error {}
 
 export async function getMe(signal?: AbortSignal): Promise<Me> {
-  const res = await fetch('/api/v1/me', { signal, headers: ACCEPT_JSON })
+  const res = await fetch(ME_API, { signal, headers: ACCEPT_JSON })
   if (res.status === 401) throw new SignInNeeded()
   if (!res.ok) throw new Error(`me ${res.status}`)
   const me = (await res.json()) as Me

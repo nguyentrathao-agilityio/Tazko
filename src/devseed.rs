@@ -257,26 +257,44 @@ fn roadmap() -> Vec<Card> {
     ]
 }
 
-async fn lists_of(client: &Client, board: i64) -> Result<Vec<(i64, String)>, String> {
-    let v = client
-        .call(
-            Method::GET,
-            &format!("/api/v1/c/{SLUG}/boards/{board}"),
-            None,
-        )
-        .await?;
-    Ok(v["lists"]
+fn board_path(board: i64) -> String {
+    format!("/api/v1/c/{SLUG}/boards/{board}")
+}
+
+fn id_and_text(items: &Value, text: &str) -> Vec<(i64, String)> {
+    items
         .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
+        .into_iter()
+        .flatten()
         .map(|l| {
             (
                 l["id"].as_i64().unwrap_or(0),
-                l["title"].as_str().unwrap_or("").to_string(),
+                l[text].as_str().unwrap_or("").to_string(),
             )
         })
-        .collect())
+        .collect()
+}
+
+async fn lists_of(client: &Client, board: i64) -> Result<Vec<(i64, String)>, String> {
+    let v = client.call(Method::GET, &board_path(board), None).await?;
+    Ok(id_and_text(&v["lists"], "title"))
+}
+
+async fn create_board(
+    client: &Client,
+    project: i64,
+    name: &str,
+    background: &str,
+) -> Result<i64, String> {
+    client
+        .call(
+            Method::POST,
+            &format!("/api/v1/c/{SLUG}/projects/{project}/boards"),
+            Some(json!({ "name": name, "background": background })),
+        )
+        .await?["id"]
+        .as_i64()
+        .ok_or_else(|| "no board id".into())
 }
 
 async fn shape_lists(
@@ -284,7 +302,7 @@ async fn shape_lists(
     board: i64,
     wanted: &[&str],
 ) -> Result<Vec<(i64, String)>, String> {
-    let b = format!("/api/v1/c/{SLUG}/boards/{board}");
+    let b = board_path(board);
     let existing = lists_of(client, board).await?;
     for (i, (id, _)) in existing.iter().enumerate() {
         if let Some(title) = wanted.get(i) {
@@ -316,20 +334,9 @@ async fn fill(
     cards: Vec<Card>,
     me: i64,
 ) -> Result<(), String> {
-    let b = format!("/api/v1/c/{SLUG}/boards/{board}");
+    let b = board_path(board);
     let v = client.call(Method::GET, &b, None).await?;
-    let labels: Vec<(i64, String)> = v["labels"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .map(|l| {
-            (
-                l["id"].as_i64().unwrap_or(0),
-                l["name"].as_str().unwrap_or("").to_string(),
-            )
-        })
-        .collect();
+    let labels = id_and_text(&v["labels"], "name");
     let today = now();
     for c in cards {
         let list = lists
@@ -508,15 +515,7 @@ async fn run(client: &Client, me: i64) -> Result<Seeded, String> {
         )
         .await?;
 
-    let board = client
-        .call(
-            Method::POST,
-            &format!("{c}/projects/{project}/boards"),
-            Some(json!({ "name": "Sprint 12", "background": "dusk" })),
-        )
-        .await?["id"]
-        .as_i64()
-        .ok_or("no board id")?;
+    let board = create_board(client, project, "Sprint 12", "dusk").await?;
     let lists = shape_lists(
         client,
         board,
@@ -539,22 +538,13 @@ async fn run(client: &Client, me: i64) -> Result<Seeded, String> {
         )
         .await?;
 
-    let roadmap = client
-        .call(
-            Method::POST,
-            &format!("{c}/projects/{project}/boards"),
-            Some(json!({ "name": "Roadmap", "background": "sea" })),
-        )
-        .await?["id"]
-        .as_i64()
-        .ok_or("no board id")?;
-    let lists = shape_lists(client, roadmap, &["Now", "Next", "Later"]).await?;
-    fill(client, roadmap, &lists, roadmap_cards(), me).await?;
-    Ok(Seeded::Created { board, roadmap })
-}
-
-fn roadmap_cards() -> Vec<Card> {
-    roadmap()
+    let roadmap_board = create_board(client, project, "Roadmap", "sea").await?;
+    let lists = shape_lists(client, roadmap_board, &["Now", "Next", "Later"]).await?;
+    fill(client, roadmap_board, &lists, roadmap(), me).await?;
+    Ok(Seeded::Created {
+        board,
+        roadmap: roadmap_board,
+    })
 }
 
 #[cfg(test)]

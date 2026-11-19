@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { api, HttpError } from '@/http'
+import { api, errorMessage } from '@/http'
 import { t } from '@/i18n'
+import { ErrorNote } from '@/ui/ErrorNote'
 import { Link, type Go } from '@/ui/Link'
 import { Modal } from '@/ui/Modal'
 import { Avatar } from '@/ui/people'
@@ -9,31 +10,27 @@ import { useLoad } from '@/ui/useLoad'
 import { StatusPill } from '@/admin/Companies'
 import { MembersPanel } from '@/admin/MembersPanel'
 import type { CompanyDetail as Detail, ProjectRow } from '@/admin/types'
+import { useRun } from '@/projects/useRun'
+import { ADMIN_API } from '@/paths'
 
 const GB = 1024 ** 3
 type Tab = 'members' | 'projects' | 'settings'
 
 export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
-  const base = `/api/v1/admin/companies/${encodeURIComponent(slug)}`
+  const base = `${ADMIN_API}/companies/${encodeURIComponent(slug)}`
   const { data: c, error, reload } = useLoad(() => api<Detail>('GET', base), base)
   const [tab, setTab] = useState<Tab>('members')
-  const [problem, setProblem] = useState<string | null>(null)
+  const { error: problem, run } = useRun(reload)
   const toast = useToast()
 
   const status = async (to: 'suspend' | 'resume', undoable = true) => {
-    setProblem(null)
-    try {
-      await api('POST', `${base}/${to}`)
-      reload()
-      const name = c?.name ?? slug
-      const back = to === 'suspend' ? 'resume' : 'suspend'
-      toast(t(to === 'suspend' ? 'toast.suspended' : 'toast.resumed', { company: name }), undoable ? () => status(back, false) : undefined)
-    } catch (e) {
-      setProblem(e instanceof HttpError ? e.message : String(e))
-    }
+    if (!(await run(() => api('POST', `${base}/${to}`)))) return
+    const name = c?.name ?? slug
+    const back = to === 'suspend' ? 'resume' : 'suspend'
+    toast(t(to === 'suspend' ? 'toast.suspended' : 'toast.resumed', { company: name }), undoable ? () => status(back, false) : undefined)
   }
 
-  if (error) return <p className="error" role="alert">{error}</p>
+  if (error) return <ErrorNote message={error} />
   if (!c) return <p className="muted">{t('common.loading')}</p>
 
   return (
@@ -64,7 +61,7 @@ export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
           </button>
         )}
       </div>
-      {problem && <p className="error" role="alert">{problem}</p>}
+      <ErrorNote message={problem} />
       <div className="tabs" role="tablist">
         {(['members', 'projects', 'settings'] as Tab[]).map((k) => (
           <button
@@ -86,7 +83,7 @@ export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
           </div>
           <MembersPanel
             base={base}
-            revokePath={(id) => `/api/v1/admin/invites/${id}`}
+            revokePath={(id) => `${ADMIN_API}/invites/${id}`}
             members={c.members}
             invites={c.invites}
             onChange={reload}
@@ -94,10 +91,17 @@ export function CompanyDetail({ slug, go }: { slug: string; go: Go }) {
         </>
       )}
       {tab === 'projects' && <ProjectsPanel projects={c.projects} />}
-      {tab === 'settings' && <SettingsPanel company={c} base={base} onSaved={reload} onDeleted={() => {
+      {tab === 'settings' && (
+        <SettingsPanel
+          company={c}
+          base={base}
+          onSaved={reload}
+          onDeleted={() => {
             toast(t('toast.companyDeleted', { company: c.name }))
             go('/admin/companies')
-          }} />}
+          }}
+        />
+      )}
     </>
   )
 }
@@ -168,7 +172,7 @@ function SettingsPanel({
       toast(t('toast.saved'))
       onSaved()
     } catch (err) {
-      setMsg(err instanceof HttpError ? err.message : String(err))
+      setMsg(errorMessage(err))
     }
   }
 
@@ -234,7 +238,7 @@ function DeleteCompany({
       await api('DELETE', base, { confirm: typed })
       onDeleted()
     } catch (e) {
-      setError(e instanceof HttpError ? e.message : String(e))
+      setError(errorMessage(e))
     }
   }
 
@@ -250,7 +254,7 @@ function DeleteCompany({
         </label>
         <input type="text" id="d-t" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
+      <ErrorNote message={error} />
       <div className="acts">
         <button type="button" className="btn" onClick={onClose}>
           {t('common.cancel')}

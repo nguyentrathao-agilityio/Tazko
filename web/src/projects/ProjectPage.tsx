@@ -11,6 +11,7 @@ import { ProjectMembers } from '@/projects/ProjectMembers'
 import { ProjectSettings } from '@/projects/ProjectSettings'
 import type { ProjectView } from '@/projects/types'
 import { isOwner } from '@/roles'
+import { companyRoute, projectApi } from '@/paths'
 
 export type ProjectTab = 'boards' | 'members' | 'settings'
 
@@ -19,14 +20,15 @@ export function RoleChip({ role }: { role: ProjectView['role'] }) {
 }
 
 export function ProjectPage({ company, id, tab, go }: { company: Company; id: number; tab: ProjectTab; go: Go }) {
-  const path = `/api/v1/c/${company.slug}/projects/${id}`
+  const path = projectApi(company.slug, id)
+  const home = companyRoute(company.slug)
   const { data, error, reload } = useLoad(() => api<ProjectView>('GET', path), path)
-  const base = `/c/${company.slug}/p/${id}`
+  const base = `${home}/p/${id}`
 
   if (error)
     return (
       <EmptyState title={t('project.missingTitle')} body={t('project.missingBody')}>
-        <Link to={`/c/${company.slug}`} go={go} className="btn">
+        <Link to={home} go={go} className="btn">
           {t('project.back')}
         </Link>
       </EmptyState>
@@ -42,7 +44,7 @@ export function ProjectPage({ company, id, tab, go }: { company: Company; id: nu
   return (
     <>
       <div className="crumb">
-        <Link to={`/c/${company.slug}`} go={go}>
+        <Link to={home} go={go}>
           {t('nav.projects')}
         </Link>{' '}
         / {data.name}

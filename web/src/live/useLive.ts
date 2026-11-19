@@ -14,10 +14,18 @@ type Msg =
 
 const delays = [500, 1000, 2000, 4000, 5000]
 
-export function liveUrl(slug: string, board: number, after: number | null): string {
+export function socketUrl(path: string): string {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${scheme}://${window.location.host}${path}`
+}
+
+export function keepAlive(ws: WebSocket): number {
+  return window.setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('ping'), 30_000)
+}
+
+export function liveUrl(slug: string, board: number, after: number | null): string {
   const q = after === null ? '' : `?after=${after}`
-  return `${scheme}://${window.location.host}/api/v1/c/${slug}/boards/${board}/live${q}`
+  return socketUrl(`/api/v1/c/${slug}/boards/${board}/live${q}`)
 }
 
 export function useLive(slug: string, board: number, start: number | null, onChange: (events: LiveEvent[] | null) => void) {
@@ -84,7 +92,7 @@ export function useLive(slug: string, board: number, start: number | null, onCha
         timer = window.setTimeout(connect, delays[Math.min(attempt++, delays.length - 1)])
       }
       ws.onopen = () => {
-        ping = window.setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('ping'), 30_000)
+        ping = keepAlive(ws)
       }
     }
 

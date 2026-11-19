@@ -5,6 +5,7 @@ import { Icon } from '@/ui/Icon'
 import { ago } from '@/card/look'
 import { extOf, fileSize, fileUrl, shortUrl, shownName, sizeShort, usage } from '@/card/files'
 import type { CardDetail } from '@/card/types'
+import { ENTER } from '@/keys/keyNames'
 
 const SHOWN = 3
 
@@ -43,20 +44,21 @@ export function AttachmentsSection({
       {list.length === 0 && <p className="hint">{t('attach.none')}</p>}
       {shown.map((a) => {
         const isCover = card.cover_image === a.id
-        const href = a.kind === 'link' ? a.url ?? '#' : fileUrl(base, a.id, !a.image)
+        const isLink = a.kind === 'link'
+        const href = isLink ? a.url ?? '#' : fileUrl(base, a.id, !a.image)
         return (
           <div className="atr" key={a.id}>
             <a className="thumb" href={href} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden="true">
-              {a.kind === 'link' ? <Icon name="link" /> : a.image ? <img src={fileUrl(base, a.id)} alt="" loading="lazy" /> : extOf(a.name)}
+              {isLink ? <Icon name="link" /> : a.image ? <img src={fileUrl(base, a.id)} alt="" loading="lazy" /> : extOf(a.name)}
             </a>
             <div className="meta">
-              <b title={a.kind === 'link' ? a.url ?? '' : a.name}>
+              <b title={isLink ? a.url ?? '' : a.name}>
                 <a className="alk" href={href} target="_blank" rel="noopener noreferrer">
                   {shownName(a)}
                 </a>
               </b>
               <small>
-                {a.kind === 'link' ? (a.name.startsWith('http') ? t('attach.link') : shortUrl(a.url ?? '')) : fileSize(a.size)} · {t('attach.added', { when: ago(a.created_at).replace(/^Just/, 'just') })}
+                {isLink ? (a.name.startsWith('http') ? t('attach.link') : shortUrl(a.url ?? '')) : fileSize(a.size)} · {t('attach.added', { when: ago(a.created_at).replace(/^Just/, 'just') })}
               </small>
               {isCover && <span className="pill accent">{t('card.cover')}</span>}
             </div>
@@ -131,12 +133,14 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
   }
 
   const link = () => {
-    if (!/^https?:\/\/\S+$/i.test(url.trim())) {
+    const address = url.trim()
+    const label = name.trim()
+    if (!/^https?:\/\/\S+$/i.test(address)) {
       setError(t('attach.badLink'))
       return
     }
 
-    void send(() => api('POST', `${path}/attachments/link`, { url: url.trim(), name: name.trim() || undefined }), name.trim() || url.trim())
+    void send(() => api('POST', `${path}/attachments/link`, { url: address, name: label || undefined }), label || address)
   }
 
   const max = storage ? sizeShort(storage.max_file) : '10 MB'
@@ -159,11 +163,11 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
       )}
       <div className="field">
         <label htmlFor="at-u">{t('attach.pasteLink')}</label>
-        <input type="text" id="at-u" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && link()} autoFocus />
+        <input type="text" id="at-u" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === ENTER && link()} autoFocus />
       </div>
       <div className="field">
         <label htmlFor="at-n">{t('attach.linkName')}</label>
-        <input type="text" id="at-n" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && link()} />
+        <input type="text" id="at-n" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === ENTER && link()} />
       </div>
       <button type="button" className="btn primary sm" disabled={busy} onClick={link}>
         {t('attach.attachLink')}

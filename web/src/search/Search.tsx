@@ -6,6 +6,7 @@ import type { Go } from '@/ui/Link'
 import { isTyping, openSearchEvent, popoverOpen } from '@/ui/typing'
 import { shortDate } from '@/card/look'
 import { background } from '@/projects/look'
+import { ESCAPE, ENTER, ARROW_UP, ARROW_DOWN } from '@/keys/keyNames'
 
 type Hit = { id: number; title: string; board: { id: number; name: string; background: string }; list: string; due_at: number | null; archived: boolean; project: string }
 type BoardHit = { id: number; name: string; background: string; project: string }
@@ -55,14 +56,15 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
   }, [q, company.slug])
 
   const data = q.trim() && result ? result.data : null
+  const boardBackground = (bg: string, board: number) => background(bg, `/api/v1/c/${company.slug}/boards/${board}`)
   const hits: { key: string; to: string; title: string; sub: string; bg: string }[] = [
-    ...(data?.boards ?? []).map((b) => ({ key: `b${b.id}`, to: `/c/${company.slug}/b/${b.id}`, title: b.name, sub: b.project, bg: background(b.background, `/api/v1/c/${company.slug}/boards/${b.id}`) })),
+    ...(data?.boards ?? []).map((b) => ({ key: `b${b.id}`, to: `/c/${company.slug}/b/${b.id}`, title: b.name, sub: b.project, bg: boardBackground(b.background, b.id) })),
     ...(data?.cards ?? []).map((c) => ({
       key: `c${c.id}`,
       to: `/c/${company.slug}/b/${c.board.id}/c/${c.id}`,
       title: c.title,
       sub: [c.board.name, c.archived ? t('search.archived') : c.list, c.due_at ? t('search.due', { date: shortDate(c.due_at) }) : ''].filter(Boolean).join(' · '),
-      bg: background(c.board.background, `/api/v1/c/${company.slug}/boards/${c.board.id}`),
+      bg: boardBackground(c.board.background, c.board.id),
     })),
   ]
 
@@ -72,22 +74,22 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
   }
 
   const key = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === ESCAPE) {
       e.stopPropagation()
       onClose()
     }
 
-    if (e.key === 'ArrowDown') {
+    if (e.key === ARROW_DOWN) {
       e.preventDefault()
       setOn((i) => Math.min(i + 1, hits.length - 1))
     }
 
-    if (e.key === 'ArrowUp') {
+    if (e.key === ARROW_UP) {
       e.preventDefault()
       setOn((i) => Math.max(i - 1, 0))
     }
 
-    if (e.key === 'Enter' && hits[on]) {
+    if (e.key === ENTER && hits[on]) {
       e.preventDefault()
       pick(hits[on].to)
     }

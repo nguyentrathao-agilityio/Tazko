@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, header};
+use axum::http::HeaderMap;
 use axum::response::{Json, Response};
 use axum::routing::{get, post};
 use rusqlite::{OptionalExtension, params};
@@ -11,9 +11,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::Board;
-use crate::admin::dir_size;
 use crate::api::COMPANY_PREFIX;
-use crate::error::ApiError;
+use crate::error::{ApiError, bad};
 use crate::events;
 use crate::files::{self, kind, store};
 use crate::projects::{Act, path_id};
@@ -55,11 +54,7 @@ async fn upload(
     body: Body,
 ) -> Result<Json<Value>, ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
-    let declared = headers
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok());
-    if declared.is_some_and(|n| n > MAX_BYTES) {
+    if files::declared_length(&headers).is_some_and(|n| n > MAX_BYTES) {
         return Err(too_large());
     }
 
@@ -70,7 +65,7 @@ async fn upload(
             other => other,
         })?;
     if bytes.is_empty() {
-        return Err(ApiError::BadRequest("this file is empty".into()));
+        return Err(bad("this file is empty"));
     }
 
     let name = kind::clean_name(q.name.as_deref().unwrap_or(""));
@@ -86,24 +81,16 @@ async fn upload(
     let (id, at) = (board.id, board.at());
     let size = bytes.len() as i64;
     let mime = found.mime.to_string();
-    let (hash, bytes) = tokio::task::spawn_blocking(move || (store::hash(&bytes), bytes))
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let (hash, bytes) = files::hash_off_thread(bytes).await?;
     let saved = board
         .project
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
-            let stored: bool = tx.query_row(files::STORED, [&hash], |r| r.get(0))?;
-            if !stored && let Some(limit) = limit {
-                let used = dir_size(&dir);
-                if used + bytes.len() as u64 > limit {
-                    return Ok(Err(ApiError::TooLarge(format!(
-                        "this company has used {} of its {} storage; delete old files or ask an admin for more space",
-                        files::size_text(used),
-                        files::size_text(limit)
-                    ))));
-                }
+            if !files::is_stored(&tx, &hash)?
+                && let Some(e) = files::quota_error(&dir, limit, bytes.len() as u64)
+            {
+                return Ok(Err(e));
             }
 
             let written = match store::put(&dir, &hash, &bytes) {
@@ -138,8 +125,7 @@ async fn upload(
             match result.and_then(|v| tx.commit().map(|_| v)) {
                 Ok((background, old)) => {
                     for h in old.iter().filter(|h| **h != hash) {
-                        let still: bool = c.query_row(files::STORED, [h], |r| r.get(0))?;
-                        if !still {
+                        if !files::is_stored(c, h)? {
                             let _ = store::remove(&dir, h);
                         }
                     }
@@ -178,10 +164,6 @@ async fn picture(
         .await?;
     let (hash, mime, name) = found.ok_or(ApiError::NotFound)?;
     let dir = files::org_dir(&state, &board.project.company.slug);
-    let path = store::path_of(&dir, &hash).ok_or(ApiError::NotFound)?;
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .map_err(|_| ApiError::NotFound)?;
+    let bytes = files::read_stored(&dir, &hash).await?;
     Ok(files::file_response(bytes, &mime, &name, true))
 }

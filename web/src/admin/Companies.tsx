@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { api, HttpError } from '@/http'
+import { api, errorMessage } from '@/http'
 import { t } from '@/i18n'
 import { bytes, when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
@@ -7,10 +7,12 @@ import type { Go } from '@/ui/Link'
 import { Modal } from '@/ui/Modal'
 import { Avatar } from '@/ui/people'
 import { EmptyState } from '@/ui/EmptyState'
+import { ErrorNote } from '@/ui/ErrorNote'
 import { PageHead } from '@/ui/PageHead'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import type { CompanyRow } from '@/admin/types'
+import { ADMIN_API } from '@/paths'
 
 export function StatusPill({ status }: { status: string }) {
   return status === 'active' ? (
@@ -35,7 +37,7 @@ export function Storage({ used, limit }: { used: number; limit: number | null })
 }
 
 export function Companies({ go }: { go: Go }) {
-  const { data, error, reload } = useLoad(() => api<{ companies: CompanyRow[] }>('GET', '/api/v1/admin/companies'), 'companies')
+  const { data, error, reload } = useLoad(() => api<{ companies: CompanyRow[] }>('GET', `${ADMIN_API}/companies`), 'companies')
   const [creating, setCreating] = useState(false)
   const toast = useToast()
 
@@ -47,7 +49,7 @@ export function Companies({ go }: { go: Go }) {
           {t('companies.new')}
         </button>
       </PageHead>
-      {error && <p className="error" role="alert">{error}</p>}
+      <ErrorNote message={error} />
       {data && data.companies.length === 0 ? (
         <EmptyState title={t('companies.empty')} />
       ) : (
@@ -122,7 +124,7 @@ function NewCompany({ onClose, onCreated }: { onClose: () => void; onCreated: (s
     const f = new FormData(e.currentTarget)
     setBusy(true)
     try {
-      const res = await api<{ slug: string; name: string }>('POST', '/api/v1/admin/companies', {
+      const res = await api<{ slug: string; name: string }>('POST', `${ADMIN_API}/companies`, {
         name: String(f.get('name') ?? ''),
         slug: String(f.get('slug') ?? '') || undefined,
         owner_email: String(f.get('owner') ?? ''),
@@ -130,7 +132,7 @@ function NewCompany({ onClose, onCreated }: { onClose: () => void; onCreated: (s
       })
       onCreated(res.slug, res.name)
     } catch (err) {
-      setError(err instanceof HttpError ? err.message : String(err))
+      setError(errorMessage(err))
       setBusy(false)
     }
   }
@@ -156,7 +158,7 @@ function NewCompany({ onClose, onCreated }: { onClose: () => void; onCreated: (s
           <label htmlFor="n-lim">{t('newCompany.limit')}</label>
           <input type="number" id="n-lim" name="limit" defaultValue={2} min={1} style={{ maxWidth: 140 }} />
         </div>
-        {error && <p className="error" role="alert">{error}</p>}
+        <ErrorNote message={error} />
         <div className="acts">
           <button type="button" className="btn" onClick={onClose}>
             {t('common.cancel')}

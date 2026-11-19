@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import type { Anchor } from '@/ui/anchor'
+import { ESCAPE } from '@/keys/keyNames'
 
 export function Popover({
   anchor,
@@ -33,7 +34,7 @@ export function Popover({
     const first = box.current?.querySelector<HTMLElement>('[data-focus],input,select,textarea,.pop-b button')
     first?.focus()
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === ESCAPE) {
         e.stopPropagation()
         onClose()
       }

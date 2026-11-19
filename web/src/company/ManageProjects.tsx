@@ -5,12 +5,13 @@ import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { Modal } from '@/ui/Modal'
 import { displayName } from '@/ui/names'
-import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import { NoAccess } from '@/company/CompanyHome'
 import type { ManagedProject, Person } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
 import { companyRoleLabel, isOwner } from '@/roles'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { companyApi } from '@/paths'
 
 type Dialog = { kind: 'new' } | { kind: 'owner'; project: ManagedProject } | { kind: 'delete'; project: ManagedProject } | null
 
@@ -20,17 +21,19 @@ export function ManageProjects({ company }: { company: Company }) {
 }
 
 function ProjectList({ company }: { company: Company }) {
-  const path = `/api/v1/c/${company.slug}/projects`
+  const path = `${companyApi(company.slug)}/projects`
   const { data, error: loadError, reload } = useLoad(() => api<{ projects: ManagedProject[]; people: Person[] }>('GET', path), path)
   const [dialog, setDialog] = useState<Dialog>(null)
-  const toast = useToast()
-  const { error, run } = useRun(reload)
+  const { error, runAndToast } = useRun(reload)
+
+  const closeAfter = (fn: () => Promise<unknown>, message: string) =>
+    runAndToast(fn, message).then((ok) => {
+      if (ok) setDialog(null)
+    })
 
   const archive = (p: ManagedProject) => {
     const to = p.status === 'archived' ? 'restore' : 'archive'
-    void run(() => api('POST', `${path}/${p.id}/${to}`)).then((ok) => {
-      if (ok) toast(t(to === 'archive' ? 'manage.archived' : 'manage.restored', { project: p.name }))
-    })
+    void runAndToast(() => api('POST', `${path}/${p.id}/${to}`), t(to === 'archive' ? 'manage.archived' : 'manage.restored', { project: p.name }))
   }
 
   return (
@@ -49,11 +52,7 @@ function ProjectList({ company }: { company: Company }) {
       <div className="note" style={{ margin: '0 0 16px' }}>
         {t('manage.note')}
       </div>
-      {(error || loadError) && (
-        <p className="error" role="alert">
-          {error ?? loadError}
-        </p>
-      )}
+      <ErrorNote message={error ?? loadError} />
       <div className="tw">
         <table>
           <thead>
@@ -115,14 +114,7 @@ function ProjectList({ company }: { company: Company }) {
         <NewProject
           people={data.people}
           onClose={() => setDialog(null)}
-          onCreate={(name, owner) =>
-            run(() => api('POST', path, { name, owner_id: owner })).then((ok) => {
-              if (ok) {
-                setDialog(null)
-                toast(t('manage.created', { project: name }))
-              }
-            })
-          }
+          onCreate={(name, owner) => closeAfter(() => api('POST', path, { name, owner_id: owner }), t('manage.created', { project: name }))}
         />
       )}
       {dialog?.kind === 'owner' && data && (
@@ -130,28 +122,14 @@ function ProjectList({ company }: { company: Company }) {
           project={dialog.project}
           people={data.people.filter((m) => !dialog.project.owners.some((o) => o.id === m.id))}
           onClose={() => setDialog(null)}
-          onAdd={(id) =>
-            run(() => api('POST', `${path}/${dialog.project.id}/owners`, { user_id: id })).then((ok) => {
-              if (ok) {
-                setDialog(null)
-                toast(t('manage.ownerAdded', { project: dialog.project.name }))
-              }
-            })
-          }
+          onAdd={(id) => closeAfter(() => api('POST', `${path}/${dialog.project.id}/owners`, { user_id: id }), t('manage.ownerAdded', { project: dialog.project.name }))}
         />
       )}
       {dialog?.kind === 'delete' && (
         <DeleteProject
           project={dialog.project}
           onClose={() => setDialog(null)}
-          onDelete={(confirm) =>
-            run(() => api('DELETE', `${path}/${dialog.project.id}`, { confirm })).then((ok) => {
-              if (ok) {
-                setDialog(null)
-                toast(t('manage.deleted', { project: dialog.project.name }))
-              }
-            })
-          }
+          onDelete={(confirm) => closeAfter(() => api('DELETE', `${path}/${dialog.project.id}`, { confirm }), t('manage.deleted', { project: dialog.project.name }))}
         />
       )}
     </>

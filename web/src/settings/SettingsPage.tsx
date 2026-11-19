@@ -13,6 +13,9 @@ import { useRun } from '@/projects/useRun'
 import { Tools } from '@/ui/Tools'
 import { saveSettings, useSettings, type Settings } from '@/settings/store'
 import { companyRoleLabel, isOwner } from '@/roles'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { SwitchRow } from '@/ui/SwitchRow'
+import { companyRoute, ME_API } from '@/paths'
 
 export type SettingsTab = 'profile' | 'appearance' | 'sessions'
 
@@ -45,15 +48,7 @@ function Seg<K extends keyof Settings>({ name, label, options }: { name: K; labe
 
 function Switch({ name, label, hint }: { name: 'reduce_motion' | 'zen' | 'zen_quiet'; label: string; hint: string }) {
   const s = useSettings()
-  return (
-    <div className="switchrow">
-      <div>
-        <b>{label}</b>
-        <small>{hint}</small>
-      </div>
-      <button type="button" className="switchbtn" role="switch" aria-checked={s[name]} aria-label={label} onClick={() => void save({ [name]: !s[name] })} />
-    </div>
-  )
+  return <SwitchRow label={label} hint={hint} on={s[name]} onChange={(on) => void save({ [name]: on })} />
 }
 
 const failedEvent = 'tazko:settings-failed'
@@ -74,7 +69,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
 
     return () => window.removeEventListener(failedEvent, onFail)
   }, [])
-  const base = `/c/${company.slug}/me`
+  const base = `${companyRoute(company.slug)}/me`
   const tabs: [SettingsTab, string][] = [
     ['profile', t('settings.tab.profile')],
     ['appearance', t('settings.tab.appearance')],
@@ -98,11 +93,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
           </button>
         ))}
       </div>
-      {problem && (
-        <p className="error" role="alert">
-          {problem}
-        </p>
-      )}
+      <ErrorNote message={problem} />
       {tab === 'profile' && <Profile me={me} onSaved={onProfile} />}
       {tab === 'appearance' && <Appearance />}
       {tab === 'sessions' && <Sessions />}
@@ -120,7 +111,7 @@ function Profile({ me, onSaved }: { me: Me; onSaved: () => void }) {
 
   const submit = () =>
     void run(async () => {
-      await api('PATCH', '/api/v1/me/profile', { name })
+      await api('PATCH', `${ME_API}/profile`, { name })
       await saveSettings({ job_title: title.trim() })
     }).then((ok) => {
       if (ok) {
@@ -133,11 +124,7 @@ function Profile({ me, onSaved }: { me: Me; onSaved: () => void }) {
     <>
       <section className="box">
         <h2>{t('settings.profile')}</h2>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
+        <ErrorNote message={error} />
         <div className="row" style={{ gap: 16, flexWrap: 'nowrap', marginBottom: 8 }}>
           <Avatar name={shown} big />
           <div>
@@ -279,20 +266,12 @@ function Appearance() {
             ]}
           />
         </div>
-        <div className="switchrow">
-          <div>
-            <b>{t('settings.labelBars')}</b>
-            <small>{t('settings.labelBarsHint')}</small>
-          </div>
-          <button
-            type="button"
-            className="switchbtn"
-            role="switch"
-            aria-checked={s.label_style === 'bars'}
-            aria-label={t('settings.labelBars')}
-            onClick={() => void save({ label_style: s.label_style === 'bars' ? 'names' : 'bars' })}
-          />
-        </div>
+        <SwitchRow
+          label={t('settings.labelBars')}
+          hint={t('settings.labelBarsHint')}
+          on={s.label_style === 'bars'}
+          onChange={(on) => void save({ label_style: on ? 'bars' : 'names' })}
+        />
       </section>
       <section className="box">
         <h2>{t('settings.zen')}</h2>
@@ -379,10 +358,9 @@ function device(ua: string | null): string {
 }
 
 function Sessions() {
-  const path = '/api/v1/me/sessions'
+  const path = `${ME_API}/sessions`
   const { data, reload } = useLoad(() => api<{ sessions: SessionRow[] }>('GET', path), path)
-  const toast = useToast()
-  const { error, run } = useRun(reload)
+  const { error, runAndToast } = useRun(reload)
 
   return (
     <section className="box">
@@ -396,20 +374,12 @@ function Sessions() {
         <button
           type="button"
           className="btn"
-          onClick={() =>
-            void run(() => api('POST', `${path}/others`)).then((ok) => {
-              if (ok) toast(t('settings.othersEnded'))
-            })
-          }
+          onClick={() => void runAndToast(() => api('POST', `${path}/others`), t('settings.othersEnded'))}
         >
           {t('settings.endOthers')}
         </button>
       </div>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       <div className="tw" style={{ marginTop: 14 }}>
         <table>
           <tbody>
@@ -433,11 +403,7 @@ function Sessions() {
                     <button
                       type="button"
                       className="btn sm"
-                      onClick={() =>
-                        void run(() => api('DELETE', `${path}/${row.id}`)).then((ok) => {
-                          if (ok) toast(t('settings.ended', { device: device(row.user_agent) }))
-                        })
-                      }
+                      onClick={() => void runAndToast(() => api('DELETE', `${path}/${row.id}`), t('settings.ended', { device: device(row.user_agent) }))}
                     >
                       {t('home.signOut')}
                     </button>

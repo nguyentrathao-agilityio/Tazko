@@ -2,6 +2,7 @@ pub mod live;
 pub mod mentions;
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::Router;
 use axum::extract::{Path, Query};
@@ -31,28 +32,13 @@ const CAN_SEE: &str = "EXISTS (SELECT 1 FROM boards b
         AND (b.restricted = 0 OR EXISTS (SELECT 1 FROM board_access x WHERE x.board_id = b.id AND x.user_id = n.user_id)))";
 
 pub fn routes() -> Router<AppState> {
+    let p = |s: &str| format!("{COMPANY_PREFIX}{s}");
     Router::new()
-        .route(&format!("{COMPANY_PREFIX}/notifications"), get(list))
-        .route(
-            &format!("{COMPANY_PREFIX}/notifications/read"),
-            post(read_all),
-        )
-        .route(
-            &format!("{COMPANY_PREFIX}/notifications/{{notification}}/read"),
-            post(read_one),
-        )
-        .route(
-            &format!("{COMPANY_PREFIX}/notifications/live"),
-            get(live::live),
-        )
-        .route(
-            &format!("{COMPANY_PREFIX}/boards/{{board}}/watch"),
-            put(watch),
-        )
-}
-
-pub fn can_see(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
-    crate::realtime::allowed(c, board, user)
+        .route(&p("/notifications"), get(list))
+        .route(&p("/notifications/read"), post(read_all))
+        .route(&p("/notifications/{notification}/read"), post(read_one))
+        .route(&p("/notifications/live"), get(live::live))
+        .route(&p("/boards/{board}/watch"), put(watch))
 }
 
 pub enum Kind {
@@ -69,7 +55,7 @@ pub fn notify(
     card: i64,
     kind: Kind,
 ) -> rusqlite::Result<bool> {
-    if user == actor || !can_see(c, board, user)? {
+    if user == actor || !crate::realtime::allowed(c, board, user)? {
         return Ok(false);
     }
 
@@ -160,7 +146,7 @@ pub async fn due_soon(db: &Database, now: i64) -> Result<usize, ApiError> {
         .await?)
 }
 
-pub const DUE_CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+pub const DUE_CHECK_EVERY: Duration = Duration::from_secs(5 * 60);
 
 pub async fn due_soon_all(state: &AppState, now: i64) -> usize {
     let slugs: Vec<String> = state

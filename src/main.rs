@@ -19,7 +19,7 @@ async fn main() -> ExitCode {
             email,
             data,
             env_file,
-        } => admin(&email, data.as_deref(), env_file.as_deref()).await,
+        } => admin(&email, data, env_file.as_deref()).await,
         Command::Backup {
             action,
             data,
@@ -150,17 +150,10 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-async fn admin(email: &str, data: Option<&Path>, env_file: Option<&Path>) -> ExitCode {
-    let data = match data {
-        Some(d) => d.to_path_buf(),
-        None => match config::load(env_file) {
-            Ok(s) => s.data_dir,
-            Err(e) => {
-                eprintln!("tazko: {e}");
-                eprintln!("tazko: or pass --data <folder>");
-                return ExitCode::FAILURE;
-            }
-        },
+async fn admin(email: &str, data: Option<PathBuf>, env_file: Option<&Path>) -> ExitCode {
+    let data = match data_dir(data, env_file) {
+        Ok(d) => d,
+        Err(code) => return code,
     };
     match tazko::admin::cli::grant_super_admin(&data, email).await {
         Ok((email, Granted::Already)) => println!("{email} is already a super admin."),

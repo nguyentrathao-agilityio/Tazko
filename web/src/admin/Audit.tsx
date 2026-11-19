@@ -4,6 +4,8 @@ import { t, type MessageKey } from '@/i18n'
 import { when } from '@/ui/format'
 import { useLoad } from '@/ui/useLoad'
 import type { AuditEntry } from '@/admin/types'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { ADMIN_API } from '@/paths'
 
 const PAGE = 100
 
@@ -25,7 +27,7 @@ function describe(e: AuditEntry): string {
 function page(kind: string, before?: number) {
   const q = new URLSearchParams({ kind })
   if (before) q.set('before', String(before))
-  return api<{ entries: AuditEntry[] }>('GET', `/api/v1/admin/audit?${q}`).then((r) => r.entries)
+  return api<{ entries: AuditEntry[] }>('GET', `${ADMIN_API}/audit?${q}`).then((r) => r.entries)
 }
 
 export function Audit() {
@@ -67,11 +69,7 @@ function AuditList({ kind }: { kind: string }) {
 
   return (
     <>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       <div className="tw">
         <ul className="log">
           {first && entries.length === 0 && <li className="muted">{t('audit.none')}</li>}

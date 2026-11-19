@@ -349,7 +349,7 @@ fn read_secret_file(path: &Path) -> io::Result<Secret> {
 fn create_secret_file(path: &Path) -> io::Result<Secret> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
-    let value: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let value = crate::session::hex(&bytes);
 
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);

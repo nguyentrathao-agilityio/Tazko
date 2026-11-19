@@ -4,16 +4,15 @@ use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{delete, get, patch, post};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::admin::{self, audit, dir_size, validate};
+use crate::admin::{self, validate};
 use crate::api::COMPANY_PREFIX;
 use crate::auth::check_csrf;
 use crate::db::DbError;
-use crate::error::ApiError;
-use crate::session::now;
+use crate::error::{ApiError, bad};
 use crate::state::AppState;
 use crate::tenant::{Company, CompanyRole};
 
@@ -118,7 +117,7 @@ async fn settings(
         "name": co.name,
         "members": members,
         "invites": invites,
-        "storage_used": dir_size(&state.dbs.layout().orgs.join(&co.slug)),
+        "storage_used": admin::org_storage_used(&state, &co.slug),
         "storage_limit": limit,
     })))
 }
@@ -136,8 +135,7 @@ async fn invite(
     Json(body): Json<NewInvite>,
 ) -> Result<Response, ApiError> {
     let by = owner.writing(&headers)?;
-    let email =
-        validate::email(&body.email).ok_or_else(|| admin::bad("enter a valid email address"))?;
+    let email = validate::email(&body.email).ok_or_else(|| bad(admin::INVALID_EMAIL))?;
     let role = admin::company_role(&body.role)?;
     let slug = owner.0.slug.clone();
     let outcome = state
@@ -168,28 +166,17 @@ async fn revoke(
 ) -> Result<StatusCode, ApiError> {
     let by = owner.writing(&headers)?;
     let org_id = owner.0.org_id;
-    let done = state
+    let revoked = state
         .dbs
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let email: Option<String> = tx
-                .query_row(
-                    "SELECT email FROM invites WHERE id = ?1 AND org_id = ?2 AND accepted_at IS NULL AND revoked_at IS NULL",
-                    params![id, org_id],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            let Some(email) = email else {
-                return Ok(false);
-            };
-            tx.execute("UPDATE invites SET revoked_at = ?2 WHERE id = ?1", params![id, now()])?;
-            audit::record(&tx, Some(by), "invite_revoked", Some(org_id), &email, json!({ "invite": id }))?;
+            let revoked = admin::revoke_pending_invite(&tx, id, Some(org_id), by)?;
             tx.commit()?;
-            Ok(true)
+            Ok(revoked)
         })
         .await?;
-    if done {
+    if revoked {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::NotFound)
@@ -199,20 +186,6 @@ async fn revoke(
 #[derive(Deserialize)]
 struct RoleChange {
     role: String,
-}
-
-enum Change {
-    Done,
-    NotMember,
-    LastOwner,
-}
-
-fn finish(change: Change) -> Result<StatusCode, ApiError> {
-    match change {
-        Change::Done => Ok(StatusCode::NO_CONTENT),
-        Change::NotMember => Err(ApiError::NotFound),
-        Change::LastOwner => Err(admin::bad("a company needs at least one owner")),
-    }
 }
 
 async fn change_role(
@@ -230,34 +203,13 @@ async fn change_role(
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let Some((old, email)) = admin::member(&tx, org_id, user_id)? else {
-                return Ok(Change::NotMember);
-            };
-            if old == role {
-                return Ok(Change::Done);
-            }
-
-            if old == "owner" && admin::owners(&tx, org_id)? <= 1 {
-                return Ok(Change::LastOwner);
-            }
-
-            tx.execute(
-                "UPDATE org_members SET role = ?3 WHERE org_id = ?1 AND user_id = ?2",
-                params![org_id, user_id, role],
-            )?;
-            audit::record(
-                &tx,
-                Some(by),
-                "role_changed",
-                Some(org_id),
-                &email,
-                json!({ "from": old, "to": role }),
-            )?;
+            let change = admin::change_member_role(&tx, org_id, user_id, role, by)?;
             tx.commit()?;
-            Ok(Change::Done)
+            Ok(change)
         })
         .await?;
-    finish(change)
+    change.into_result()?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn remove_member(
@@ -273,32 +225,12 @@ async fn remove_member(
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let Some((role, email)) = admin::member(&tx, org_id, user_id)? else {
-                return Ok(Change::NotMember);
-            };
-            if role == "owner" && admin::owners(&tx, org_id)? <= 1 {
-                return Ok(Change::LastOwner);
-            }
-
-            tx.execute(
-                "DELETE FROM org_members WHERE org_id = ?1 AND user_id = ?2",
-                params![org_id, user_id],
-            )?;
-            audit::record(
-                &tx,
-                Some(by),
-                "member_removed",
-                Some(org_id),
-                &email,
-                json!({ "role": role }),
-            )?;
+            let change = admin::remove_org_member(&tx, org_id, user_id, by)?;
             tx.commit()?;
-            Ok(Change::Done)
+            Ok(change)
         })
         .await?;
-    if matches!(change, Change::Done) {
-        crate::projects::forget_member(&state, &owner.0.slug, org_id, user_id).await?;
-    }
-
-    finish(change)
+    change.into_result()?;
+    crate::projects::forget_member(&state, &owner.0.slug, org_id, user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

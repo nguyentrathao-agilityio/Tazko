@@ -4,6 +4,8 @@ import { bytes, duration, when } from '@/ui/format'
 import { PageHead } from '@/ui/PageHead'
 import { useLoad } from '@/ui/useLoad'
 import type { RunStatus, ServerInfo } from '@/admin/types'
+import { ErrorNote } from '@/ui/ErrorNote'
+import { ADMIN_API } from '@/paths'
 
 function RunRow({ label, run }: { label: string; run: RunStatus | null }) {
   if (!run) {
@@ -49,17 +51,13 @@ function RunRow({ label, run }: { label: string; run: RunStatus | null }) {
 }
 
 export function Server() {
-  const { data: s, error } = useLoad(() => api<ServerInfo>('GET', '/api/v1/admin/server'), 'server')
+  const { data: s, error } = useLoad(() => api<ServerInfo>('GET', `${ADMIN_API}/server`), 'server')
   const last = s?.last_backup
 
   return (
     <>
       <PageHead title={t('rail.server')} lead={s?.public_url.replace(/^https?:\/\//, '') ?? ''} />
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
+      <ErrorNote message={error} />
       {s && (
         <>
           <div className="stats">

@@ -23,7 +23,10 @@ pub const OAUTH_COOKIE: &str = "tazko_oauth";
 pub const REFUSAL_COOKIE: &str = "tazko_refusal";
 pub const CSRF_HEADER: &str = "x-csrf-token";
 const OAUTH_PATH: &str = "/auth/google";
+const OAUTH_PURPOSE: &str = "oauth";
 const OAUTH_TTL: i64 = 10 * 60;
+const REFUSAL_PATH: &str = "/auth/refusal";
+const REFUSAL_PURPOSE: &str = "refusal";
 const REFUSAL_TTL: i64 = 10 * 60;
 
 #[derive(Serialize, Deserialize)]
@@ -44,7 +47,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/auth/google/start", get(start))
         .route("/auth/google/callback", get(callback))
-        .route("/auth/refusal", get(refusal))
+        .route(REFUSAL_PATH, get(refusal))
         .route("/auth/signout", post(sign_out))
 }
 
@@ -103,6 +106,10 @@ pub fn safe_next(next: Option<&str>) -> String {
     }
 }
 
+fn same_secret(a: &str, b: &str) -> bool {
+    bool::from(subtle::ConstantTimeEq::ct_eq(a.as_bytes(), b.as_bytes()))
+}
+
 fn pkce_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
@@ -133,7 +140,7 @@ async fn start(State(state): State<AppState>, Query(q): Query<StartQuery>) -> Re
     let auth_url = &state.google.endpoints.auth_url;
     let sep = if auth_url.contains('?') { '&' } else { '?' };
     let url = format!("{auth_url}{sep}{query}");
-    let sealed = cookies::seal(state.secret.expose(), "oauth", OAUTH_TTL, &pending);
+    let sealed = cookies::seal(state.secret.expose(), OAUTH_PURPOSE, OAUTH_TTL, &pending);
     (
         [(
             header::SET_COOKIE,
@@ -149,6 +156,22 @@ struct CallbackQuery {
     code: Option<String>,
     state: Option<String>,
     error: Option<String>,
+}
+
+fn sign_in_failed(e: impl std::fmt::Display) -> Response {
+    eprintln!("tazko: sign-in failed: {e}");
+    back_to_sign_in("failed")
+}
+
+fn redirect_clearing_oauth(to: &str, cookie: String) -> Response {
+    let mut res = Redirect::to(to).into_response();
+    let h = res.headers_mut();
+    h.append(header::SET_COOKIE, cookie.parse().unwrap());
+    h.append(
+        header::SET_COOKIE,
+        cookies::clear(OAUTH_COOKIE, OAUTH_PATH).parse().unwrap(),
+    );
+    res
 }
 
 fn back_to_sign_in(error: &str) -> Response {
@@ -169,14 +192,11 @@ async fn callback(
     }
 
     let pending: Option<Pending> = cookies::read(&headers, OAUTH_COOKIE)
-        .and_then(|v| cookies::open(state.secret.expose(), "oauth", &v));
+        .and_then(|v| cookies::open(state.secret.expose(), OAUTH_PURPOSE, &v));
     let (Some(pending), Some(code), Some(got_state)) = (pending, q.code, q.state) else {
         return back_to_sign_in("expired");
     };
-    if !bool::from(subtle::ConstantTimeEq::ct_eq(
-        got_state.as_bytes(),
-        pending.state.as_bytes(),
-    )) {
+    if !same_secret(&got_state, &pending.state) {
         return back_to_sign_in("expired");
     }
 
@@ -201,10 +221,7 @@ async fn callback(
     };
     let claims = match claims {
         Ok(Ok(c)) => c,
-        Ok(Err(e)) => {
-            eprintln!("tazko: sign-in failed: {e}");
-            return back_to_sign_in("failed");
-        }
+        Ok(Err(e)) => return sign_in_failed(e),
         Err(_) => return back_to_sign_in("failed"),
     };
 
@@ -219,10 +236,7 @@ async fn callback(
     let user_id = match outcome {
         Ok(Ok(id)) => id,
         Ok(Err(reason)) => return refused(&state, &claims, reason),
-        Err(e) => {
-            eprintln!("tazko: sign-in failed: {e}");
-            return back_to_sign_in("failed");
-        }
+        Err(e) => return sign_in_failed(e),
     };
 
     let agent = headers
@@ -231,25 +245,13 @@ async fn callback(
         .map(|s| s.chars().take(200).collect());
     let token = match session::create(state.dbs.control(), user_id, agent).await {
         Ok((token, _)) => token,
-        Err(e) => {
-            eprintln!("tazko: sign-in failed: {e}");
-            return back_to_sign_in("failed");
-        }
+        Err(e) => return sign_in_failed(e),
     };
 
-    let mut res = Redirect::to(&pending.next).into_response();
-    let h = res.headers_mut();
-    h.append(
-        header::SET_COOKIE,
-        cookies::set(session::COOKIE, &token, "/", session::LIFETIME_SECS)
-            .parse()
-            .unwrap(),
-    );
-    h.append(
-        header::SET_COOKIE,
-        cookies::clear(OAUTH_COOKIE, OAUTH_PATH).parse().unwrap(),
-    );
-    res
+    redirect_clearing_oauth(
+        &pending.next,
+        cookies::set(session::COOKIE, &token, "/", session::LIFETIME_SECS),
+    )
 }
 
 fn refused(state: &AppState, claims: &google::Claims, reason: Refusal) -> Response {
@@ -257,20 +259,11 @@ fn refused(state: &AppState, claims: &google::Claims, reason: Refusal) -> Respon
         email: claims.email.clone().unwrap_or_default(),
         reason: reason.code().to_string(),
     };
-    let sealed = cookies::seal(state.secret.expose(), "refusal", REFUSAL_TTL, &note);
-    let mut res = Redirect::to("/signin/refused").into_response();
-    let h = res.headers_mut();
-    h.append(
-        header::SET_COOKIE,
-        cookies::set(REFUSAL_COOKIE, &sealed, "/auth/refusal", REFUSAL_TTL)
-            .parse()
-            .unwrap(),
-    );
-    h.append(
-        header::SET_COOKIE,
-        cookies::clear(OAUTH_COOKIE, OAUTH_PATH).parse().unwrap(),
-    );
-    res
+    let sealed = cookies::seal(state.secret.expose(), REFUSAL_PURPOSE, REFUSAL_TTL, &note);
+    redirect_clearing_oauth(
+        "/signin/refused",
+        cookies::set(REFUSAL_COOKIE, &sealed, REFUSAL_PATH, REFUSAL_TTL),
+    )
 }
 
 async fn refusal(
@@ -278,7 +271,7 @@ async fn refusal(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let note: RefusalNote = cookies::read(&headers, REFUSAL_COOKIE)
-        .and_then(|v| cookies::open(state.secret.expose(), "refusal", &v))
+        .and_then(|v| cookies::open(state.secret.expose(), REFUSAL_PURPOSE, &v))
         .ok_or(ApiError::NotFound)?;
     Ok(Json(json!({ "email": note.email, "reason": note.reason })))
 }
@@ -292,11 +285,7 @@ pub fn check_csrf(user: &CurrentUser, headers: &HeaderMap) -> Result<(), ApiErro
         .get(CSRF_HEADER)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    if bool::from(subtle::ConstantTimeEq::ct_eq(
-        sent.as_bytes(),
-        user.0.csrf_token.as_bytes(),
-    )) && !sent.is_empty()
-    {
+    if same_secret(sent, &user.0.csrf_token) && !sent.is_empty() {
         Ok(())
     } else {
         Err(ApiError::Forbidden)
