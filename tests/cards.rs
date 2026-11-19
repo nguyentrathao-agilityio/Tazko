@@ -432,3 +432,118 @@ async fn cards_stay_on_their_board_and_observers_cannot_change_them() {
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn changes_inside_a_card_move_its_last_updated_time() {
+    let app = common::TestApp::new();
+    let a = app.company("company-a", "active").await;
+    let owner = common::person(&app, "lead@a.example").await;
+    app.member(a, owner.id, "owner").await;
+    let c = "/api/v1/c/company-a";
+    let res = common::call(
+        &app,
+        &owner,
+        axum::http::Method::POST,
+        &format!("{c}/projects"),
+        Some(serde_json::json!({ "name": "P", "owner_id": owner.id })),
+    )
+    .await;
+    let project = common::body_json(res).await["id"].as_i64().unwrap();
+    let res = common::call(
+        &app,
+        &owner,
+        axum::http::Method::POST,
+        &format!("{c}/projects/{project}/boards"),
+        Some(serde_json::json!({ "name": "B" })),
+    )
+    .await;
+    let board = common::body_json(res).await["id"].as_i64().unwrap();
+    let view = common::body_json(
+        common::call(
+            &app,
+            &owner,
+            axum::http::Method::GET,
+            &format!("{c}/boards/{board}"),
+            None,
+        )
+        .await,
+    )
+    .await;
+    let list = view["lists"][0]["id"].as_i64().unwrap();
+    let res = common::call(
+        &app,
+        &owner,
+        axum::http::Method::POST,
+        &format!("{c}/boards/{board}/cards"),
+        Some(serde_json::json!({ "list_id": list, "title": "T" })),
+    )
+    .await;
+    let card = common::body_json(res).await["cards"][0]["id"]
+        .as_i64()
+        .unwrap();
+    let db = app.state.dbs.tenant("company-a").unwrap();
+    let set_old = |db: tazko::db::Database| async move {
+        db.write(move |x| {
+            x.execute("UPDATE cards SET updated_at = 1 WHERE id = ?1", [card])?;
+            Ok(())
+        })
+        .await
+        .unwrap()
+    };
+    let stamp = |db: tazko::db::Database| async move {
+        db.read(move |x| {
+            Ok(
+                x.query_row("SELECT updated_at FROM cards WHERE id = ?1", [card], |r| {
+                    r.get::<_, i64>(0)
+                })?,
+            )
+        })
+        .await
+        .unwrap()
+    };
+    set_old(db.clone()).await;
+    common::call(
+        &app,
+        &owner,
+        axum::http::Method::POST,
+        &format!("{c}/boards/{board}/cards/{card}/comments"),
+        Some(serde_json::json!({ "body": "hi" })),
+    )
+    .await;
+    assert!(stamp(db.clone()).await > 1, "comment");
+    set_old(db.clone()).await;
+    let label = view["labels"][0]["id"].as_i64().unwrap();
+    common::call(
+        &app,
+        &owner,
+        axum::http::Method::PUT,
+        &format!("{c}/boards/{board}/cards/{card}/labels/{label}"),
+        Some(serde_json::json!({ "on": true })),
+    )
+    .await;
+    assert!(stamp(db.clone()).await > 1, "label");
+    set_old(db.clone()).await;
+    let k = common::body_json(
+        common::call(
+            &app,
+            &owner,
+            axum::http::Method::POST,
+            &format!("{c}/boards/{board}/cards/{card}/checklists"),
+            Some(serde_json::json!({ "title": "K" })),
+        )
+        .await,
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    set_old(db.clone()).await;
+    common::call(
+        &app,
+        &owner,
+        axum::http::Method::POST,
+        &format!("{c}/boards/{board}/checklists/{k}/items"),
+        Some(serde_json::json!({ "text": "x" })),
+    )
+    .await;
+    assert!(stamp(db).await > 1, "checklist item");
+}

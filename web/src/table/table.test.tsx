@@ -79,6 +79,8 @@ describe('table helpers', () => {
     const s = sortRows(r, { key: 'title', dir: 1 })
     expect(s.map((x) => x.card.title)).toEqual(['Audit nav', 'Choose fonts', 'Write copy'])
     expect(r.map((x) => x.card.title)).toEqual(['Write copy', 'Audit nav', 'Choose fonts'])
+    expect(sortRows(r, { key: 'due', dir: -1 }).map((x) => x.card.title).at(-1)).not.toBe('Write copy')
+    expect(sortRows(r, { key: 'f:81', dir: 1 }).map((x) => x.card.title)[0]).toBe('Choose fonts')
     expect(nextSort({ key: null, dir: 1 }, 'title')).toEqual({ key: 'title', dir: 1 })
     expect(nextSort({ key: 'title', dir: 1 }, 'title')).toEqual({ key: 'title', dir: -1 })
     expect(nextSort({ key: 'title', dir: -1 }, 'title')).toEqual({ key: null, dir: 1 })
@@ -121,6 +123,8 @@ describe('table view', () => {
     open('/c/acme/b/7/table')
     const due = await screen.findByLabelText('Due date of Write copy')
     fireEvent.change(due, { target: { value: '2026-12-24' } })
+    expect(calls.find((c) => c.method === 'PATCH')).toBeUndefined()
+    fireEvent.blur(due)
     await waitFor(() => expect(calls.find((c) => c.url.endsWith('/cards/21') && c.method === 'PATCH')).toBeTruthy())
     const body = calls.find((c) => c.url.endsWith('/cards/21') && c.method === 'PATCH')!.body as { due_at: number }
     expect(new Date(body.due_at * 1000).getDate()).toBe(24)

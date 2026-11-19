@@ -86,13 +86,16 @@ export function TableView({
   const sorted = useMemo(() => sortRows(toRows(lists), sort), [lists, sort])
   const ids = sorted.map((r) => r.card.id)
   const chosen = useMemo(() => new Set(selected), [selected])
-  const allSelected = ids.length > 0 && ids.every((id) => chosen.has(id))
+  const picked = ids.filter((id) => chosen.has(id))
+  const allSelected = ids.length > 0 && picked.length === ids.length
 
   const patch = (card: CardData, body: Record<string, unknown>) => run(() => api('PATCH', `${base}/cards/${card.id}`, body))
   const move = (card: CardData, list: number) => run(() => api('POST', `${base}/cards/${card.id}/move`, { list_id: list, after: appendAfter(board.lists, list, card.id) }))
   const setField = (card: CardData, f: FieldDef, value: FieldValue | null) => run(() => api('PUT', `${base}/cards/${card.id}/fields/${f.id}`, { value }))
   const moveAll = async (cards: CardData[], list: number) => {
-    let after = appendAfter(board.lists, list, -1)
+    const moving = new Set(cards.map((c) => c.id))
+    const rest = (board.lists.find((l) => l.id === list)?.cards ?? []).filter((c) => !moving.has(c.id))
+    let after: number | null = rest.length ? rest[rest.length - 1].id : null
     for (const c of cards) {
       await api('POST', `${base}/cards/${c.id}/move`, { list_id: list, after })
       after = c.id
@@ -135,6 +138,7 @@ export function TableView({
               aria-label={t('table.selectAll')}
               checked={allSelected}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
               onChange={(e) => setSelected(e.target.checked ? ids : [])}
             />
             {c.name}
@@ -225,11 +229,18 @@ export function TableView({
           <td key={c.key}>
             {edit ? (
               <input
+                key={`${card.id}:${card[k] ?? ''}`}
                 type="date"
                 aria-label={t(c.key === 'due' ? 'table.dueOf' : 'table.startOf', { title: card.title })}
                 className={st ? `d-${st}` : undefined}
-                value={toDateInput(card[k])}
-                onChange={(e) => void patch(card, { [k]: fromInputs(e.target.value, toTimeInput(card[k])) })}
+                defaultValue={toDateInput(card[k])}
+                onBlur={(e) => {
+                  const next = fromInputs(e.target.value, toTimeInput(card[k]))
+                  if (e.target.value !== toDateInput(card[k]) && (next === null || next > 0)) void patch(card, { [k]: next })
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === ENTER) e.currentTarget.blur()
+                }}
               />
             ) : (
               toDateInput(card[k])
@@ -290,18 +301,14 @@ export function TableView({
   return (
     <div className="tbd">
       <div className="tbbar">
-        {selected.length ? (
+        {picked.length ? (
           <>
-            <b>{t('table.selected', { n: selected.length })}</b>
+            <b>{t('table.selected', { n: picked.length })}</b>
             {edit && (
               <>
                 <select aria-label={t('table.moveSelected')} value="" onChange={(e) => e.target.value && void bulk('table.moved', (cards) => moveAll(cards, Number(e.target.value)))}>
                   <option value="">{t('table.moveTo')}</option>
-                  {board.lists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.title}
-                    </option>
-                  ))}
+                  {listOptions}
                 </select>
                 <button type="button" className="btn sm" onClick={() => void bulk('table.assigned', (cards) => eachAtOnce(cards, (c) => api('PUT', `${base}/cards/${c.id}/members/${me}`, { on: true })))}>
                   {t('table.assignMe')}

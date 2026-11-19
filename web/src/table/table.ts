@@ -1,6 +1,6 @@
 import type { BoardData, CardData, ListData } from '@/board/types'
 import { fieldText, type FieldDef } from '@/card/fieldTypes'
-import { shortDate } from '@/card/look'
+import { toDateInput } from '@/card/dates'
 import { displayName } from '@/ui/names'
 
 export type Column = { key: string; name: string; field?: FieldDef }
@@ -24,12 +24,12 @@ export function rows(lists: ListData[]): Row[] {
   return lists.flatMap((list, listIndex) => list.cards.map((card) => ({ card, list, listIndex })))
 }
 
-function key(r: Row, k: string): string | number {
+function key(r: Row, k: string): string | number | null {
   const c = r.card
   if (k === 'title') return c.title.toLowerCase()
   if (k === 'list') return r.listIndex
-  if (k === 'start') return c.start_at ?? Number.MAX_SAFE_INTEGER
-  if (k === 'due') return c.due_at ?? Number.MAX_SAFE_INTEGER
+  if (k === 'start') return c.start_at ?? null
+  if (k === 'due') return c.due_at ?? null
   if (k === 'check') return c.items ? (c.items_done ?? 0) / c.items : -1
   if (k === 'members') return c.members?.length ?? 0
   if (k === 'labels') return c.labels?.length ?? 0
@@ -38,7 +38,7 @@ function key(r: Row, k: string): string | number {
   if (k === 'last') return c.updated_at ?? 0
   if (k.startsWith('f:')) {
     const v = c.fields?.[k.slice(2)]
-    if (v === undefined || v === '') return '~'
+    if (v === undefined || v === '') return null
     return typeof v === 'string' ? v.toLowerCase() : v === true ? 1 : v === false ? 0 : v
   }
 
@@ -51,6 +51,8 @@ export function sortRows(list: Row[], sort: Sort): Row[] {
   return [...list].sort((a, b) => {
     const x = key(a, k)
     const y = key(b, k)
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1
+    if (typeof x !== typeof y) return String(x).localeCompare(String(y)) * sort.dir
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir
   })
 }
@@ -76,9 +78,9 @@ function plain(r: Row, col: Column, board: BoardData): string {
         .map((p) => (p ? displayName(p.name, p.email) : ''))
         .join('; ')
     case 'start':
-      return c.start_at ? shortDate(c.start_at) : ''
+      return toDateInput(c.start_at)
     case 'due':
-      return c.due_at ? shortDate(c.due_at) : ''
+      return toDateInput(c.due_at)
     case 'check':
       return c.items ? `${c.items_done ?? 0}/${c.items}` : ''
     case 'att':
@@ -86,7 +88,7 @@ function plain(r: Row, col: Column, board: BoardData): string {
     case 'cm':
       return String(c.comments ?? 0)
     case 'last':
-      return c.updated_at ? shortDate(c.updated_at) : ''
+      return toDateInput(c.updated_at)
     default:
       return col.field ? fieldText(col.field, c.fields?.[String(col.field.id)]) : ''
   }
@@ -94,7 +96,7 @@ function plain(r: Row, col: Column, board: BoardData): string {
 
 export function csv(list: Row[], cols: Column[], board: BoardData): string {
   const q = (raw: string) => {
-    const s = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+    const s = /^[=+\-@\t\r]/.test(raw) && !/^-?\d+(\.\d+)?$/.test(raw) ? `'${raw}` : raw
     return `"${s.replace(/"/g, '""')}"`
   }
   return [cols.map((c) => q(c.name)).join(','), ...list.map((r) => cols.map((c) => q(plain(r, c, board))).join(','))].join('\n')
