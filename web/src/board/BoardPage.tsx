@@ -212,7 +212,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
   }
 
   return (
-    <div className={`bd${zen ? ` zen zd-${settings.zen_density}` : ''}`} style={{ background: background(board.background), backgroundSize: 'cover' }}>
+    <div className={`bd${zen ? ` zen zd-${settings.zen_density}` : ''}${board.background.startsWith('img:') ? ' img' : ''}`} style={{ background: background(board.background, base), backgroundSize: 'cover' }}>
       {zen && (
         <ZenStrip
           name={board.name}
@@ -327,6 +327,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
       <BoardLists
         lists={shownLists}
         base={base}
+        fields={board.fields}
         totals={active(filter) ? new Map(lists.map((l) => [l.id, l.cards.length])) : null}
         edit={edit}
         collapsed={collapsed.ids}
@@ -438,7 +439,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
       )}
       {pop?.kind === 'filter' && (
         <Popover anchor={pop.at} title={t('filter.title')} width={340} onClose={() => setPop(null)}>
-          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} />
+          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} fields={board.fields} />
         </Popover>
       )}
       {pop?.kind === 'access' && (

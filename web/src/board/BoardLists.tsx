@@ -1,3 +1,4 @@
+import type { FieldDef } from '@/card/fieldTypes'
 import {
   closestCorners,
   DndContext,
@@ -36,6 +37,7 @@ function SortableList({ list, edit, children }: { list: ListData; edit: boolean;
 export function BoardLists({
   lists: source,
   base,
+  fields,
   totals,
   labels,
   people,
@@ -56,6 +58,7 @@ export function BoardLists({
 }: {
   lists: ListData[]
   base?: string
+  fields?: FieldDef[]
   totals: Map<number, number> | null
   labels: Label[]
   people: BoardPerson[]
@@ -191,7 +194,7 @@ export function BoardLists({
                 >
                   <SortableContext items={l.cards.map((c) => `c:${c.id}`)} strategy={verticalListSortingStrategy}>
                     {l.cards.map((c) => (
-                      <CardTile key={c.id} card={c} base={base} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
+                      <CardTile key={c.id} card={c} base={base} fields={fields} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} />
                     ))}
                   </SortableContext>
                 </ListColumn>

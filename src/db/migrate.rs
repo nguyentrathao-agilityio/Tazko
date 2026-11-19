@@ -81,6 +81,11 @@ pub static TENANT: Migrations = Migrations {
             name: "0008_notifications.sql",
             sql: include_str!("../../migrations/tenant/0008_notifications.sql"),
         },
+        Migration {
+            version: 9,
+            name: "0009_fields_reactions_backgrounds.sql",
+            sql: include_str!("../../migrations/tenant/0009_fields_reactions_backgrounds.sql"),
+        },
     ],
 };
 

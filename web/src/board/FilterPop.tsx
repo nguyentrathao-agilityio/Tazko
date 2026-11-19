@@ -4,8 +4,34 @@ import { Avatar } from '@/ui/people'
 import { emptyFilter, type Filter } from '@/board/filter'
 import type { BoardPerson, Label } from '@/board/types'
 import { labelStyle } from '@/card/look'
+import type { FieldDef } from '@/card/fieldTypes'
 
-export function FilterPop({ filter, onChange, people, labels }: { filter: Filter; onChange: (f: Filter) => void; people: BoardPerson[]; labels: Label[] }) {
+export function FilterPop({
+  filter,
+  onChange,
+  people,
+  labels,
+  fields = [],
+}: {
+  filter: Filter
+  onChange: (f: Filter) => void
+  people: BoardPerson[]
+  labels: Label[]
+  fields?: FieldDef[]
+}) {
+  const picked = filter.fields ?? []
+  const fieldBox = (key: string, label: string) => (
+    <label className="fopt" key={`f-${key}`}>
+      <input
+        type="checkbox"
+        checked={picked.includes(key)}
+        onChange={() => onChange({ ...filter, fields: picked.includes(key) ? picked.filter((x) => x !== key) : [...picked, key] })}
+        aria-label={label}
+      />
+      {label}
+    </label>
+  )
+  const choices = fields.filter((f) => f.type === 'select' || f.type === 'check')
   const toggle = (key: 'members' | 'labels' | 'due', value: string) => {
     const cur = filter[key]
     onChange({ ...filter, [key]: cur.includes(value) ? cur.filter((x) => x !== value) : [...cur, value] })
@@ -58,6 +84,10 @@ export function FilterPop({ filter, onChange, people, labels }: { filter: Filter
       {box('due', 'week', t('filter.nextWeek'), t('filter.nextWeek'))}
       {box('due', 'done', t('filter.done'), t('filter.done'))}
       {box('due', 'open', t('filter.open'), t('filter.open'))}
+      {choices.length > 0 && <div className="fsub">{t('fields.filter')}</div>}
+      {choices.flatMap((f) =>
+        f.type === 'check' ? [fieldBox(`${f.id}:yes`, f.name)] : f.options.map((o) => fieldBox(`${f.id}:${o}`, `${f.name}: ${o}`)),
+      )}
       <button type="button" className="btn sm" style={{ marginTop: 10 }} onClick={() => onChange(emptyFilter)}>
         {t('filter.clearAll')}
       </button>

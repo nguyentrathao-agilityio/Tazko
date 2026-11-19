@@ -906,3 +906,139 @@
     text-transform: uppercase;
   }
 }
+
+@layer components {
+  .fgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  .fgrid label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  .fgrid input,
+  .fgrid select {
+    height: 34px;
+    width: 100%;
+  }
+
+  .fgrid .opt {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-weight: 400;
+    font-size: 0.9rem;
+  }
+
+  .fgrid .opt input {
+    width: 16px;
+    height: 16px;
+  }
+
+  .fld {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: var(--sunken);
+    color: var(--muted);
+    font-size: 0.74rem;
+  }
+
+  .fld b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .frow {
+    flex-wrap: nowrap;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+  }
+
+  .rx {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 2px 0 4px;
+  }
+
+  .rxc {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+    height: 26px;
+    padding: 0 9px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .rxc.me {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .rxc.add {
+    padding: 0 7px;
+  }
+
+  .rxc.add .ic {
+    width: 15px;
+    height: 15px;
+  }
+
+  .rxc:hover:not(:disabled) {
+    border-color: var(--accent-line);
+  }
+
+  .rxpick {
+    width: 40px;
+    height: 40px;
+    font-size: 1.3rem;
+  }
+
+  .sw.up {
+    display: inline-grid;
+    place-items: center;
+    background: var(--sunken);
+    color: var(--muted);
+    cursor: pointer;
+    border: 2px dashed var(--line);
+    width: 96px;
+    height: 62px;
+    border-radius: 7px;
+  }
+
+  .sw.up:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .sw.up.busy {
+    cursor: progress;
+    opacity: 0.6;
+  }
+
+  .bd.img .bh,
+  .bd.img .top {
+    background: rgba(10, 12, 28, 0.55);
+  }
+}

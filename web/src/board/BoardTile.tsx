@@ -1,7 +1,7 @@
 import type { KeyboardEvent, MouseEvent } from 'react'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
-import { background } from '@/projects/look'
+import { background, boardApi } from '@/projects/look'
 import type { BoardTileData } from '@/board/types'
 
 export function BoardTile({ board, onOpen, onStar }: { board: BoardTileData; onOpen: () => void; onStar: (on: boolean) => void }) {
@@ -17,7 +17,7 @@ export function BoardTile({ board, onOpen, onStar }: { board: BoardTileData; onO
   }
 
   return (
-    <div className="btile" role="link" tabIndex={0} aria-label={board.name} onClick={onOpen} onKeyDown={key} style={{ background: background(board.background) }}>
+    <div className="btile" role="link" tabIndex={0} aria-label={board.name} onClick={onOpen} onKeyDown={key} style={{ background: background(board.background, boardApi(board.id)) }}>
       <b>{board.name}</b>
       <small>
         {board.restricted && (

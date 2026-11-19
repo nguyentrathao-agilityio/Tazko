@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '@/http'
+import { api, HttpError, upload } from '@/http'
 import { t } from '@/i18n'
 import { Icon, type IconName } from '@/ui/Icon'
 import { useLoad } from '@/ui/useLoad'
@@ -9,9 +9,10 @@ import { describeBoard, type BoardEntry } from '@/card/activity'
 import { ago } from '@/card/look'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
+import { FieldsPage } from '@/card/Fields'
 import type { BoardData } from '@/board/types'
 
-type Page = 'main' | 'about' | 'bg' | 'arch' | 'access' | 'copy' | 'activity'
+type Page = 'main' | 'about' | 'bg' | 'fields' | 'arch' | 'access' | 'copy' | 'activity'
 
 export function BoardMenu({
   board,
@@ -47,6 +48,7 @@ export function BoardMenu({
     access: t('boardMenu.access'),
     copy: t('boardMenu.copy'),
     activity: t('boardMenu.activity'),
+    fields: t('fields.title'),
   }
   const item = (to: Page, icon: IconName, label: string) => (
     <button type="button" className="mi" onClick={() => setPage(to)}>
@@ -75,6 +77,7 @@ export function BoardMenu({
           <>
             {item('about', 'info', t('boardMenu.about'))}
             {board.can.edit && item('bg', 'palette', t('boardMenu.background'))}
+            {item('fields', 'sliders', t('fields.title'))}
             {item('arch', 'archive', t('boardMenu.archived'))}
             {item('activity', 'act', t('boardMenu.activity'))}
             <button
@@ -110,21 +113,8 @@ export function BoardMenu({
           </>
         )}
         {page === 'about' && <About board={board} base={base} run={run} />}
-        {page === 'bg' && (
-          <div className="swatches">
-            {backgroundNames.map((k) => (
-              <button
-                key={k}
-                type="button"
-                className="sw"
-                style={{ background: background(k), width: 96, height: 62 }}
-                aria-pressed={board.background === k}
-                aria-label={t('project.backgroundOption', { name: k })}
-                onClick={() => void run(() => api('PATCH', base, { background: k }))}
-              />
-            ))}
-          </div>
-        )}
+        {page === 'fields' && <FieldsPage defs={board.fields ?? []} edit={board.can.edit} base={base} run={run} />}
+        {page === 'bg' && <BackgroundPage board={board} base={base} run={run} />}
         {page === 'arch' && <Archived board={board} base={base} run={run} />}
         {page === 'access' && <Access board={board} base={base} run={run} />}
         {page === 'activity' && <Activity board={board} base={base} />}
@@ -242,6 +232,64 @@ function Activity({ board, base }: { board: BoardData; base: string }) {
           {t('common.loadMore')}
         </button>
       )}
+    </>
+  )
+}
+
+function BackgroundPage({ board, base, run }: { board: BoardData; base: string; run: (fn: () => Promise<unknown>) => Promise<boolean> }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const uploaded = board.background.startsWith('img:')
+  const pick = (file: File | undefined) => {
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      setError(t('bg.tooLarge'))
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    void run(() =>
+      upload(`${base}/background`, file).catch((e: unknown) => {
+        setError(e instanceof HttpError ? e.message : String(e))
+        throw e
+      }),
+    ).finally(() => setBusy(false))
+  }
+
+  return (
+    <>
+      <div className="swatches">
+        {uploaded && (
+          <button type="button" className="sw" style={{ background: background(board.background, base), width: 96, height: 62 }} aria-pressed aria-label={t('bg.current')} />
+        )}
+        {backgroundNames.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className="sw"
+            style={{ background: background(k), width: 96, height: 62 }}
+            aria-pressed={board.background === k}
+            aria-label={t('project.backgroundOption', { name: k })}
+            disabled={!board.can.edit}
+            onClick={() => void run(() => api('PATCH', base, { background: k }))}
+          />
+        ))}
+        {board.can.edit && (
+          <label className={`sw up${busy ? ' busy' : ''}`} title={t('bg.upload')}>
+            <Icon name="upload" />
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" style={{ display: 'none' }} aria-label={t('bg.upload')} disabled={busy} onChange={(e) => pick(e.target.files?.[0])} />
+          </label>
+        )}
+      </div>
+      {error && (
+        <p className="error" role="alert" style={{ marginTop: 10 }}>
+          {error}
+        </p>
+      )}
+      <p className="hint" style={{ marginTop: 10 }}>
+        {busy ? t('bg.uploading') : t('bg.hint')}
+      </p>
     </>
   )
 }

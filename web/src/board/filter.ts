@@ -1,11 +1,11 @@
 import type { CardData, ListData } from '@/board/types'
 
-export type Filter = { q: string; members: string[]; labels: string[]; due: string[]; hideDone?: boolean }
+export type Filter = { q: string; members: string[]; labels: string[]; due: string[]; fields?: string[]; hideDone?: boolean }
 
 export const emptyFilter: Filter = { q: '', members: [], labels: [], due: [] }
 
 export function active(f: Filter): boolean {
-  return Boolean(f.q.trim() || f.members.length || f.labels.length || f.due.length || f.hideDone)
+  return Boolean(f.q.trim() || f.members.length || f.labels.length || f.due.length || f.fields?.length || f.hideDone)
 }
 
 const DAY = 86_400
@@ -31,6 +31,15 @@ export function matches(c: CardData, f: Filter, me: number, labelNames: Map<numb
       if (k === 'done') return Boolean(c.done)
       if (k === 'open') return !c.done
       return false
+    })
+    if (!ok) return false
+  }
+
+  if (f.fields?.length) {
+    const ok = f.fields.every((key) => {
+      const at = key.indexOf(':')
+      const v = c.fields?.[key.slice(0, at)]
+      return key.slice(at + 1) === 'yes' ? v === true : v === key.slice(at + 1)
     })
     if (!ok) return false
   }

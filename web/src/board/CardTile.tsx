@@ -7,10 +7,12 @@ import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { dateRange, dueState, labelStyle } from '@/card/look'
 import type { BoardPerson, CardData, Label } from '@/board/types'
+import { fieldText, type FieldDef } from '@/card/fieldTypes'
 
 export function CardTile({
   card,
   base,
+  fields = [],
   selected = false,
   edit,
   labels,
@@ -21,6 +23,7 @@ export function CardTile({
 }: {
   card: CardData
   base?: string
+  fields?: FieldDef[]
   selected?: boolean
   edit: boolean
   labels: Label[]
@@ -36,7 +39,8 @@ export function CardTile({
   const members = people.filter((p) => card.members?.includes(p.id))
   const state = dueState(card.due_at, card.done)
   const items = card.items ?? 0
-  const hasBadges = Boolean(card.due_at || card.start_at || card.has_description || card.comments || card.attachments || items || members.length)
+  const front = fields.filter((f) => f.show_on_card).map((f) => ({ f, text: fieldText(f, card.fields?.[String(f.id)]) })).filter((x) => x.text)
+  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.has_description || card.comments || card.attachments || items || members.length)
 
   return (
     <article
@@ -111,6 +115,11 @@ export function CardTile({
                 {card.attachments}
               </span>
             )}
+            {front.map(({ f, text }) => (
+              <span key={f.id} className="fld">
+                <b>{f.name}</b> {text}
+              </span>
+            ))}
             {items > 0 && (
               <span className={`bdg${card.items_done === items ? ' ok' : ''}`} title={t('card.itemsBadge')}>
                 <Icon name="checksq" />
