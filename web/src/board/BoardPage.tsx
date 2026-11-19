@@ -28,6 +28,7 @@ import { useBoardKeys } from '@/keys/useBoardKeys'
 import { Shortcuts } from '@/keys/Shortcuts'
 import { saveSettings, useSettings } from '@/settings/store'
 import { ZenStrip } from '@/zen/ZenStrip'
+import { Dashboard } from '@/dashboard/Dashboard'
 import { TableView } from '@/table/TableView'
 import { useLive } from '@/live/useLive'
 import { LiveList, LivePill } from '@/live/LivePill'
@@ -62,7 +63,7 @@ type CardPop = 'quick' | 'k-members' | 'k-dates' | 'k-labels' | 'k-move'
 
 type Pop = { kind: 'access' | 'share' | 'members' | 'filter' | 'live'; at: Anchor } | { kind: 'cardtpl'; at: Anchor; list: number } | { kind: CardPop; at: Anchor; card: CardData } | null
 
-export type BoardView = 'board' | 'table'
+export type BoardView = 'board' | 'table' | 'dashboard'
 
 export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { company: Company; id: number; cardId: number | null; me: number; go: Go; view?: BoardView }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
@@ -113,7 +114,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   }
 
   const boardRoot = `/c/${company.slug}/b/${id}`
-  const boardBase = view === 'table' ? `${boardRoot}/table` : boardRoot
+  const boardBase = view === 'board' ? boardRoot : `${boardRoot}/${view}`
   const keys = useBoardKeys({
     lists: view === 'board' ? shownLists : [],
     edit: Boolean(board?.can.edit),
@@ -290,6 +291,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
             [
               ['board', t('view.board'), boardRoot],
               ['table', t('view.table'), `${boardRoot}/table`],
+              ['dashboard', t('view.dashboard'), `${boardRoot}/dashboard`],
             ] as [BoardView, string, string][]
           ).map(([k, label, to]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => view !== k && go(to)}>
@@ -331,7 +333,13 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
       {active(filter) && (
         <div className="fbar" role="status">
           <Icon name="filter" />
-          <b>{shownLists.reduce((n, l) => n + l.cards.length, 0)}</b> {t('filter.matching')}
+          {view === 'dashboard' ? (
+            t('dash.filtered', { n: shownLists.reduce((n, l) => n + l.cards.length, 0) })
+          ) : (
+            <>
+              <b>{shownLists.reduce((n, l) => n + l.cards.length, 0)}</b> {t('filter.matching')}
+            </>
+          )}
           <button type="button" onClick={() => setFilter(emptyFilter)}>
             {t('filter.clear')}
           </button>
@@ -345,6 +353,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
       {view === 'table' && (
         <TableView board={board} lists={shownLists} total={lists.reduce((n, l) => n + l.cards.length, 0)} base={base} me={me} run={run} onOpen={(c) => go(`${boardPath}/c/${c.id}`)} />
       )}
+      {view === 'dashboard' && <Dashboard board={board} lists={shownLists} />}
       {view === 'board' && (
         <BoardLists
         lists={shownLists}

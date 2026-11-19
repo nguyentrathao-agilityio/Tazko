@@ -1,0 +1,101 @@
+@layer components {
+  .mcbar {
+    margin-bottom: 14px;
+  }
+
+  .mcbar .opt {
+    margin: 0;
+  }
+
+  .mcbar .mcq {
+    width: 240px;
+    max-width: 100%;
+  }
+
+  .sechd.bad {
+    color: var(--bad);
+  }
+
+  .sechd .muted {
+    font-weight: 500;
+  }
+
+  .mclist {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+
+  .mc {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    background: var(--surface);
+  }
+
+  .mc:hover {
+    background: var(--accent-soft);
+  }
+
+  .mc:last-child {
+    border-bottom: 0;
+  }
+
+  .mc .chk {
+    width: 18px;
+    opacity: 1;
+    margin: 0;
+  }
+
+  .mc .lb {
+    cursor: default;
+  }
+
+  .mcb {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mcb b {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .mcb b.dn {
+    color: var(--muted);
+    text-decoration: line-through;
+  }
+
+  .mcb small {
+    color: var(--muted);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mcm {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex: none;
+  }
+
+  @media (max-width: 720px) {
+    .mc {
+      flex-wrap: wrap;
+    }
+
+    .mcm {
+      width: 100%;
+      padding-left: 30px;
+    }
+  }
+}

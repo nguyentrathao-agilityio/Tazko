@@ -86,7 +86,7 @@ export function CompanyShell({
 }: {
   me: Me
   company: Company
-  active: 'home' | 'projects' | 'settings' | 'me'
+  active: 'home' | 'mycards' | 'projects' | 'settings' | 'me'
   go: Go
   onSignOut: () => void
   children: ReactNode
@@ -102,6 +102,10 @@ export function CompanyShell({
         <Link to={base} go={go} className={`nav${active === 'home' ? ' on' : ''}`}>
           <Icon name="grid" />
           {t('nav.projects')}
+        </Link>
+        <Link to={`${base}/my-cards`} go={go} className={`nav${active === 'mycards' ? ' on' : ''}`}>
+          <Icon name="checksq" />
+          {t('nav.myCards')}
         </Link>
         {owner && (
           <>

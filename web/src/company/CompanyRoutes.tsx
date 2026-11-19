@@ -8,6 +8,7 @@ import { CompanySettings } from '@/company/CompanySettings'
 import { CompanyShell } from '@/company/CompanyShell'
 import { lastCompany, rememberCompany } from '@/company/lastCompany'
 import { ManageProjects } from '@/company/ManageProjects'
+import { MyCardsPage } from '@/mycards/MyCardsPage'
 import { ProjectPage } from '@/projects/ProjectPage'
 import { BoardPage } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
@@ -26,7 +27,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table)?(?:\/c\/(?<card>\d+))?|\/me(?<me>\/appearance|\/sessions)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/me(?<me>\/appearance|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const g = match?.groups ?? {}
   const company = me.companies.find((c) => c.slug === slug)
@@ -72,14 +73,14 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
   if (g.board)
     return (
       <MeContext.Provider value={me}>
-        <BoardPage key={`${company.slug}:b${g.board}`} company={company} id={Number(g.board)} cardId={g.card ? Number(g.card) : null} me={me.id} go={go} view={g.view ? 'table' : 'board'} />
+        <BoardPage key={`${company.slug}:b${g.board}`} company={company} id={Number(g.board)} cardId={g.card ? Number(g.card) : null} me={me.id} go={go} view={g.view === '/table' ? 'table' : g.view === '/dashboard' ? 'dashboard' : 'board'} />
         <SearchHost company={company} go={go} />
       </MeContext.Provider>
     )
 
   const projectId = g.project ? Number(g.project) : null
   const mine = g.section?.startsWith('/me') ?? false
-  const section = mine ? 'me' : projectId ? 'home' : g.section === '/settings' ? 'settings' : g.section === '/projects' ? 'projects' : 'home'
+  const section = mine ? 'me' : g.section === '/my-cards' ? 'mycards' : projectId ? 'home' : g.section === '/settings' ? 'settings' : g.section === '/projects' ? 'projects' : 'home'
   const tab = g.tab === '/members' ? 'members' : g.tab === '/settings' ? 'settings' : 'boards'
   return (
     <MeContext.Provider value={me}>
@@ -90,6 +91,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
       {section === 'me' && (
         <SettingsPage me={me} company={company} tab={g.me === '/appearance' ? 'appearance' : g.me === '/sessions' ? 'sessions' : 'profile'} go={go} onProfile={onProfile} />
       )}
+      {section === 'mycards' && <MyCardsPage key={company.slug} company={company} go={go} />}
       {section === 'settings' && <CompanySettings key={company.slug} company={company} />}
       {section === 'projects' && <ManageProjects key={company.slug} company={company} />}
       <SearchHost company={company} go={go} />

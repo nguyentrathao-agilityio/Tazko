@@ -1,0 +1,94 @@
+@layer components {
+  .dash {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) 28px max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .dstats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    max-width: 1200px;
+  }
+
+  .dstat {
+    background: var(--lst);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: var(--lst-sh);
+  }
+
+  .dstat small {
+    color: var(--muted);
+    display: block;
+  }
+
+  .dstat b {
+    font-size: 1.5rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+    max-width: 1200px;
+  }
+
+  .dcard {
+    background: var(--lst);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: var(--lst-sh);
+    min-width: 0;
+  }
+
+  .dcard h3 {
+    margin: 0 0 10px;
+    font-size: 0.95rem;
+  }
+
+  .hb {
+    display: grid;
+    grid-template-columns: minmax(80px, 32%) 1fr 34px;
+    gap: 10px;
+    align-items: center;
+    margin: 7px 0;
+    font-size: 0.85rem;
+  }
+
+  .hb .n {
+    overflow: hidden;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .hb .n > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hb .tr {
+    height: 12px;
+    border-radius: 99px;
+    background: var(--sunken);
+    overflow: hidden;
+  }
+
+  .hb .tr i {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent);
+  }
+
+  .hb .v {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+}
