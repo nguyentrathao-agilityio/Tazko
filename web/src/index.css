@@ -15,6 +15,7 @@
 @import './dashboard/dashboard.css';
 @import './mycards/mycards.css';
 @import './palette/palette.css';
+@import './tokens/tokens.css';
 
 body {
   margin: 0;

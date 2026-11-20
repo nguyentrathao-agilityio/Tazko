@@ -1,0 +1,27 @@
+@layer components {
+  .termw {
+    position: relative;
+  }
+
+  .term {
+    background: #13131f;
+    color: #d9dcf2;
+    font: 400 0.83rem/1.6 var(--mono);
+    padding: 14px 16px;
+    border-radius: 10px;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 8px 0;
+    word-break: break-all;
+  }
+
+  .termc {
+    position: absolute;
+    top: 14px;
+    right: 8px;
+    height: 26px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    border-color: transparent;
+  }
+}
