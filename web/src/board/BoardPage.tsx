@@ -36,6 +36,7 @@ import { TableView } from '@/table/TableView'
 import { useLive } from '@/live/useLive'
 import { LiveList, LivePill } from '@/live/LivePill'
 import { DatesPop, LabelsPop, MembersPop, MovePop } from '@/card/Pops'
+import { useToggleDone } from '@/card/repeat'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -72,6 +73,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   const base = `/api/v1/c/${company.slug}/boards/${id}`
   const { data: board, error: loadError, reload } = useLoad(() => api<BoardData>('GET', base), base)
   const { error, run } = useRun(reload)
+  const toggleDone = useToggleDone(run)
   const toast = useToast()
   const [pop, setPop] = useState<Pop>(null)
   const [menu, setMenu] = useState(false)
@@ -125,7 +127,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
     open: (c) => go(`${boardBase}/c/${c.id}`),
     goToCard: (c) => go(`${boardBase}/c/${c.id}`, true),
     quick: (c) => setPop({ kind: 'quick', at: anchorFor(c), card: c }),
-    done: (c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done })),
+    done: (c) => toggleDone(base, c),
     pop: (kind, c) => setPop({ kind: `k-${kind}`, at: anchorFor(c), card: c }),
     archive: (c) =>
       void run(() => api('POST', `${base}/cards/${c.id}/archive`)).then((ok) => {
@@ -419,7 +421,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         labels={board.labels}
         people={board.people}
         onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
-        onToggleDone={(c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done }))}
+        onToggleDone={(c) => toggleDone(base, c)}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         selected={keys.selected}
         after={
@@ -493,6 +495,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
             <DatesPop
               start={pop.card.start_at ?? null}
               due={pop.card.due_at ?? null}
+              recurrence={pop.card.recurrence ?? null}
               onSave={(v) => void run(() => api('PATCH', `${base}/cards/${pop.card.id}`, v)).then(() => setPop(null))}
             />
           )}

@@ -6,6 +6,7 @@ import { Icon } from '@/ui/Icon'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { dateRange, dueState, labelStyle } from '@/card/look'
+import { RepeatBadge } from '@/card/RepeatBadge'
 import type { BoardPerson, CardData, Label } from '@/board/types'
 import { fieldText, type FieldDef } from '@/card/fieldTypes'
 
@@ -40,7 +41,7 @@ export function CardTile({
   const state = dueState(card.due_at, card.done)
   const items = card.items ?? 0
   const front = fields.filter((f) => f.show_on_card).map((f) => ({ f, text: fieldText(f, card.fields?.[String(f.id)]) })).filter((x) => x.text)
-  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.has_description || card.comments || card.attachments || items || members.length)
+  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.recurrence || card.has_description || card.comments || card.attachments || items || members.length)
 
   return (
     <article
@@ -101,6 +102,7 @@ export function CardTile({
                 {dateRange(card.start_at, card.due_at)}
               </span>
             )}
+            <RepeatBadge rule={card.recurrence} />
             {card.has_description && (
               <span className="bdg" title={t('card.hasDescription')}>
                 <Icon name="text" />

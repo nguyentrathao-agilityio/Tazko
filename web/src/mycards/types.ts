@@ -10,6 +10,7 @@ export type MyCard = {
   items_done: number
   can_edit: boolean
   labels: { id: number; name: string; color: number }[]
+  recurrence?: string | null
   company: { slug: string; name: string }
 }
 

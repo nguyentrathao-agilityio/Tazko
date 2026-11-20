@@ -7,6 +7,7 @@ import { Avatar } from '@/ui/people'
 import type { BoardPerson, Label, ListData } from '@/board/types'
 import { labelColors, labelStyle } from '@/card/look'
 import { isObserver } from '@/roles'
+import { RULES, ruleText } from '@/card/repeat'
 
 function search(q: string, text: string) {
   return !q || text.toLowerCase().includes(q.toLowerCase())
@@ -170,12 +171,15 @@ export function LabelsPop({
 export function DatesPop({
   start,
   due,
+  recurrence = null,
   onSave,
 }: {
   start: number | null
   due: number | null
-  onSave: (v: { start_at: number | null; due_at: number | null }) => void
+  recurrence?: string | null
+  onSave: (v: { start_at: number | null; due_at: number | null; recurrence: string | null }) => void
 }) {
+  const [rule, setRule] = useState(recurrence ?? '')
   const [s, setS] = useState(toDateInput(start))
   const [d, setD] = useState(toDateInput(due))
   const [tm, setTm] = useState(toTimeInput(due))
@@ -192,11 +196,23 @@ export function DatesPop({
           <input type="time" value={tm} onChange={(e) => setTm(e.target.value)} style={{ width: 110 }} aria-label={t('cardPop.dueTime')} />
         </div>
       </div>
+      <div className="field">
+        <label htmlFor="dt-rp">{t('repeat.label')}</label>
+        <select id="dt-rp" value={d ? rule : ''} disabled={!d} onChange={(e) => setRule(e.target.value)} style={{ width: '100%' }}>
+          <option value="">{t('repeat.none')}</option>
+          {RULES.map((r) => (
+            <option key={r} value={r}>
+              {t('repeat.option', { rule: ruleText(r) })}
+            </option>
+          ))}
+        </select>
+        <small className="hint">{t('repeat.hint')}</small>
+      </div>
       <div className="row" style={{ marginTop: 12 }}>
-        <button type="button" className="btn primary sm" onClick={() => onSave({ start_at: fromInputs(s, '00:00'), due_at: fromInputs(d, tm) })}>
+        <button type="button" className="btn primary sm" onClick={() => onSave({ start_at: fromInputs(s, '00:00'), due_at: fromInputs(d, tm), recurrence: (d && rule) || null })}>
           {t('boardMenu.save')}
         </button>
-        <button type="button" className="btn sm" onClick={() => onSave({ start_at: null, due_at: null })}>
+        <button type="button" className="btn sm" onClick={() => onSave({ start_at: null, due_at: null, recurrence: null })}>
           {t('common.remove')}
         </button>
       </div>

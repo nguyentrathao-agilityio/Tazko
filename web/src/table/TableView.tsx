@@ -11,6 +11,7 @@ import { useToast } from '@/ui/toast'
 import type { BoardData, CardData, ListData } from '@/board/types'
 import { dueState, labelStyle } from '@/card/look'
 import { LabelsPop, MembersPop } from '@/card/Pops'
+import { useToggleDone } from '@/card/repeat'
 import { fieldText, type FieldDef, type FieldValue } from '@/card/fieldTypes'
 import { FieldControl } from '@/card/Fields'
 import { fromInputs, toDateInput, toTimeInput } from '@/card/dates'
@@ -89,6 +90,7 @@ export function TableView({
   const picked = ids.filter((id) => chosen.has(id))
   const allSelected = ids.length > 0 && picked.length === ids.length
 
+  const toggleDone = useToggleDone(run)
   const patch = (card: CardData, body: Record<string, unknown>) => run(() => api('PATCH', `${base}/cards/${card.id}`, body))
   const move = (card: CardData, list: number) => run(() => api('POST', `${base}/cards/${card.id}/move`, { list_id: list, after: appendAfter(board.lists, list, card.id) }))
   const setField = (card: CardData, f: FieldDef, value: FieldValue | null) => run(() => api('PUT', `${base}/cards/${card.id}/fields/${f.id}`, { value }))
@@ -159,7 +161,7 @@ export function TableView({
           <td key="title" className="tt">
             <div className="row">
               <input type="checkbox" aria-label={t('table.select', { title: card.title })} checked={chosen.has(card.id)} onChange={() => toggle(card.id)} />
-              <button type="button" className="chk" role="checkbox" aria-checked={Boolean(card.done)} aria-label={t('card.markComplete')} disabled={!edit} onClick={() => void patch(card, { done: !card.done })}>
+              <button type="button" className="chk" role="checkbox" aria-checked={Boolean(card.done)} aria-label={t('card.markComplete')} disabled={!edit} onClick={() => toggleDone(base, card)}>
                 {card.done && <Icon name="check" />}
               </button>
               <button type="button" className={`tl${card.done ? ' dn' : ''}`} title={card.title} onClick={() => onOpen(card)}>
