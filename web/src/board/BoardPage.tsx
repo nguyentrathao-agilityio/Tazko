@@ -1,4 +1,5 @@
-import { EmailInviteOption, invitedMessage, wantsEmail, type InviteResult } from '@/invite/emailInvite'
+import { EmailInviteOption } from '@/invite/EmailInviteOption'
+import { invitedMessage, wantsEmail, type InviteResult } from '@/invite/invite'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
