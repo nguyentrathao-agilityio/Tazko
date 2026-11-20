@@ -116,6 +116,11 @@ pub static TENANT: Migrations = Migrations {
             name: "0013_item_meta.sql",
             sql: include_str!("../../migrations/tenant/0013_item_meta.sql"),
         },
+        Migration {
+            version: 14,
+            name: "0014_item_note_text.sql",
+            sql: include_str!("../../migrations/tenant/0014_item_note_text.sql"),
+        },
     ],
 };
 

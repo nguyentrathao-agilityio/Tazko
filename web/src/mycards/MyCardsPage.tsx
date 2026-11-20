@@ -1,4 +1,4 @@
-import { Children, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
@@ -60,12 +60,12 @@ function Row({
       </div>
       <div className="mcm">
         {children}
-        {due && (
+        {due ? (
           <span className={`bdg ${dueState(due, done)}`} title={t('card.dates')}>
             <Icon name="clock" />
             {shortDate(due)}
           </span>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -91,11 +91,11 @@ function CardBadges({ card }: { card: MyCard }) {
 
 type Tab = 'cards' | 'items'
 
-function Group({ group, children }: { group: DueBucket; children: ReactNode }) {
+function Group({ group, count, children }: { group: DueBucket; count: number; children: ReactNode }) {
   return (
     <section aria-label={t(`mycards.group.${group}`)}>
       <div className={`sechd${group === 'overdue' ? ' bad' : ''}`}>
-        {t(`mycards.group.${group}`)} <span className="muted">· {Children.count(children)}</span>
+        {t(`mycards.group.${group}`)} <span className="muted">· {count}</span>
       </div>
       <div className="mclist">{children}</div>
     </section>
@@ -122,7 +122,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
   const shownCards = cards.filter((c) => keep(c, c.title))
   const shownItems = items.filter((i) => keep(i, i.text))
   const empty = tab === 'cards' ? shownCards.length === 0 : shownItems.length === 0
-  const place = (x: { company: { name: string } }, parts: string[], sep: string) => [all ? x.company.name : null, ...parts].filter(Boolean).join(sep)
+  const place = (x: { company: { name: string } }, ...parts: string[]) => [all ? x.company.name : null, ...parts].filter(Boolean).join(' › ')
 
   return (
     <>
@@ -171,14 +171,14 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
       {data && empty && <EmptyState title={t('mycards.noneTitle')} body={tab === 'cards' ? t('mycards.noneBody') : t('mycards.noItemsBody')} />}
       {tab === 'cards' &&
         groupCards(shownCards).map(([g, list]) => (
-          <Group key={g} group={g}>
+          <Group key={g} group={g} count={list.length}>
             {list.map((c) => (
               <Row
                 key={`${c.company.slug}:${c.id}`}
                 done={c.done}
                 canEdit={c.can_edit}
                 title={c.title}
-                sub={place(c, [c.project.name, c.board.name, c.list], ' › ')}
+                sub={place(c, c.project.name, c.board.name, c.list)}
                 due={c.due_at}
                 onOpen={() => go(cardRoute(c.company.slug, c.board.id, c.id))}
                 onDone={() => void run(() => api('PATCH', `${boardApiOf(c.company.slug, c.board.id)}/cards/${c.id}`, { done: !c.done }))}
@@ -190,7 +190,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
         ))}
       {tab === 'items' &&
         groupCards(shownItems).map(([g, list]) => (
-          <Group key={g} group={g}>
+          <Group key={g} group={g} count={list.length}>
             {list.map((i) => (
               <Row
                 key={`${i.company.slug}:${i.id}`}
@@ -198,7 +198,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
                 done={i.done}
                 canEdit={i.can_edit}
                 title={i.text}
-                sub={place(i, [t('mycards.itemIn', { card: i.card.title, board: i.board.name })], ' › ')}
+                sub={place(i, t('mycards.itemIn', { card: i.card.title, board: i.board.name }))}
                 due={i.due_at}
                 onOpen={() => go(cardRoute(i.company.slug, i.board.id, i.card.id))}
                 onDone={() => void run(() => api('PATCH', `${boardApiOf(i.company.slug, i.board.id)}/items/${i.id}`, { done: !i.done }))}

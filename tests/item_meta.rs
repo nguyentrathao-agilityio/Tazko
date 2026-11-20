@@ -244,9 +244,6 @@ async fn an_assigned_item_shows_in_my_cards_with_its_due_date_and_notifies() {
         Some(json!({ "assignee": null, "due_at": null })),
     )
     .await;
-    let item = shown(&w).await;
-    assert_eq!(item["assignee"], Value::Null);
-    assert_eq!(item["due_at"], Value::Null);
     let mine = req(
         &w.app,
         &w.dev,

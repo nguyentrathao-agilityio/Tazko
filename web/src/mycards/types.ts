@@ -18,7 +18,6 @@ export type MyItem = {
   text: string
   done: boolean
   due_at: number | null
-  checklist: number
   card: { id: number; title: string }
   board: { id: number; name: string }
   project: { id: number; name: string }

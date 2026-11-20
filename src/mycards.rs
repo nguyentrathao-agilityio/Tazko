@@ -14,6 +14,14 @@ use crate::tenant::CurrentUser;
 
 pub const LIMIT: i64 = 500;
 
+const OPEN: &str = "JOIN lists l ON l.id = k.list_id
+         JOIN boards b ON b.id = k.board_id
+         JOIN projects p ON p.id = b.project_id
+         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?2";
+
+const LIVE: &str = "k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
+           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL";
+
 pub fn routes() -> Router<AppState> {
     Router::new().route("/api/v1/me/cards", get(mine))
 }
@@ -31,12 +39,8 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
                 pm.role != 'observer'
          FROM card_members cm
          JOIN cards k ON k.id = cm.card_id
-         JOIN lists l ON l.id = k.list_id
-         JOIN boards b ON b.id = k.board_id
-         JOIN projects p ON p.id = b.project_id
-         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?2
-         WHERE cm.user_id = ?2 AND k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
-           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL AND {VISIBLE}
+         {OPEN}
+         WHERE cm.user_id = ?2 AND {LIVE} AND {VISIBLE}
          ORDER BY k.done, k.due_at IS NULL, k.due_at, k.id LIMIT ?1"
     ))?;
     let rows: Vec<(Value, i64)> = stmt
@@ -78,16 +82,12 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
 
 pub fn assigned_items(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = c.prepare(&format!(
-        "SELECT i.id, i.text, i.done, i.due_at, x.id, k.id, k.title, b.id, b.name, p.id, p.name, pm.role != 'observer'
+        "SELECT i.id, i.text, i.done, i.due_at, k.id, k.title, b.id, b.name, p.id, p.name, pm.role != 'observer'
          FROM checklist_items i
          JOIN checklists x ON x.id = i.checklist_id
          JOIN cards k ON k.id = x.card_id
-         JOIN lists l ON l.id = k.list_id
-         JOIN boards b ON b.id = k.board_id
-         JOIN projects p ON p.id = b.project_id
-         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?2
-         WHERE i.assignee_id = ?2 AND k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
-           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL AND {VISIBLE}
+         {OPEN}
+         WHERE i.assignee_id = ?2 AND {LIVE} AND {VISIBLE}
          ORDER BY i.done, i.due_at IS NULL, i.due_at, i.id LIMIT ?1"
     ))?;
     stmt.query_map(params![LIMIT, user], |r| {
@@ -96,11 +96,10 @@ pub fn assigned_items(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>>
             "text": r.get::<_, String>(1)?,
             "done": r.get::<_, bool>(2)?,
             "due_at": r.get::<_, Option<i64>>(3)?,
-            "checklist": r.get::<_, i64>(4)?,
-            "card": { "id": r.get::<_, i64>(5)?, "title": r.get::<_, String>(6)? },
-            "board": { "id": r.get::<_, i64>(7)?, "name": r.get::<_, String>(8)? },
-            "project": { "id": r.get::<_, i64>(9)?, "name": r.get::<_, String>(10)? },
-            "can_edit": r.get::<_, bool>(11)?,
+            "card": { "id": r.get::<_, i64>(4)?, "title": r.get::<_, String>(5)? },
+            "board": { "id": r.get::<_, i64>(6)?, "name": r.get::<_, String>(7)? },
+            "project": { "id": r.get::<_, i64>(8)?, "name": r.get::<_, String>(9)? },
+            "can_edit": r.get::<_, bool>(10)?,
         }))
     })?
     .collect()

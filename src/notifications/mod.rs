@@ -44,7 +44,7 @@ pub fn routes() -> Router<AppState> {
 pub enum Kind {
     Mention(i64),
     Assigned,
-    ItemAssigned(i64),
+    ItemAssigned(String),
     CardAdded,
 }
 
@@ -63,11 +63,11 @@ pub fn notify(
     let (name, comment, item) = match kind {
         Kind::Mention(comment) => ("mention", Some(comment), None),
         Kind::Assigned => ("assigned", None, None),
-        Kind::ItemAssigned(item) => ("assigned", None, Some(item)),
+        Kind::ItemAssigned(text) => ("assigned", None, Some(text)),
         Kind::CardAdded => ("card_added", None, None),
     };
     c.execute(
-        "INSERT INTO notifications (user_id, kind, actor_id, board_id, card_id, comment_id, item_id)
+        "INSERT INTO notifications (user_id, kind, actor_id, board_id, card_id, comment_id, item_text)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![user, name, actor, board, card, comment, item],
     )?;
@@ -200,9 +200,8 @@ struct ListQuery {
 fn rows(c: &Connection, user: i64, only_unread: bool) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = c.prepare(&format!(
         "SELECT n.id, n.kind, n.actor_id, coalesce(nullif(a.name, ''), a.email, ''), a.email,
-                n.card_id, k.title, n.board_id, b.name, n.created_at, n.read_at IS NOT NULL, n.due_at, i.text
+                n.card_id, k.title, n.board_id, b.name, n.created_at, n.read_at IS NOT NULL, n.due_at, n.item_text
          FROM notifications n
-         LEFT JOIN checklist_items i ON i.id = n.item_id
          JOIN cards k ON k.id = n.card_id
          JOIN boards b ON b.id = n.board_id
          LEFT JOIN people a ON a.id = n.actor_id

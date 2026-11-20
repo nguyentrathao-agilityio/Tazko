@@ -49,7 +49,6 @@ const item = {
   text: 'Write release notes',
   done: false,
   due_at: NOW + 3 * DAY,
-  checklist: 5,
   card: { id: 23, title: 'Plan launch' },
   board: { id: 8, name: 'Ops board' },
   project: { id: 5, name: 'Ops' },

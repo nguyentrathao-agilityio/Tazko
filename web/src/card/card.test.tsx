@@ -125,7 +125,10 @@ describe('card dialog', () => {
     expect(within(pop).queryByRole('button', { name: /Ana Reyes/ })).toBeNull()
     fireEvent.click(within(pop).getByRole('button', { name: /Jo Lee/ }))
     await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/items/53', method: 'PATCH', body: { assignee: 2 } }))
-    fireEvent.change(within(pop).getByLabelText('Due date'), { target: { value: '2026-12-24' } })
+    const dateBox = within(pop).getByLabelText('Due date')
+    fireEvent.change(dateBox, { target: { value: '2026-12-24' } })
+    expect(calls.some((c) => c.url === '/api/v1/c/acme/boards/7/items/53' && 'due_at' in ((c.body as object) ?? {}))).toBe(false)
+    fireEvent.blur(dateBox)
     await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/c/acme/boards/7/items/53' && typeof (c.body as { due_at?: number }).due_at === 'number')).toBe(true))
 
     fireEvent.click(within(rows[2] as HTMLElement).getByRole('button', { name: /^Due / }))

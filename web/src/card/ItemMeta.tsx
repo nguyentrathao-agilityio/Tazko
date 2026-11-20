@@ -4,6 +4,7 @@ import { fromInputs, toDateInput } from '@/card/dates'
 import type { ChecklistItem } from '@/card/types'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
+import { ENTER } from '@/keys/keyNames'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { isObserver } from '@/roles'
@@ -21,17 +22,22 @@ export function ItemBadges({ item, people, edit, onOpen }: { item: ChecklistItem
           <Avatar name={name} />
         </span>
       )}
-      {item.due_at && (
+      {item.due_at ? (
         <button type="button" className={`itd ${item.done ? '' : dueState(item.due_at, false)}`} disabled={!edit} aria-label={t('item.due', { date: shortDate(item.due_at) })} onClick={(e) => onOpen(e.currentTarget)}>
           <Icon name="clock" />
           {shortDate(item.due_at)}
         </button>
-      )}
+      ) : null}
     </span>
   )
 }
 
 export function ItemMetaPop({ item, people, onChange }: { item: ChecklistItem; people: BoardPerson[]; onChange: (change: ItemChange) => void }) {
+  const save = (value: string) => {
+    const due = fromInputs(value, '')
+    if (due && due > 0 && due !== item.due_at) onChange({ due_at: due })
+  }
+
   return (
     <>
       <div className="sub">{t('item.assignTo')}</div>
@@ -64,14 +70,15 @@ export function ItemMetaPop({ item, people, onChange }: { item: ChecklistItem; p
           id={`it-d-${item.id}`}
           key={item.due_at ?? 'none'}
           defaultValue={toDateInput(item.due_at)}
-          onChange={(e) => e.target.value && onChange({ due_at: fromInputs(e.target.value, '') })}
+          onBlur={(e) => save(e.currentTarget.value)}
+          onKeyDown={(e) => e.key === ENTER && save(e.currentTarget.value)}
         />
       </div>
-      {item.due_at && (
+      {item.due_at ? (
         <button type="button" className="btn sm" onClick={() => onChange({ due_at: null })}>
           {t('item.removeDue')}
         </button>
-      )}
+      ) : null}
     </>
   )
 }

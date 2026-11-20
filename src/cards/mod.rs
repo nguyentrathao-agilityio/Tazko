@@ -243,8 +243,8 @@ pub fn copy_card(
         )?;
         let id = c.last_insert_rowid();
         c.execute(
-            "INSERT INTO checklist_items (checklist_id, text, done, position)
-             SELECT ?2, text, done, position FROM checklist_items WHERE checklist_id = ?1",
+            "INSERT INTO checklist_items (checklist_id, text, done, position, assignee_id, due_at)
+             SELECT ?2, text, done, position, assignee_id, due_at FROM checklist_items WHERE checklist_id = ?1",
             params![old, id],
         )?;
     }
