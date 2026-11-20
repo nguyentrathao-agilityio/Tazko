@@ -8,6 +8,10 @@ export type Comment = { id: number; author: PersonRef; body: string; created_at:
 
 export type ChecklistItem = { id: number; text: string; done: boolean; assignee?: number | null; due_at?: number | null }
 
+export type LinkKind = 'relates' | 'blocks' | 'blocked_by' | 'duplicates' | 'duplicated_by'
+
+export type CardLink = { card: { id: number; title: string; done: boolean; archived: boolean }; board: { id: number; name: string }; list: string; kind: LinkKind }
+
 export type Checklist = { id: number; title: string; items: ChecklistItem[] }
 
 export type Attachment = { id: number; kind: 'file' | 'link'; name: string; size: number; url: string | null; image: boolean; type: string; created_at: number }
@@ -27,6 +31,7 @@ export type CardDetail = {
   labels: number[]
   members: number[]
   checklists: Checklist[]
+  links?: CardLink[]
   attachments: Attachment[]
   fields?: Record<string, FieldValue>
   cover_image: number | null

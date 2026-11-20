@@ -41,7 +41,7 @@ export function CardTile({
   const state = dueState(card.due_at, card.done)
   const items = card.items ?? 0
   const front = fields.filter((f) => f.show_on_card).map((f) => ({ f, text: fieldText(f, card.fields?.[String(f.id)]) })).filter((x) => x.text)
-  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.recurrence || card.has_description || card.comments || card.attachments || items || members.length)
+  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.recurrence || card.links || card.has_description || card.comments || card.attachments || items || members.length)
 
   return (
     <article
@@ -103,6 +103,16 @@ export function CardTile({
               </span>
             )}
             <RepeatBadge rule={card.recurrence} />
+            {card.blocked ? (
+              <span className="bdg bad" title={t('links.blockedHint')}>
+                {t('links.blocked')}
+              </span>
+            ) : card.links ? (
+              <span className="bdg" title={t('links.badge')}>
+                <Icon name="link" />
+                {card.links}
+              </span>
+            ) : null}
             {card.has_description && (
               <span className="bdg" title={t('card.hasDescription')}>
                 <Icon name="text" />
