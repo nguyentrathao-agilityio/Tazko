@@ -66,6 +66,10 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'reopened a checklist item'
     case 'item_changed':
       return 'changed a checklist item'
+    case 'card_voted':
+      return 'voted for this card'
+    case 'card_unvoted':
+      return 'removed their vote from this card'
     case 'link_added':
       return 'linked this card to another card'
     case 'link_removed':

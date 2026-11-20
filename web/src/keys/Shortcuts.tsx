@@ -20,6 +20,7 @@ const keys: [string, MessageKey][] = [
   ['D', 'keys.dates'],
   ['T', 'keys.labels'],
   ['M', 'keys.move'],
+  ['V', 'keys.vote'],
   ['X', 'keys.archive'],
   ['1–8', 'keys.label'],
   ['G', 'keys.drag'],

@@ -32,6 +32,8 @@ export type CardDetail = {
   members: number[]
   checklists: Checklist[]
   links?: CardLink[]
+  voted?: boolean
+  voters?: { id: number; name: string; email: string }[]
   attachments: Attachment[]
   fields?: Record<string, FieldValue>
   cover_image: number | null

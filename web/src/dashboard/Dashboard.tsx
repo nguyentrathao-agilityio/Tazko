@@ -58,6 +58,12 @@ export function Dashboard({ board, lists }: { board: BoardData; lists: ListData[
           <h3>{t('dash.dueDates')}</h3>
           <Bars rows={s.due} />
         </section>
+        {board.voting && (
+          <section className="dcard" aria-label={t('dash.mostVotes')}>
+            <h3>{t('dash.mostVotes')}</h3>
+            {s.votes.length ? <Bars rows={s.votes} /> : <p className="muted">{t('dash.noVotes')}</p>}
+          </section>
+        )}
       </div>
     </div>
   )

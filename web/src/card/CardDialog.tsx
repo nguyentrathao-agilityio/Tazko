@@ -20,6 +20,7 @@ import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop }
 import { FieldsSection } from '@/card/Fields'
 import { LinkPop, LinksSection } from '@/card/Links'
 import { ruleText, useToggleDone } from '@/card/repeat'
+import { useVote } from '@/card/vote'
 import { ItemBadges, ItemMetaPop } from '@/card/ItemMeta'
 import { MentionBox } from '@/card/MentionBox'
 import { Reactions } from '@/card/Reactions'
@@ -61,6 +62,7 @@ export function CardDialog({
   }, [reload, onChanged])
   const { error, run } = useRun(changed)
   const toggleDone = useToggleDone(run)
+  const vote = useVote(run)
   const toast = useToast()
   const [pop, setPop] = useState<Pop>(null)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -218,6 +220,22 @@ export function CardDialog({
                   )}
                 </div>
               </div>
+              {board.voting && (
+                <div>
+                  <h4>{t('vote.title')}</h4>
+                  <div className="ln">
+                    <button type="button" className={`votebtn${card.voted ? ' on' : ''}`} aria-pressed={Boolean(card.voted)} disabled={!edit} onClick={() => vote(base, card)}>
+                      <Icon name="up" />
+                      {card.voted ? t('vote.voted') : t('vote.vote')} · {card.voters?.length ?? 0}
+                    </button>
+                    {(card.voters ?? []).slice(0, 5).map((p) => (
+                      <span key={p.id} title={displayName(p.name, p.email)}>
+                        <Avatar name={displayName(p.name, p.email)} />
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {(card.due_at || card.start_at) && (
                 <div>
                   <h4>{t('card.dates')}</h4>

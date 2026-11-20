@@ -21,6 +21,7 @@ export function CardTile({
   onOpen,
   onQuickEdit,
   onToggleDone,
+  onVote,
 }: {
   card: CardData
   base?: string
@@ -32,6 +33,7 @@ export function CardTile({
   onOpen: (card: CardData) => void
   onQuickEdit: (card: CardData, el: HTMLElement) => void
   onToggleDone: (card: CardData) => void
+  onVote?: (card: CardData) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `c:${card.id}`, disabled: !edit })
   const style = { transform: CSS.Translate.toString(transform), transition }
@@ -41,7 +43,7 @@ export function CardTile({
   const state = dueState(card.due_at, card.done)
   const items = card.items ?? 0
   const front = fields.filter((f) => f.show_on_card).map((f) => ({ f, text: fieldText(f, card.fields?.[String(f.id)]) })).filter((x) => x.text)
-  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.recurrence || card.links || card.has_description || card.comments || card.attachments || items || members.length)
+  const hasBadges = front.length > 0 || Boolean(card.due_at || card.start_at || card.recurrence || card.links || (onVote && card.votes) || card.has_description || card.comments || card.attachments || items || members.length)
 
   return (
     <article
@@ -101,6 +103,24 @@ export function CardTile({
                 <Icon name="clock" />
                 {dateRange(card.start_at, card.due_at)}
               </span>
+            )}
+            {onVote && Boolean(card.votes) && (
+              <button
+                type="button"
+                className={`bdg vote${card.voted ? ' me' : ''}`}
+                title={t('vote.count', { n: card.votes ?? 0 })}
+                aria-label={card.voted ? t('vote.remove') : t('vote.add')}
+                aria-pressed={Boolean(card.voted)}
+                disabled={!edit}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  stop(e)
+                  onVote(card)
+                }}
+              >
+                <Icon name="up" />
+                {card.votes}
+              </button>
             )}
             <RepeatBadge rule={card.recurrence} />
             {card.blocked ? (

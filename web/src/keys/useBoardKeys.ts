@@ -15,6 +15,7 @@ export type KeyActions = {
   zen: () => void
   help: () => void
   leaveZen: () => boolean
+  vote?: (card: CardData) => void
   goToCard: (card: CardData) => void
 }
 
@@ -166,6 +167,9 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
       } else if (key === ' ') {
         handled()
         s.actions.done(card)
+      } else if (lower === 'v' && s.actions.vote) {
+        handled()
+        s.actions.vote(card)
       } else if (lower === 'x') {
         handled()
         s.actions.archive(card)

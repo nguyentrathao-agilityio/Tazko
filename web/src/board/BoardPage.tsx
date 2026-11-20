@@ -38,6 +38,7 @@ import { useLive } from '@/live/useLive'
 import { LiveList, LivePill } from '@/live/LivePill'
 import { DatesPop, LabelsPop, MembersPop, MovePop } from '@/card/Pops'
 import { useToggleDone } from '@/card/repeat'
+import { useVote } from '@/card/vote'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -75,6 +76,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   const { data: board, error: loadError, reload } = useLoad(() => api<BoardData>('GET', base), base)
   const { error, run } = useRun(reload)
   const toggleDone = useToggleDone(run)
+  const vote = useVote(run)
   const toast = useToast()
   const [pop, setPop] = useState<Pop>(null)
   const [menu, setMenu] = useState(false)
@@ -129,6 +131,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
     goToCard: (c) => go(`${boardBase}/c/${c.id}`, true),
     quick: (c) => setPop({ kind: 'quick', at: anchorFor(c), card: c }),
     done: (c) => toggleDone(base, c),
+    vote: board?.voting ? (c) => vote(base, c) : undefined,
     pop: (kind, c) => setPop({ kind: `k-${kind}`, at: anchorFor(c), card: c }),
     archive: (c) =>
       void run(() => api('POST', `${base}/cards/${c.id}/archive`)).then((ok) => {
@@ -203,6 +206,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
     },
     addCard: (l) => setComposing(l.id),
     sort: (l, by) => void run(() => api('POST', `${base}/lists/${l.id}/sort`, { by })),
+    votes: board.voting,
     moveAll: (l, to) => void run(() => api('POST', `${base}/lists/${l.id}/move-cards`, { to: to.id })),
     archiveAll: (l) =>
       void run(() => api('POST', `${base}/lists/${l.id}/archive-cards`)).then((ok) => {
@@ -238,6 +242,8 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         done: boardActions.done,
         pop: boardActions.pop,
         move: (c, l) => void run(() => api('POST', `${base}/cards/${c.id}/move`, { list_id: l.id, after: appendAfter(lists, l.id, c.id) })),
+        voting: Boolean(board.voting),
+        vote: (c) => vote(base, c),
         archive: (c) => {
           keys.setSelected(null)
           boardActions.archive(c)
@@ -423,6 +429,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         people={board.people}
         onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
         onToggleDone={(c) => toggleDone(base, c)}
+        onVote={board.voting ? (c) => vote(base, c) : undefined}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         selected={keys.selected}
         after={
@@ -467,6 +474,14 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
               setPop(null)
               if (title !== pop.card.title) void run(() => api('PATCH', `${base}/cards/${pop.card.id}`, { title }))
             }}
+            onVote={
+              board.voting
+                ? () => {
+                    setPop(null)
+                    vote(base, pop.card)
+                  }
+                : undefined
+            }
             onArchive={() => {
               const card = pop.card
               setPop(null)
@@ -643,7 +658,7 @@ function Share({ company, board, onDone }: { company: Company; board: BoardData;
   )
 }
 
-function QuickEdit({ card, onSave, onArchive }: { card: CardData; lists: ListData[]; onSave: (title: string) => void; onArchive: () => void }) {
+function QuickEdit({ card, onSave, onVote, onArchive }: { card: CardData; lists: ListData[]; onSave: (title: string) => void; onVote?: () => void; onArchive: () => void }) {
   const [title, setTitle] = useState(card.title)
   return (
     <form
@@ -671,6 +686,15 @@ function QuickEdit({ card, onSave, onArchive }: { card: CardData; lists: ListDat
           {t('boardMenu.save')}
         </button>
       </div>
+      {onVote && (
+        <button type="button" className="mi" onClick={onVote}>
+          <Icon name="up" />
+          {card.voted ? t('vote.remove') : t('vote.add')}
+          <span className="kbd" style={{ marginLeft: 'auto' }}>
+            V
+          </span>
+        </button>
+      )}
       <button type="button" className="mi danger" onClick={onArchive}>
         <Icon name="archive" />
         {t('card.archive')}
