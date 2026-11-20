@@ -34,6 +34,12 @@ let calls: Call[] = []
 let role = 'member'
 
 const ctrlK = () => fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+const dialog = () => screen.queryByRole('dialog', { name: 'Command palette' })
+const openPalette = () =>
+  waitFor(() => {
+    if (!dialog()) ctrlK()
+    expect(dialog()).toBeTruthy()
+  })
 const input = () => screen.getByRole('searchbox', { name: 'Command palette' })
 const press = (key: string, n = 1) => {
   for (let i = 0; i < n; i++) fireEvent.keyDown(input(), { key })
@@ -42,7 +48,7 @@ const options = () => screen.getAllByRole('option').map((o) => o.textContent ?? 
 const writes = () => calls.filter((c) => c.method !== 'GET')
 
 async function choose(label: RegExp) {
-  ctrlK()
+  await openPalette()
   const at = options().findIndex((o) => label.test(o))
   expect(at, String(label)).toBeGreaterThanOrEqual(0)
   press('ArrowDown', at)
@@ -125,8 +131,7 @@ describe('palette on a board', () => {
   it('opens with Ctrl K and lists the groups with shortcuts', async () => {
     openAt('/c/acme/b/7')
     await screen.findByText('Write copy')
-    ctrlK()
-    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeTruthy()
+    await openPalette()
     const subs = [...document.querySelectorAll('.pal .sub')].map((s) => s.textContent)
     expect(subs).toEqual(['Actions', 'Filter', 'Density', 'Zen quiet mode', 'Card actions', 'Go to'])
     expect(options()).toContain('Enter zen modeZ')
@@ -179,7 +184,7 @@ describe('palette on a board', () => {
     openAt('/c/acme/b/7')
     await screen.findByText('Write copy')
     fireEvent.keyDown(window, { key: 'j' })
-    ctrlK()
+    await openPalette()
     const o = options()
     expect(o.some((x) => x.startsWith('Open "Write copy"'))).toBe(true)
     expect(o.some((x) => /^(Mark|Move|Archive|Assign|Dates|Labels|New card)/.test(x))).toBe(false)
@@ -197,7 +202,7 @@ describe('palette on a board', () => {
     await screen.findByText('Write copy')
     fireEvent.keyDown(window, { key: 'j' })
     fireEvent.keyDown(window, { key: 'q' })
-    ctrlK()
+    await openPalette()
     expect(options().some((x) => x.includes('"Write copy"'))).toBe(false)
   })
 })

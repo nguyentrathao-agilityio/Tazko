@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import { saveSettings, useSettings } from '@/settings/store'
 import type { Go } from '@/ui/Link'
 import { openSearchEvent } from '@/ui/typing'
@@ -9,7 +9,7 @@ const BLOCKING = '.pop, .modal, .drawer, .ov:not(.pal):not(.cmov)'
 export function usePalette(enabled = true) {
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!enabled) return
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key.toLowerCase() !== 'k' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
