@@ -46,7 +46,24 @@ pub fn clean(text: &str) -> String {
 }
 
 pub fn name(text: &str) -> String {
-    clean_to(&text.replace("://", " ").replace("www.", "www "), 60)
+    let mut out = String::new();
+    let chars: Vec<char> = clean_to(&text.replace("://", " "), 200).chars().collect();
+    for (i, c) in chars.iter().enumerate() {
+        out.push(*c);
+        let joins = |j: Option<&char>| j.is_some_and(|c| c.is_alphanumeric());
+        if *c == '.'
+            && joins(i.checked_sub(1).and_then(|p| chars.get(p)))
+            && joins(chars.get(i + 1))
+        {
+            out.push(' ');
+        }
+    }
+    out.trim_end()
+        .chars()
+        .take(60)
+        .collect::<String>()
+        .trim_end()
+        .to_string()
 }
 
 fn clean_to(text: &str, limit: usize) -> String {
@@ -90,7 +107,7 @@ fn encoded(text: &str) -> String {
     let mut words = vec![];
     let mut chunk = String::new();
     for c in text.chars() {
-        if chunk.len() + c.len_utf8() > 45 {
+        if chunk.len() + c.len_utf8() > 39 {
             words.push(std::mem::take(&mut chunk));
         }
 
@@ -101,7 +118,7 @@ fn encoded(text: &str) -> String {
         .iter()
         .map(|w| format!("=?UTF-8?B?{}?=", STANDARD.encode(w)))
         .collect::<Vec<_>>()
-        .join(" ")
+        .join("\r\n ")
 }
 
 fn base64_lines(body: &str) -> String {
@@ -225,6 +242,24 @@ mod tests {
             .render()
             .is_none()
         );
+    }
+
+    #[test]
+    fn names_cannot_look_like_links() {
+        assert_eq!(
+            name("Verify at pay-tazko-login.com"),
+            "Verify at pay-tazko-login. com"
+        );
+        assert_eq!(name("https://evil.example/x"), "https evil. example/x");
+        assert_eq!(name("Acme Inc."), "Acme Inc.");
+        assert_eq!(name(&"x".repeat(100)).len(), 60);
+    }
+
+    #[test]
+    fn long_encoded_headers_are_folded() {
+        let long = encoded(&"ố".repeat(60));
+        assert!(long.split("\r\n ").all(|line| line.len() <= 76));
+        assert!(long.contains("\r\n "));
     }
 
     #[test]

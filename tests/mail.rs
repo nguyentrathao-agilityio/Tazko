@@ -300,3 +300,110 @@ async fn an_unreachable_mail_server_is_retried_later() {
     assert!(next > tazko::session::now() + 30);
     assert_eq!(deliver(&w.app).await, 0, "waits before trying again");
 }
+
+fn refusing_server() -> u16 {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader, Write};
+        for stream in listener.incoming().flatten() {
+            let mut out = stream.try_clone().unwrap();
+            let mut lines = BufReader::new(stream);
+            let _ = out.write_all(b"220 ready\r\n");
+            let mut line = String::new();
+            while lines.read_line(&mut line).unwrap_or(0) > 0 {
+                let reply: &[u8] = if line.starts_with("EHLO") {
+                    b"250-x\r\n250 AUTH PLAIN\r\n"
+                } else {
+                    b"535 5.7.8 bad credentials\r\n"
+                };
+                let _ = out.write_all(reply);
+                line.clear();
+            }
+        }
+    });
+    port
+}
+
+#[tokio::test]
+async fn a_rejected_sign_in_is_retried_not_given_up() {
+    let port = refusing_server();
+    let w = world(&format!(
+        "{}TAZKO_SMTP_USER=mailer\nTAZKO_SMTP_PASSWORD=wrong\n",
+        smtp_env(port)
+    ))
+    .await;
+    for email in ["one@b.example", "two@b.example"] {
+        req(
+            &w.app,
+            &w.boss,
+            Method::POST,
+            &format!("{C}/invites"),
+            Some(json!({ "email": email, "role": "member", "send_email": true })),
+        )
+        .await;
+    }
+    assert_eq!(
+        deliver(&w.app).await,
+        1,
+        "a server-wide problem stops the batch"
+    );
+    let rows: Vec<(String, i64)> = w
+        .app
+        .sql(|c| {
+            c.prepare("SELECT status, attempts FROM email_queue ORDER BY id")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
+        .await;
+    assert_eq!(
+        rows,
+        [("pending".to_string(), 1), ("pending".to_string(), 0)]
+    );
+    let admin = w.boss.id;
+    w.app
+        .sql(move |c| c.execute("UPDATE users SET is_super_admin = 1 WHERE id = ?1", [admin]))
+        .await;
+    let (_, server) = req(&w.app, &w.boss, Method::GET, "/api/v1/admin/server", None).await;
+    assert!(
+        server["email_queue"]["last_error"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("535")
+    );
+}
+
+#[tokio::test]
+async fn disabled_and_non_ascii_addresses_get_no_email_and_old_mail_is_cleared() {
+    let (port, _out, _keep) = stub();
+    let w = world(&smtp_env(port)).await;
+    w.app
+        .sql(|c| {
+            c.execute(
+                "INSERT INTO users (email, name, disabled) VALUES ('gone@b.example', 'Gone', 1)",
+                [],
+            )
+        })
+        .await;
+    let (_, owner_gone) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/invites"),
+        Some(json!({ "email": "gone@b.example", "role": "member", "send_email": true })),
+    )
+    .await;
+    assert_eq!(
+        owner_gone["emailed"], false,
+        "a disabled account is not told it joins automatically"
+    );
+    w.app
+        .sql(|c| c.execute("INSERT INTO email_queue (kind, to_addr, subject, body_text, body_html, status, created_at) VALUES ('invite', 'old@b.example', 's', 't', 'h', 'sent', 1)", []))
+        .await;
+    assert_eq!(
+        tazko::mail::purge(&w.app.state, tazko::session::now())
+            .await
+            .unwrap(),
+        1
+    );
+}

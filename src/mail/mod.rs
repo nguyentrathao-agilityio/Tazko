@@ -23,6 +23,7 @@ use message::{Message, name};
 const TICK: Duration = Duration::from_secs(5);
 const SEND_BATCH: i64 = 10;
 const BACKOFF: [i64; 5] = [60, 300, 1800, 7200, 21600];
+const PURGE_EVERY: i64 = 3600;
 const KEEP: i64 = 30 * 24 * 3600;
 const INVITES_PER_ADDRESS_PER_DAY: i64 = 3;
 const INVITES_PER_COMPANY_PER_HOUR: i64 = 50;
@@ -111,14 +112,14 @@ pub struct InviteMail {
 
 impl InviteMail {
     pub fn new(state: &AppState, user: &SessionUser, send_email: bool) -> Self {
-        let inviter = if user.name.trim().is_empty() {
-            &user.email
+        let inviter = if user.name.trim().is_empty() || user.name == user.email {
+            message::clean(&user.email)
         } else {
-            &user.name
+            name(&user.name)
         };
         InviteMail {
             wanted: send_email && enabled(state),
-            inviter: name(inviter),
+            inviter,
             public_url: state.settings.public_url.clone(),
         }
     }
@@ -161,7 +162,12 @@ impl InviteMail {
         org: i64,
         by: i64,
     ) -> rusqlite::Result<Emailed> {
-        if !self.wanted {
+        let disabled: bool = c.query_row(
+            "SELECT EXISTS (SELECT 1 FROM users WHERE email = ?1 AND disabled = 1)",
+            [to],
+            |r| r.get(0),
+        )?;
+        if !self.wanted || !to.is_ascii() || disabled {
             return Ok(Emailed::Skipped);
         }
 
@@ -190,18 +196,20 @@ pub fn invitation_allowed(c: &Connection, org: i64, to: &str) -> rusqlite::Resul
 }
 
 pub fn status(c: &Connection) -> rusqlite::Result<Value> {
+    let day = now() - 86_400;
     let (pending, sent, failed): (i64, i64, i64) = c.query_row(
         "SELECT coalesce(sum(status = 'pending'), 0),
                 coalesce(sum(status = 'sent' AND sent_at > ?1), 0),
-                coalesce(sum(status = 'failed' AND created_at > ?1), 0)
+                coalesce(sum(status = 'failed' AND last_attempt_at > ?1), 0)
          FROM email_queue",
-        [now() - 86_400],
+        [day],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
     let last_error: Option<(String, i64)> = c
         .query_row(
-            "SELECT error, created_at FROM email_queue WHERE error IS NOT NULL ORDER BY id DESC LIMIT 1",
-            [],
+            "SELECT error, last_attempt_at FROM email_queue WHERE error IS NOT NULL AND last_attempt_at > ?1
+             ORDER BY last_attempt_at DESC, id DESC LIMIT 1",
+            [day],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()?;
@@ -280,16 +288,47 @@ pub async fn job(state: AppState) {
 
     let mut tick = tokio::time::interval(TICK);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut last_purge = 0;
     loop {
         tick.tick().await;
         if let Err(e) = deliver_due(&state, now()).await {
             eprintln!("tazko: email delivery failed: {e:?}");
         }
+
+        if now() - last_purge > PURGE_EVERY {
+            last_purge = now();
+            if let Err(e) = purge(&state, last_purge).await {
+                eprintln!("tazko: email clean-up failed: {e:?}");
+            }
+        }
     }
 }
 
-fn unreachable(failure: &smtp::Failure) -> bool {
-    matches!(failure, smtp::Failure::Temporary(e) if e.starts_with("connection problem") || e.starts_with("could not find"))
+pub async fn purge(state: &AppState, at: i64) -> crate::db::DbResult<usize> {
+    state
+        .dbs
+        .control()
+        .write(move |c| {
+            Ok(c.execute(
+                "DELETE FROM email_queue WHERE status != 'pending' AND created_at < ?1",
+                [at - KEEP],
+            )?)
+        })
+        .await
+}
+
+fn send_one(smtp: &Smtp, d: &Due) -> Result<(), smtp::Failure> {
+    let data = Message {
+        from: &smtp.from,
+        to: &d.to,
+        subject: &d.subject,
+        text: &d.text,
+        html: &d.html,
+        date: now(),
+    }
+    .render()
+    .ok_or_else(|| smtp::Failure::Permanent("the recipient address is not valid".into()))?;
+    smtp::send(smtp, &d.to, &data)
 }
 
 pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize> {
@@ -319,18 +358,14 @@ pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize
     let results = tokio::task::spawn_blocking(move || {
         let mut results = vec![];
         for d in due {
-            let result = Message {
-                from: &smtp.from,
-                to: &d.to,
-                subject: &d.subject,
-                text: &d.text,
-                html: &d.html,
-                date: now(),
-            }
-            .render()
-            .ok_or_else(|| smtp::Failure::Permanent("the recipient address is not valid".into()))
-            .and_then(|data| smtp::send(&smtp, &d.to, &data));
-            let stop = result.as_ref().is_err_and(unreachable);
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| send_one(&smtp, &d)))
+                    .unwrap_or_else(|_| {
+                        Err(smtp::Failure::Temporary(
+                            "sending stopped unexpectedly".into(),
+                        ))
+                    });
+            let stop = matches!(result, Err(smtp::Failure::Temporary(_)));
             results.push((d.id, d.attempts, result));
             if stop {
                 break;
@@ -357,12 +392,11 @@ pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize
                     Err(smtp::Failure::Permanent(e)) => ("failed", finished, Some(e)),
                 };
                 tx.execute(
-                    "UPDATE email_queue SET status = ?2, attempts = ?3, error = ?4, next_attempt_at = ?5,
+                    "UPDATE email_queue SET status = ?2, attempts = ?3, error = ?4, next_attempt_at = ?5, last_attempt_at = ?6,
                         sent_at = CASE WHEN ?2 = 'sent' THEN ?6 ELSE sent_at END WHERE id = ?1",
                     params![id, status, tried + 1, error, next, finished],
                 )?;
             }
-            tx.execute("DELETE FROM email_queue WHERE status != 'pending' AND created_at < ?1", [finished - KEEP])?;
             tx.commit()?;
             Ok(())
         })
@@ -385,10 +419,10 @@ mod tests {
         };
         let mail = invite.mail("mai@example.com", "Acme & Co", Some("Web"), 1, 2);
         assert_eq!(mail.subject, "You are invited to Acme & Co on Tazko");
-        assert!(!invite.inviter.contains("://") && !invite.inviter.contains("www."));
+        assert!(!invite.inviter.contains("://") && !invite.inviter.contains("www.evil"));
         assert!(invite.inviter.chars().count() <= 60);
         let page = html(&mail.lines, &mail.link, mail.button);
-        assert!(page.contains("Lan &lt;script&gt; Bcc: x@y.z"));
+        assert!(page.contains("Lan &lt;script&gt; Bcc: x@y. z"));
         assert!(page.contains("the Web project in Acme &amp; Co"));
         assert!(!page.contains("<script>"));
         assert_eq!(mail.link, "https://tazko.example.com/");

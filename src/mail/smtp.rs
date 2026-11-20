@@ -99,10 +99,11 @@ impl Conn {
             .chars()
             .take(300)
             .collect();
-        Err(if (400..500).contains(&code) {
-            Failure::Temporary(text)
-        } else {
+        let about_recipient = matches!(step, "recipient" | "message");
+        Err(if code >= 500 && about_recipient {
             Failure::Permanent(text)
+        } else {
+            Failure::Temporary(text)
         })
     }
 
@@ -119,23 +120,23 @@ impl Conn {
 }
 
 fn tls_config() -> Result<Arc<ClientConfig>, Failure> {
-    static CONFIG: OnceLock<Option<Arc<ClientConfig>>> = OnceLock::new();
-    CONFIG
-        .get_or_init(|| {
-            let _ = rustls::crypto::ring::default_provider().install_default();
-            <ClientConfig as rustls_platform_verifier::ConfigVerifierExt>::with_platform_verifier()
-                .ok()
-                .map(Arc::new)
-        })
-        .clone()
-        .ok_or_else(|| {
-            Failure::Temporary("could not load the system's trusted certificates".into())
-        })
+    static CONFIG: OnceLock<Arc<ClientConfig>> = OnceLock::new();
+    if let Some(config) = CONFIG.get() {
+        return Ok(config.clone());
+    }
+
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let config =
+        <ClientConfig as rustls_platform_verifier::ConfigVerifierExt>::with_platform_verifier()
+            .map_err(|_| {
+                Failure::Temporary("could not load the system's trusted certificates".into())
+            })?;
+    Ok(CONFIG.get_or_init(|| Arc::new(config)).clone())
 }
 
 fn wrap(tcp: TcpStream, host: &str) -> Result<Box<dyn Stream>, Failure> {
     let name = ServerName::try_from(host.to_string())
-        .map_err(|_| Failure::Permanent("the mail server name is not valid for TLS".into()))?;
+        .map_err(|_| Failure::Temporary("the mail server name is not valid for TLS".into()))?;
     let conn = ClientConnection::new(tls_config()?, name)
         .map_err(|e| Failure::Temporary(format!("TLS setup failed: {e}")))?;
     Ok(Box::new(StreamOwned::new(conn, tcp)))
@@ -173,9 +174,10 @@ fn has(caps: &[String], word: &str) -> bool {
 
 fn auth_methods(caps: &[String]) -> Vec<String> {
     caps.iter()
-        .filter(|c| c.len() > 4 && c[..4].eq_ignore_ascii_case("AUTH"))
+        .filter(|c| c.get(..4).is_some_and(|w| w.eq_ignore_ascii_case("AUTH")))
         .flat_map(|c| {
-            c[4..]
+            c.get(4..)
+                .unwrap_or("")
                 .split_whitespace()
                 .map(|m| m.to_ascii_uppercase())
                 .collect::<Vec<_>>()
@@ -230,7 +232,7 @@ pub fn send(cfg: &Smtp, to: &str, data: &str) -> Result<(), Failure> {
             };
             caps = conn.command("EHLO", &helo, &[250])?;
         } else if !loopback(&cfg.host) {
-            return Err(Failure::Permanent(
+            return Err(Failure::Temporary(
                 "the mail server does not offer STARTTLS, so nothing was sent".into(),
             ));
         }
@@ -246,7 +248,7 @@ pub fn send(cfg: &Smtp, to: &str, data: &str) -> Result<(), Failure> {
             conn.command("sign-in", &STANDARD.encode(user), &[334])?;
             conn.command("sign-in", &STANDARD.encode(password.expose()), &[235])?;
         } else {
-            return Err(Failure::Permanent(
+            return Err(Failure::Temporary(
                 "the mail server offers no sign-in method Tazko supports (PLAIN or LOGIN)".into(),
             ));
         }
@@ -281,6 +283,7 @@ mod tests {
         ];
         assert!(has(&caps, "STARTTLS"));
         assert_eq!(auth_methods(&caps), ["LOGIN", "PLAIN"]);
+        assert!(auth_methods(&["abcé x".to_string()]).is_empty());
         assert!(loopback("127.0.0.1") && loopback("localhost") && !loopback("smtp.example.com"));
     }
 }
