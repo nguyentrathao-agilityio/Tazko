@@ -14,7 +14,7 @@ use super::CAN_SEE;
 use super::prefs::{Frequency, Prefs};
 use crate::auth::{check_csrf, cookies};
 use crate::db::{Database, DbResult};
-use crate::error::{ApiError, bad};
+use crate::error::ApiError;
 use crate::mail::message::{display, name, safe};
 use crate::mail::{self, Outgoing};
 use crate::sanitize::escape_html;
@@ -23,11 +23,10 @@ use crate::state::AppState;
 use crate::tenant::CurrentUser;
 
 const TICK: Duration = Duration::from_secs(60);
-const BATCH: i64 = 500;
-const MAX_PENDING: usize = 20_000;
+const PER_USER: i64 = 200;
+const STALE: i64 = 3 * 86_400;
 const INSTANT_GAP: i64 = 300;
 const HOURLY_GAP: i64 = 3600;
-const DAILY_GAP: i64 = 20 * 3600;
 const DIGEST_LIMIT: usize = 30;
 const UNSUBSCRIBE: &str = "unsubscribe";
 const UNSUBSCRIBE_TTL: i64 = 365 * 86_400;
@@ -85,6 +84,7 @@ fn due_phrase(i: &Item, now: i64) -> String {
 
 fn when(due: i64, now: i64) -> String {
     match due - now {
+        l if l < -60 => "overdue".into(),
         l if l <= 60 => "now".into(),
         l if l < 2 * 3600 => "within 2 hours".into(),
         l if l < 86_400 => format!("in {} hours", l / 3600),
@@ -95,8 +95,7 @@ fn when(due: i64, now: i64) -> String {
 
 fn who(i: &Item) -> String {
     i.actor
-        .as_deref()
-        .map(display)
+        .clone()
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| "Someone".into())
 }
@@ -110,6 +109,7 @@ pub fn summary(i: &Item, now: i64) -> String {
         }
         "assigned" => format!("{} added you to {card}", who(i)),
         "card_added" => format!("New card on {}: {card}", name(&i.board)),
+        "due" if due_phrase(i, now) == "overdue" => format!("{card} is overdue"),
         "due" => format!("{card} is due {}", due_phrase(i, now)),
         _ => card,
     }
@@ -165,6 +165,9 @@ pub fn compose(
             _ => "Open card",
         };
         let subject = match one.kind.as_str() {
+            "due" if due_phrase(one, now) == "overdue" => {
+                format!("Overdue: {}", safe(&one.card, 120))
+            }
             "due" => format!("Due {}: {}", due_phrase(one, now), safe(&one.card, 120)),
             _ => summary(one, now),
         };
@@ -219,50 +222,47 @@ fn time_to_send(p: &Person, now: i64) -> bool {
         Frequency::Instant => p.last_sent <= now - INSTANT_GAP,
         Frequency::Hourly => p.last_sent <= now - HOURLY_GAP,
         Frequency::Daily => {
-            now.rem_euclid(86_400) / 3600 == p.prefs.daily_hour && p.last_sent <= now - DAILY_GAP
+            let today = now - now.rem_euclid(86_400) + p.prefs.daily_hour * 3600;
+            let slot = if now >= today { today } else { today - 86_400 };
+            p.last_sent < slot
         }
     }
 }
 
-fn pending(c: &Connection) -> rusqlite::Result<Vec<Item>> {
-    let mut all = vec![];
-    let mut after = 0;
-    loop {
-        let page = pending_page(c, after)?;
-        let full = page.len() as i64 == BATCH;
-        after = page.last().map_or(after, |i| i.id);
-        all.extend(page);
-        if !full || all.len() >= MAX_PENDING {
-            return Ok(all);
-        }
-    }
+fn waiting_users(c: &Connection) -> rusqlite::Result<Vec<i64>> {
+    c.prepare("SELECT DISTINCT user_id FROM notifications WHERE emailed_at IS NULL")?
+        .query_map([], |r| r.get(0))?
+        .collect()
 }
 
-fn pending_page(c: &Connection, after: i64) -> rusqlite::Result<Vec<Item>> {
+fn pending(c: &Connection, user: i64, now: i64) -> rusqlite::Result<Vec<Item>> {
     let mut stmt = c.prepare(&format!(
-        "SELECT n.id, n.user_id, n.kind, coalesce(nullif(a.name, ''), a.email), n.card_id, k.title, n.board_id, b.name,
-                cm.body, n.item_text, n.due_at, {CAN_SEE} AND k.archived_at IS NULL
+        "SELECT n.id, n.user_id, n.kind, CASE WHEN a.name = '' OR a.name = a.email THEN NULL ELSE a.name END, a.email,
+                n.card_id, k.title, n.board_id, b.name, cm.body, n.item_text, n.due_at,
+                {CAN_SEE} AND k.archived_at IS NULL AND n.read_at IS NULL AND n.created_at > ?3
+                  AND (n.kind != 'due' OR (k.done = 0 AND k.due_at = n.due_at))
          FROM notifications n
          JOIN cards k ON k.id = n.card_id
          JOIN boards b ON b.id = n.board_id
          LEFT JOIN people a ON a.id = n.actor_id
          LEFT JOIN comments cm ON cm.id = n.comment_id
-         WHERE n.emailed_at IS NULL AND n.id > ?2 ORDER BY n.id LIMIT ?1"
+         WHERE n.emailed_at IS NULL AND n.user_id = ?1 ORDER BY n.id LIMIT ?2"
     ))?;
-    stmt.query_map(params![BATCH, after], |r| {
+    stmt.query_map(params![user, PER_USER, now - STALE], |r| {
+        let (shown, email): (Option<String>, Option<String>) = (r.get(3)?, r.get(4)?);
         Ok(Item {
             id: r.get(0)?,
             user: r.get(1)?,
             kind: r.get(2)?,
-            actor: r.get(3)?,
-            card_id: r.get(4)?,
-            card: r.get(5)?,
-            board_id: r.get(6)?,
-            board: r.get(7)?,
-            comment: r.get(8)?,
-            item: r.get(9)?,
-            due_at: r.get(10)?,
-            visible: r.get(11)?,
+            actor: email.map(|e| display(shown.as_deref(), &e)),
+            card_id: r.get(5)?,
+            card: r.get(6)?,
+            board_id: r.get(7)?,
+            board: r.get(8)?,
+            comment: r.get(9)?,
+            item: r.get(10)?,
+            due_at: r.get(11)?,
+            visible: r.get(12)?,
         })
     })?
     .collect()
@@ -309,22 +309,44 @@ pub async fn job(state: AppState) {
     }
 }
 
+async fn mark(db: &Database, ids: Vec<i64>, now: i64) -> DbResult<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+
+    db.write(move |c| {
+        let tx = c.transaction()?;
+        {
+            let mut stmt =
+                tx.prepare_cached("UPDATE notifications SET emailed_at = ?2 WHERE id = ?1")?;
+            for id in ids {
+                stmt.execute(params![id, now])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    })
+    .await
+}
+
 pub async fn run(state: &AppState, slug: &str, db: &Database, now: i64) -> DbResult<usize> {
+    let users = db.read(|c| Ok(waiting_users(c)?)).await?;
+    if users.is_empty() {
+        return Ok(0);
+    }
+
     if !mail::enabled(state) {
+        db.write(move |c| {
+            Ok(c.execute(
+                "UPDATE notifications SET emailed_at = ?1 WHERE emailed_at IS NULL",
+                [now],
+            )?)
+        })
+        .await?;
         return Ok(0);
     }
 
-    let items = db.read(|c| Ok(pending(c)?)).await?;
-    if items.is_empty() {
-        return Ok(0);
-    }
-
-    let mut by_user: HashMap<i64, Vec<Item>> = HashMap::new();
-    for i in items {
-        by_user.entry(i.user).or_default().push(i);
-    }
     let slug_owned = slug.to_string();
-    let users: Vec<i64> = by_user.keys().copied().collect();
     let (org, company, people) = state
         .dbs
         .control()
@@ -336,11 +358,32 @@ pub async fn run(state: &AppState, slug: &str, db: &Database, now: i64) -> DbRes
             )?;
             let mut people = HashMap::new();
             for u in users {
-                if let Some(p) = person(c, u, org)? {
-                    people.insert(u, p);
-                }
+                people.insert(u, person(c, u, org)?);
             }
             Ok((org, company, people))
+        })
+        .await?;
+
+    let due: Vec<(i64, Option<Person>)> = people
+        .into_iter()
+        .filter(|(_, p)| {
+            p.as_ref().is_none_or(|p| {
+                !p.active || p.prefs.frequency == Frequency::Never || time_to_send(p, now)
+            })
+        })
+        .collect();
+    if due.is_empty() {
+        return Ok(0);
+    }
+
+    let ids: Vec<i64> = due.iter().map(|(u, _)| *u).collect();
+    let items: Vec<Vec<Item>> = db
+        .read(move |c| {
+            let mut all = vec![];
+            for user in ids {
+                all.push(pending(c, user, now)?);
+            }
+            Ok(all)
         })
         .await?;
 
@@ -351,26 +394,23 @@ pub async fn run(state: &AppState, slug: &str, db: &Database, now: i64) -> DbRes
     };
     let mut handled: Vec<i64> = vec![];
     let mut outgoing: Vec<(i64, Outgoing)> = vec![];
-    for (user, list) in by_user {
-        let Some(p) = people.get(&user).filter(|p| p.active) else {
-            handled.extend(list.iter().map(|i| i.id));
+    for ((user, p), list) in due.into_iter().zip(items) {
+        handled.extend(list.iter().map(|i| i.id));
+        let Some(p) = p.filter(|p| p.active) else {
             continue;
         };
-        let (wanted, skipped): (Vec<Item>, Vec<Item>) = list
+        let wanted: Vec<Item> = list
             .into_iter()
-            .partition(|i| i.visible && p.prefs.by_email(&i.kind));
-        handled.extend(skipped.iter().map(|i| i.id));
-        if wanted.is_empty() || !time_to_send(p, now) {
-            continue;
+            .filter(|i| i.visible && p.prefs.by_email(&i.kind))
+            .collect();
+        if !wanted.is_empty() {
+            let mut mail = compose(&wanted, &p.email, &place, unsubscribe_url(state, user), now);
+            mail.org = Some(org);
+            outgoing.push((user, mail));
         }
-
-        handled.extend(wanted.iter().map(|i| i.id));
-        outgoing.push((
-            user,
-            compose(&wanted, &p.email, &place, unsubscribe_url(state, user), now),
-        ));
     }
 
+    mark(db, handled, now).await?;
     let sent = outgoing.len();
     if sent > 0 {
         state
@@ -378,8 +418,7 @@ pub async fn run(state: &AppState, slug: &str, db: &Database, now: i64) -> DbRes
             .control()
             .write(move |c| {
                 let tx = c.transaction()?;
-                for (user, mut mail) in outgoing {
-                    mail.org = Some(org);
+                for (user, mail) in outgoing {
                     mail::enqueue(&tx, &mail)?;
                     tx.execute(
                         "INSERT INTO email_digests (user_id, org_id, last_sent_at) VALUES (?1, ?2, ?3)
@@ -391,21 +430,6 @@ pub async fn run(state: &AppState, slug: &str, db: &Database, now: i64) -> DbRes
                 Ok(())
             })
             .await?;
-    }
-
-    if !handled.is_empty() {
-        db.write(move |c| {
-            let tx = c.transaction()?;
-            for id in handled {
-                tx.execute(
-                    "UPDATE notifications SET emailed_at = ?2 WHERE id = ?1",
-                    params![id, now],
-                )?;
-            }
-            tx.commit()?;
-            Ok(())
-        })
-        .await?;
     }
     Ok(sent)
 }
@@ -440,8 +464,14 @@ async fn unsubscribe(
     State(state): State<AppState>,
     Query(q): Query<Token>,
 ) -> Result<Response, ApiError> {
-    let user: i64 = cookies::open(state.secret.expose(), UNSUBSCRIBE, &q.t)
-        .ok_or_else(|| bad("this unsubscribe link is not valid any more"))?;
+    let Some(user) = cookies::open::<i64>(state.secret.expose(), UNSUBSCRIBE, &q.t) else {
+        let mut res = page(
+            "This link has expired",
+            "<p>This unsubscribe link is not valid any more. You can turn notification emails off under Settings, Notifications.</p>",
+        );
+        *res.status_mut() = StatusCode::BAD_REQUEST;
+        return Ok(res);
+    };
     state
         .dbs
         .control()
@@ -622,6 +652,17 @@ mod tests {
         p.last_sent = now - 86_400;
         assert!(time_to_send(&p, now));
         p.prefs.daily_hour = 8;
+        assert!(
+            time_to_send(&p, now),
+            "a missed daily hour is caught up later the same day"
+        );
+        p.last_sent = now - 60;
         assert!(!time_to_send(&p, now));
+        p.prefs.daily_hour = 10;
+        p.last_sent = now - 20 * 3600;
+        assert!(
+            !time_to_send(&p, now),
+            "already sent after yesterday's 10:00"
+        );
     }
 }

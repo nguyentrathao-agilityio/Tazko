@@ -385,3 +385,128 @@ async fn previews_and_a_personal_test_email() {
         StatusCode::BAD_REQUEST
     );
 }
+
+#[tokio::test]
+async fn names_cannot_plant_links_and_read_or_stale_items_are_not_emailed() {
+    let w = world(SMTP).await;
+    let lead = w.lead.id;
+    w.app
+        .sql(move |c| {
+            c.execute(
+                "UPDATE users SET name = 'https://evil.example/login@x.co' WHERE id = ?1",
+                [lead],
+            )
+        })
+        .await;
+    let tenant = w.app.state.dbs.tenant(SLUG).unwrap();
+    tenant
+        .write(move |c| {
+            Ok(c.execute(
+                "UPDATE people SET name = 'https://evil.example/login@x.co' WHERE id = ?1",
+                [lead],
+            )?)
+        })
+        .await
+        .unwrap();
+    w.mention_dev("@dev link test").await;
+    w.run(tazko::session::now()).await;
+    let subject = w.emails().await[0].1.clone();
+    assert!(
+        !subject.contains("://") && !subject.contains("evil.example"),
+        "{subject}"
+    );
+
+    w.mention_dev("@dev read already").await;
+    req(
+        &w.app,
+        &w.dev,
+        Method::POST,
+        &format!("{C}/notifications/read"),
+        None,
+    )
+    .await;
+    tenant.write(|c| Ok(c.execute("INSERT INTO notifications (user_id, kind, board_id, card_id, created_at) SELECT user_id, 'assigned', board_id, card_id, 1 FROM notifications LIMIT 1", [])?)).await.unwrap();
+    assert_eq!(
+        w.run(tazko::session::now() + 600).await,
+        0,
+        "read and three-day-old items are not emailed"
+    );
+    let left: i64 = tenant
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT count(*) FROM notifications WHERE emailed_at IS NULL",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[tokio::test]
+async fn without_email_notifications_are_settled_and_old_links_get_a_page() {
+    let w = world("").await;
+    w.mention_dev("@dev quiet").await;
+    w.run(tazko::session::now()).await;
+    let tenant = w.app.state.dbs.tenant(SLUG).unwrap();
+    let left: i64 = tenant
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT count(*) FROM notifications WHERE emailed_at IS NULL",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(left, 0, "turning email on later does not send this backlog");
+    let res = w
+        .app
+        .send(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/email/unsubscribe?t=old.link")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    assert!(body_text(res).await.contains("This link has expired"));
+}
+
+#[tokio::test]
+async fn overdue_cards_get_no_early_reminder() {
+    let w = world("").await;
+    req(
+        &w.app,
+        &w.lead,
+        Method::PUT,
+        &format!(
+            "{C}/boards/{}/cards/{}/members/{}",
+            w.board, w.card, w.dev.id
+        ),
+        Some(json!({ "on": true })),
+    )
+    .await;
+    let now = tazko::session::now();
+    req(
+        &w.app,
+        &w.lead,
+        Method::PATCH,
+        &format!("{C}/boards/{}/cards/{}", w.board, w.card),
+        Some(json!({ "due_at": now - 1800 })),
+    )
+    .await;
+    tazko::notifications::due_soon_all(&w.app.state, now).await;
+    assert!(
+        !w.kinds(&w.dev).await.contains(&"due".to_string()),
+        "a 1-day reminder is not sent for a card already late"
+    );
+    w.set(&w.dev, json!({ "due_reminder": "at" })).await;
+    tazko::notifications::due_soon_all(&w.app.state, now).await;
+    assert!(
+        w.kinds(&w.dev).await.contains(&"due".to_string()),
+        "at the due time still catches the last hour"
+    );
+}

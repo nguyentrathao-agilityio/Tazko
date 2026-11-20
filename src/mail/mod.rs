@@ -146,11 +146,7 @@ pub struct InviteMail {
 
 impl InviteMail {
     pub fn new(state: &AppState, user: &SessionUser, send_email: bool) -> Self {
-        let inviter = message::display(if user.name.trim().is_empty() {
-            &user.email
-        } else {
-            &user.name
-        });
+        let inviter = message::display(Some(&user.name), &user.email);
         InviteMail {
             wanted: send_email && enabled(state),
             inviter,

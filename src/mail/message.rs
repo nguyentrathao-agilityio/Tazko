@@ -45,8 +45,14 @@ pub fn clean(text: &str) -> String {
     clean_to(text, 200)
 }
 
-pub fn display(name_or_email: &str) -> String {
-    validate::email(name_or_email).unwrap_or_else(|| name(name_or_email))
+pub fn display(shown_name: Option<&str>, account_email: &str) -> String {
+    match shown_name
+        .map(str::trim)
+        .filter(|n| !n.is_empty() && *n != account_email)
+    {
+        Some(n) => name(n),
+        None => clean(account_email),
+    }
 }
 
 pub fn name(text: &str) -> String {

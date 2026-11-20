@@ -152,7 +152,10 @@ pub async fn due_soon(state: &AppState, db: &Database, now: i64) -> Result<usize
         .await?;
     let ready: Vec<_> = candidates
         .into_iter()
-        .filter(|(user, _, _, due)| *due - leads[user] <= now)
+        .filter(|(user, _, _, due)| {
+            let lead = leads[user];
+            *due - lead <= now && (*due > now || lead == 0)
+        })
         .collect();
     if ready.is_empty() {
         return Ok(0);
