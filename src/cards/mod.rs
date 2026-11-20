@@ -3,6 +3,7 @@ pub mod fields;
 pub mod links;
 pub mod reactions;
 pub mod repeat;
+pub mod votes;
 
 use std::collections::HashMap;
 
@@ -41,6 +42,7 @@ pub fn routes() -> Router<AppState> {
         .merge(detail::routes())
         .merge(fields::routes())
         .merge(links::routes())
+        .merge(votes::routes())
         .merge(reactions::routes())
 }
 
@@ -573,6 +575,9 @@ async fn sort(
         "name" => "title COLLATE NOCASE, id",
         "new" => "created_at DESC, id DESC",
         "old" => "created_at, id",
+        "votes" => {
+            "(SELECT count(*) FROM card_votes v WHERE v.card_id = cards.id) DESC, position, id"
+        }
         _ => return Err(bad("choose how to sort")),
     };
     let (id, at) = (board.id, board.at());

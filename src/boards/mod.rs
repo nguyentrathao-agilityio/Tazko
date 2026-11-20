@@ -321,7 +321,12 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
             )?;
             let mut cards = crate::cards::summaries(c, id)?;
             let flags = crate::cards::links::board_flags(c, id, user)?;
+            let votes = crate::cards::votes::board_votes(c, id, user)?;
             for card in cards.values_mut().flatten() {
+                if let Some((n, mine)) = card["id"].as_i64().and_then(|k| votes.get(&k)) {
+                    card["votes"] = json!(n);
+                    card["voted"] = json!(mine);
+                }
                 if let Some((links, blocked)) = card["id"].as_i64().and_then(|k| flags.get(&k)) {
                     card["links"] = json!(links);
                     card["blocked"] = json!(blocked);
@@ -390,6 +395,7 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
         "starred": starred.0,
         "watching": starred.1,
         "project": { "id": board.project.id, "name": board.project.info.name },
+        "voting": board.project.info.voting,
         "role": board.project.role.as_str(),
         "can": can,
         "people": people,
