@@ -11,6 +11,7 @@ export function ZenStrip({
   onHideDone,
   onDensity,
   onSearch,
+  onPalette,
   onExit,
 }: {
   name: string
@@ -21,6 +22,7 @@ export function ZenStrip({
   onHideDone: () => void
   onDensity: (d: Settings['zen_density']) => void
   onSearch: () => void
+  onPalette: () => void
   onExit: () => void
 }) {
   const options: [Settings['zen_density'], string][] = [
@@ -49,6 +51,9 @@ export function ZenStrip({
           ))}
         </div>
         <span className="sp" />
+        <button type="button" className="ibtn" aria-label={t('palette.title')} title={t('palette.button')} onClick={onPalette}>
+          <Icon name="cmd" />
+        </button>
         <button type="button" className="ibtn" aria-label={t('search.title')} title={t('zen.searchHint')} onClick={onSearch}>
           <Icon name="search" />
         </button>

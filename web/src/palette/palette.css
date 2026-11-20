@@ -1,0 +1,25 @@
+@layer components {
+  .pal .hit .pl {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pal .hit .pl b {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pal .hit .pg {
+    flex: none;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pal .hit .kbd {
+    flex: none;
+  }
+}

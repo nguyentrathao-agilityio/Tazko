@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CardData, ListData } from '@/board/types'
 import { isTyping } from '@/ui/typing'
 import { ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ENTER, ESCAPE } from '@/keys/keyNames'
@@ -65,7 +65,7 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
   const hover = useRef<number | null>(null)
   const state = useRef({ lists, edit, cardOpen, zen, actions, selected })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     state.current = { lists, edit, cardOpen, zen, actions, selected }
   })
 
