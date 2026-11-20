@@ -12,12 +12,14 @@ export function FilterPop({
   people,
   labels,
   fields = [],
+  staleDays = 7,
 }: {
   filter: Filter
   onChange: (f: Filter) => void
   people: BoardPerson[]
   labels: Label[]
   fields?: FieldDef[]
+  staleDays?: number
 }) {
   const picked = filter.fields ?? []
   const fieldBox = (key: string, label: string) => (
@@ -77,6 +79,11 @@ export function FilterPop({
           l.name || t('cardPop.colorN', { n: l.color + 1 }),
         ),
       )}
+      <div className="fsub">{t('filter.activity')}</div>
+      <label className="fopt">
+        <input type="checkbox" checked={Boolean(filter.stale)} onChange={() => onChange({ ...filter, stale: !filter.stale, hideStale: false })} aria-label={t('filter.stale', { n: staleDays })} />
+        {t('filter.stale', { n: staleDays })}
+      </label>
       <div className="fsub">{t('filter.due')}</div>
       {box('due', 'none', t('filter.noDates'), t('filter.noDates'))}
       {box('due', 'over', t('filter.overdue'), t('filter.overdue'))}

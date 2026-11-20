@@ -1,4 +1,5 @@
 import type { BoardPerson, Label, ListData } from '@/board/types'
+import { isStale } from '@/card/aging'
 import { DAY, dueBucket, dueBucketOrder, labelColors, type DueBucket } from '@/card/look'
 
 export type Bar = { key: string; name: string; value: number; color?: string; person?: string }
@@ -17,6 +18,7 @@ export type Stats = {
   done: number
   overdue: number
   soon: number
+  stale: number
   lists: Bar[]
   members: Bar[]
   labels: Bar[]
@@ -24,7 +26,7 @@ export type Stats = {
   votes: Bar[]
 }
 
-export function boardStats(lists: ListData[], people: BoardPerson[], labels: Label[], dueName: (b: DueBucket) => string, unassigned: string, now = Date.now() / 1000): Stats {
+export function boardStats(lists: ListData[], people: BoardPerson[], labels: Label[], dueName: (b: DueBucket) => string, unassigned: string, now = Date.now() / 1000, staleDays = 7): Stats {
   const due = new Map<DueBucket, number>()
   const byMember = new Map<number, number>()
   const byLabel = new Map<number, number>()
@@ -32,6 +34,7 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
   const bump = <K>(m: Map<K, number>, k: K) => m.set(k, (m.get(k) ?? 0) + 1)
   let cards = 0
   let soon = 0
+  let stale = 0
   let none = 0
   for (const c of lists.flatMap((l) => l.cards)) {
     cards += 1
@@ -40,6 +43,7 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
     const members = (c.members ?? []).filter((m) => known.has(m))
     for (const m of members) bump(byMember, m)
     for (const l of c.labels ?? []) bump(byLabel, l)
+    if (isStale(c, staleDays, now)) stale += 1
     if (!members.length) none += 1
   }
 
@@ -48,6 +52,7 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
     done: due.get('done') ?? 0,
     overdue: due.get('overdue') ?? 0,
     soon,
+    stale,
     lists: lists.map((l) => ({ key: `l${l.id}`, name: l.title, value: l.cards.length })),
     members: [
       ...people.map((p) => ({ key: `p${p.id}`, name: p.name || p.email, person: p.name || p.email, value: byMember.get(p.id) ?? 0 })),

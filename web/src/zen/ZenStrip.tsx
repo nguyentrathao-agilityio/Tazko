@@ -6,9 +6,11 @@ export function ZenStrip({
   name,
   mine,
   hideDone,
+  hideStale,
   density,
   onMine,
   onHideDone,
+  onHideStale,
   onDensity,
   onSearch,
   onPalette,
@@ -17,9 +19,11 @@ export function ZenStrip({
   name: string
   mine: boolean
   hideDone: boolean
+  hideStale: boolean
   density: Settings['zen_density']
   onMine: () => void
   onHideDone: () => void
+  onHideStale: () => void
   onDensity: (d: Settings['zen_density']) => void
   onSearch: () => void
   onPalette: () => void
@@ -41,6 +45,9 @@ export function ZenStrip({
         </button>
         <button type="button" className={`zc${hideDone ? ' on' : ''}`} aria-pressed={hideDone} onClick={onHideDone}>
           {t('zen.hideDone')}
+        </button>
+        <button type="button" className={`zc${hideStale ? ' on' : ''}`} aria-pressed={hideStale} onClick={onHideStale}>
+          {t('zen.hideStale')}
         </button>
         <span className="zsep" />
         <div className="seg" role="radiogroup" aria-label={t('zen.density')}>

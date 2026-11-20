@@ -54,6 +54,7 @@ export type BoardContext = {
   edit: boolean
   mine: boolean
   hideDone: boolean
+  hideStale: boolean
   filtered: boolean
   card: CardData | null
   lists: ListData[]
@@ -62,6 +63,7 @@ export type BoardContext = {
   help: () => void
   toggleMine: () => void
   toggleHideDone: () => void
+  toggleHideStale: () => void
   openFilter: () => void
   clearFilter: () => void
   noCard: () => void
@@ -114,6 +116,7 @@ export function boardCommands(b: BoardContext, p: Personal): Command[] {
     { id: 'help', group: 'actions', label: t('palette.shortcuts'), keys: '`', run: b.help },
     { id: 'mine', group: 'filter', label: b.mine ? t('palette.mineOff') : t('palette.mineOn'), keys: 'Q', run: b.toggleMine },
     { id: 'hide-done', group: 'filter', label: b.hideDone ? t('palette.showDone') : t('palette.hideDone'), run: b.toggleHideDone },
+    { id: 'hide-stale', group: 'filter', label: b.hideStale ? t('palette.showStale') : t('palette.hideStale'), run: b.toggleHideStale },
     { id: 'filter', group: 'filter', label: t('palette.filter'), keys: 'F', run: b.openFilter },
     ...(b.filtered ? [{ id: 'clear-filter', group: 'filter' as const, label: t('palette.clearFilter'), run: b.clearFilter }] : []),
     ...personalCommands(p),

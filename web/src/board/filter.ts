@@ -1,17 +1,19 @@
 import type { CardData, ListData } from '@/board/types'
+import { isStale } from '@/card/aging'
 
-export type Filter = { q: string; members: string[]; labels: string[]; due: string[]; fields?: string[]; hideDone?: boolean }
+export type Filter = { q: string; members: string[]; labels: string[]; due: string[]; fields?: string[]; hideDone?: boolean; stale?: boolean; hideStale?: boolean }
 
 export const emptyFilter: Filter = { q: '', members: [], labels: [], due: [] }
 
 export function active(f: Filter): boolean {
-  return Boolean(f.q.trim() || f.members.length || f.labels.length || f.due.length || f.fields?.length || f.hideDone)
+  return Boolean(f.q.trim() || f.members.length || f.labels.length || f.due.length || f.fields?.length || f.hideDone || f.stale || f.hideStale)
 }
 
 const DAY = 86_400
 
-export function matches(c: CardData, f: Filter, me: number, labelNames: Map<number, string>, now = Date.now() / 1000): boolean {
+export function matches(c: CardData, f: Filter, me: number, labelNames: Map<number, string>, now = Date.now() / 1000, staleDays = 7): boolean {
   if (f.hideDone && c.done) return false
+  if ((f.stale || f.hideStale) && isStale(c, staleDays, now) !== Boolean(f.stale)) return false
   if (f.q.trim()) {
     const hay = `${c.title} ${(c.labels ?? []).map((id) => labelNames.get(id) ?? '').join(' ')}`.toLowerCase()
     if (!f.q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w))) return false
@@ -47,9 +49,10 @@ export function matches(c: CardData, f: Filter, me: number, labelNames: Map<numb
   return true
 }
 
-export function applyFilter(lists: ListData[], f: Filter, me: number, labelNames: Map<number, string>): ListData[] {
+export function applyFilter(lists: ListData[], f: Filter, me: number, labelNames: Map<number, string>, staleDays = 7): ListData[] {
   if (!active(f)) return lists
-  return lists.map((l) => ({ ...l, cards: l.cards.filter((c) => matches(c, f, me, labelNames)) }))
+  const now = Date.now() / 1000
+  return lists.map((l) => ({ ...l, cards: l.cards.filter((c) => matches(c, f, me, labelNames, now, staleDays)) }))
 }
 
 export function toggleMine(f: Filter): Filter {

@@ -85,7 +85,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   const [composing, setComposing] = useState<number | null>(null)
   const [filter, setFilter] = useState<Filter>(emptyFilter)
   const labelNames = useMemo(() => new Map((board?.labels ?? []).map((l) => [l.id, l.name])), [board])
-  const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames) : []), [board, filter, me, labelNames])
+  const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames, board.aging_days) : []), [board, filter, me, labelNames])
 
   const settings = useSettings()
   const [tick, setTick] = useState(0)
@@ -225,6 +225,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         edit,
         mine: filter.members.includes('me'),
         hideDone: Boolean(filter.hideDone),
+        hideStale: Boolean(filter.hideStale),
         filtered: active(filter),
         card,
         lists,
@@ -236,6 +237,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         help: boardActions.help,
         toggleMine: () => setFilter((f) => toggleMine(f)),
         toggleHideDone: () => setFilter((f) => ({ ...f, hideDone: !f.hideDone })),
+        toggleHideStale: () => setFilter((f) => ({ ...f, hideStale: !f.hideStale, stale: false })),
         openFilter: boardActions.filter,
         clearFilter: () => setFilter(emptyFilter),
         noCard: () => toast(t('palette.noCard')),
@@ -278,9 +280,11 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           name={board.name}
           mine={filter.members.includes('me')}
           hideDone={Boolean(filter.hideDone)}
+          hideStale={Boolean(filter.hideStale)}
           density={settings.zen_density}
           onMine={() => setFilter((f) => toggleMine(f))}
           onHideDone={() => setFilter((f) => ({ ...f, hideDone: !f.hideDone }))}
+          onHideStale={() => setFilter((f) => ({ ...f, hideStale: !f.hideStale, stale: false }))}
           onDensity={personal.setDensity}
           onSearch={personal.search}
           onPalette={palette.show}
@@ -429,6 +433,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
         onToggleDone={(c) => toggleDone(base, c)}
         onVote={boardActions.vote}
+        aging={{ on: Boolean(board.aging), days: board.aging_days ?? 7 }}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         selected={keys.selected}
         after={
@@ -548,7 +553,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
       )}
       {pop?.kind === 'filter' && (
         <Popover anchor={pop.at} title={t('filter.title')} width={340} onClose={() => setPop(null)}>
-          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} fields={board.fields} />
+          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} fields={board.fields} staleDays={board.aging_days} />
         </Popover>
       )}
       {pop?.kind === 'access' && (
