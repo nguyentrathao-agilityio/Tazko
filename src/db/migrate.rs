@@ -106,6 +106,11 @@ pub static TENANT: Migrations = Migrations {
             name: "0011_templates.sql",
             sql: include_str!("../../migrations/tenant/0011_templates.sql"),
         },
+        Migration {
+            version: 12,
+            name: "0012_touch_cards.sql",
+            sql: include_str!("../../migrations/tenant/0012_touch_cards.sql"),
+        },
     ],
 };
 

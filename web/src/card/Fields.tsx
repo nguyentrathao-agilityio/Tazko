@@ -7,6 +7,63 @@ import { ENTER } from '@/keys/keyNames'
 
 type Run = (fn: () => Promise<unknown>) => Promise<boolean>
 
+export function FieldControl({
+  def: d,
+  value: v,
+  edit,
+  id,
+  label,
+  withYes = false,
+  onSet,
+}: {
+  def: FieldDef
+  value: FieldValue | undefined
+  edit: boolean
+  id?: string
+  label?: string
+  withYes?: boolean
+  onSet: (value: FieldValue | null) => void
+}) {
+  if (d.type === 'select')
+    return (
+      <select id={id} aria-label={label} value={typeof v === 'string' ? v : ''} disabled={!edit} onChange={(e) => onSet(e.target.value || null)}>
+        <option value="">—</option>
+        {d.options.map((o) => (
+          <option key={o}>{o}</option>
+        ))}
+      </select>
+    )
+  if (d.type === 'check') {
+    const box = <input id={id} aria-label={label} type="checkbox" checked={v === true} disabled={!edit} onChange={(e) => onSet(e.target.checked)} />
+    return withYes ? (
+      <label className="opt" style={{ height: 34 }}>
+        {box}
+        {t('fields.yes')}
+      </label>
+    ) : (
+      box
+    )
+  }
+
+  return (
+    <input
+      id={id}
+      aria-label={label}
+      key={`${d.id}:${String(v ?? '')}`}
+      type={d.type === 'number' ? 'number' : d.type === 'date' ? 'date' : 'text'}
+      defaultValue={v === undefined ? '' : String(v)}
+      disabled={!edit}
+      onBlur={(e) => {
+        const next = e.target.value.trim()
+        if (next !== String(v ?? '')) onSet(next === '' ? null : d.type === 'number' ? Number(next) : next)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === ENTER) e.currentTarget.blur()
+      }}
+    />
+  )
+}
+
 export function FieldsSection({
   defs,
   values,
@@ -33,44 +90,10 @@ export function FieldsSection({
         {defs.map((d) => {
           const v = values[String(d.id)]
           const id = `fld-${d.id}`
-          let control
-          if (d.type === 'select')
-            control = (
-              <select id={id} value={typeof v === 'string' ? v : ''} disabled={!edit} onChange={(e) => set(d.id, e.target.value || null)}>
-                <option value="">—</option>
-                {d.options.map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
-            )
-          else if (d.type === 'check')
-            control = (
-              <label className="opt" style={{ height: 34 }}>
-                <input id={id} type="checkbox" checked={v === true} disabled={!edit} onChange={(e) => set(d.id, e.target.checked)} />
-                {t('fields.yes')}
-              </label>
-            )
-          else
-            control = (
-              <input
-                id={id}
-                key={`${d.id}:${String(v ?? '')}`}
-                type={d.type === 'number' ? 'number' : d.type === 'date' ? 'date' : 'text'}
-                defaultValue={v === undefined ? '' : String(v)}
-                disabled={!edit}
-                onBlur={(e) => {
-                  const next = e.target.value.trim()
-                  if (next !== String(v ?? '')) set(d.id, next === '' ? null : d.type === 'number' ? Number(next) : next)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === ENTER) e.currentTarget.blur()
-                }}
-              />
-            )
           return (
             <div key={d.id}>
               <label htmlFor={d.type === 'check' ? undefined : id}>{d.name}</label>
-              {control}
+              <FieldControl def={d} value={v} edit={edit} id={id} onSet={(value) => set(d.id, value)} withYes />
             </div>
           )
         })}

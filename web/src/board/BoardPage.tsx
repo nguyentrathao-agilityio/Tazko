@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
+import { appendAfter } from '@/board/order'
 import { Icon } from '@/ui/Icon'
 import { Link, type Go } from '@/ui/Link'
 import { displayName } from '@/ui/names'
@@ -27,6 +28,7 @@ import { useBoardKeys } from '@/keys/useBoardKeys'
 import { Shortcuts } from '@/keys/Shortcuts'
 import { saveSettings, useSettings } from '@/settings/store'
 import { ZenStrip } from '@/zen/ZenStrip'
+import { TableView } from '@/table/TableView'
 import { useLive } from '@/live/useLive'
 import { LiveList, LivePill } from '@/live/LivePill'
 import { DatesPop, LabelsPop, MembersPop, MovePop } from '@/card/Pops'
@@ -60,7 +62,9 @@ type CardPop = 'quick' | 'k-members' | 'k-dates' | 'k-labels' | 'k-move'
 
 type Pop = { kind: 'access' | 'share' | 'members' | 'filter' | 'live'; at: Anchor } | { kind: 'cardtpl'; at: Anchor; list: number } | { kind: CardPop; at: Anchor; card: CardData } | null
 
-export function BoardPage({ company, id, cardId, me, go }: { company: Company; id: number; cardId: number | null; me: number; go: Go }) {
+export type BoardView = 'board' | 'table'
+
+export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { company: Company; id: number; cardId: number | null; me: number; go: Go; view?: BoardView }) {
   const base = `/api/v1/c/${company.slug}/boards/${id}`
   const { data: board, error: loadError, reload } = useLoad(() => api<BoardData>('GET', base), base)
   const { error, run } = useRun(reload)
@@ -108,9 +112,10 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
     return el ? anchorOf(el) : { left: 200, top: 120, bottom: 120, width: 0 }
   }
 
-  const boardBase = `/c/${company.slug}/b/${id}`
+  const boardRoot = `/c/${company.slug}/b/${id}`
+  const boardBase = view === 'table' ? `${boardRoot}/table` : boardRoot
   const keys = useBoardKeys({
-    lists: shownLists,
+    lists: view === 'board' ? shownLists : [],
     edit: Boolean(board?.can.edit),
     cardOpen: cardId,
     zen,
@@ -168,7 +173,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
     )
 
   const projectPath = `/c/${company.slug}/p/${board.project.id}`
-  const boardPath = `/c/${company.slug}/b/${board.id}`
+  const boardPath = boardBase
   const edit = board.can.edit
   const visible = board.restricted ? board.people.filter((p) => p.access) : board.people
   const lists = board.lists
@@ -280,6 +285,18 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           <Icon name={board.restricted ? 'lock' : 'users'} />
           {board.restricted ? t('board.restricted') : t('board.wholeProject')}
         </button>
+        <div className="vtabs" role="tablist" aria-label={t('view.label')}>
+          {(
+            [
+              ['board', t('view.board'), boardRoot],
+              ['table', t('view.table'), `${boardRoot}/table`],
+            ] as [BoardView, string, string][]
+          ).map(([k, label, to]) => (
+            <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => view !== k && go(to)}>
+              {label}
+            </button>
+          ))}
+        </div>
         <span className="sp" />
         <LivePill status={live.status} viewers={live.viewers} onClick={(el) => setPop({ kind: 'live', at: anchorOf(el) })} />
         <button
@@ -325,7 +342,11 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           {error}
         </div>
       )}
-      <BoardLists
+      {view === 'table' && (
+        <TableView board={board} lists={shownLists} total={lists.reduce((n, l) => n + l.cards.length, 0)} base={base} me={me} run={run} onOpen={(c) => go(`${boardPath}/c/${c.id}`)} />
+      )}
+      {view === 'board' && (
+        <BoardLists
         lists={shownLists}
         base={base}
         fields={board.fields}
@@ -378,6 +399,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
           ))
         }
       />
+      )}
       {pop?.kind === 'quick' && (
         <Popover anchor={pop.at} title={t('card.quickEdit')} width={300} onClose={() => setPop(null)}>
           <QuickEdit
@@ -425,8 +447,7 @@ export function BoardPage({ company, id, cardId, me, go }: { company: Company; i
               current={lists.find((l) => l.cards.some((c) => c.id === pop.card.id))?.id ?? lists[0].id}
               label={t('list.moveButton')}
               onMove={(list, top) => {
-                const others = (lists.find((l) => l.id === list)?.cards ?? []).filter((c) => c.id !== pop.card.id)
-                const after = top || others.length === 0 ? null : others[others.length - 1].id
+                const after = appendAfter(lists, list, pop.card.id, top)
                 void run(() => api('POST', `${base}/cards/${pop.card.id}/move`, { list_id: list, after })).then(() => setPop(null))
               }}
             />

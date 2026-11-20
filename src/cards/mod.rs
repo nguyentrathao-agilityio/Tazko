@@ -151,7 +151,7 @@ pub fn summaries(c: &Connection, board: i64) -> rusqlite::Result<HashMap<i64, Ve
                 (SELECT count(*) FROM comments m WHERE m.card_id = k.id),
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id),
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id AND i.done = 1),
-                (SELECT count(*) FROM attachments a WHERE a.card_id = k.id), k.cover_attachment, k.is_template
+                (SELECT count(*) FROM attachments a WHERE a.card_id = k.id), k.cover_attachment, k.is_template, k.updated_at
          FROM cards k WHERE k.board_id = ?1 AND k.archived_at IS NULL ORDER BY k.list_id, k.position",
     )?;
     let mut out: HashMap<i64, Vec<Value>> = HashMap::new();
@@ -175,6 +175,7 @@ pub fn summaries(c: &Connection, board: i64) -> rusqlite::Result<HashMap<i64, Ve
                 "attachments": r.get::<_, i64>(12)?,
                 "cover_image": r.get::<_, Option<i64>>(13)?,
                 "is_template": r.get::<_, bool>(14)?,
+                "updated_at": r.get::<_, i64>(15)?,
             }),
         ))
     })?;

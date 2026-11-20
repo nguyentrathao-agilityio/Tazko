@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { t } from '@/i18n'
+import { fromInputs, toDateInput, toTimeInput } from '@/card/dates'
 import { Icon } from '@/ui/Icon'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
@@ -164,27 +165,6 @@ export function LabelsPop({
       )}
     </>
   )
-}
-
-const pad = (n: number) => String(n).padStart(2, '0')
-
-function toDateInput(unix: number | null) {
-  if (!unix) return ''
-  const d = new Date(unix * 1000)
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-function toTimeInput(unix: number | null) {
-  if (!unix) return '12:00'
-  const d = new Date(unix * 1000)
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function fromInputs(date: string, time: string): number | null {
-  if (!date) return null
-  const [y, m, d] = date.split('-').map(Number)
-  const [hh, mm] = (time || '12:00').split(':').map(Number)
-  return Math.floor(new Date(y, m - 1, d, hh, mm).getTime() / 1000)
 }
 
 export function DatesPop({

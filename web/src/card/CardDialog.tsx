@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { api } from '@/http'
 import { t } from '@/i18n'
+import { appendAfter } from '@/board/order'
 import { anchorOf, type Anchor } from '@/ui/anchor'
 import { Icon } from '@/ui/Icon'
 import { displayName } from '@/ui/names'
@@ -393,9 +394,7 @@ export function CardDialog({
               current={card.list.id}
               label={t('list.moveButton')}
               onMove={(list, top) => {
-                const target = board.lists.find((l) => l.id === list)
-                const others = (target?.cards ?? []).filter((c) => c.id !== card.id)
-                const after = top || others.length === 0 ? null : others[others.length - 1].id
+                const after = appendAfter(board.lists, list, card.id, top)
                 void run(() => api('POST', `${path}/move`, { list_id: list, after })).then((ok) => {
                   if (ok) close()
                 })
