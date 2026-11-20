@@ -71,6 +71,9 @@ pub struct ProjectInfo {
     pub background: String,
     pub members_create_boards: bool,
     pub members_invite: bool,
+    pub voting: bool,
+    pub aging: bool,
+    pub aging_days: i64,
 }
 
 pub struct Project {
@@ -140,7 +143,7 @@ pub fn path_id(params: &HashMap<String, String>, key: &str) -> Result<i64, ApiEr
 
 pub fn project_info(c: &Connection, id: i64) -> rusqlite::Result<Option<ProjectInfo>> {
     c.query_row(
-        "SELECT name, description, color, background, members_create_boards, members_invite
+        "SELECT name, description, color, background, members_create_boards, members_invite, voting, aging, aging_days
          FROM projects WHERE id = ?1 AND deleted_at IS NULL AND archived_at IS NULL",
         [id],
         |r| {
@@ -151,6 +154,9 @@ pub fn project_info(c: &Connection, id: i64) -> rusqlite::Result<Option<ProjectI
                 background: r.get(3)?,
                 members_create_boards: r.get(4)?,
                 members_invite: r.get(5)?,
+                voting: r.get(6)?,
+                aging: r.get(7)?,
+                aging_days: r.get(8)?,
             })
         },
     )
@@ -480,6 +486,9 @@ async fn view(State(state): State<AppState>, project: Project) -> Result<Json<Va
         "background": i.background,
         "members_create_boards": i.members_create_boards,
         "members_invite": i.members_invite,
+        "voting": i.voting,
+        "aging": i.aging,
+        "aging_days": i.aging_days,
         "role": project.role.as_str(),
         "member_count": members,
         "can": project.permissions(),
@@ -494,6 +503,9 @@ pub struct ProjectChange {
     background: Option<String>,
     members_create_boards: Option<bool>,
     members_invite: Option<bool>,
+    voting: Option<bool>,
+    aging: Option<bool>,
+    aging_days: Option<i64>,
 }
 
 async fn update(
@@ -503,6 +515,7 @@ async fn update(
 ) -> Result<axum::http::StatusCode, ApiError> {
     let by = project.writing(&headers, Act::Manage)?;
     let mut info = project.info.clone();
+    let before = project.info.clone();
     if let Some(n) = &body.name {
         info.name = crate::admin::validate::name(n).ok_or_else(|| bad("enter a project name"))?;
     }
@@ -540,6 +553,22 @@ async fn update(
         info.members_invite = v;
     }
 
+    if let Some(v) = body.voting {
+        info.voting = v;
+    }
+
+    if let Some(v) = body.aging {
+        info.aging = v;
+    }
+
+    if let Some(d) = body.aging_days {
+        if ![3, 7, 14, 30].contains(&d) {
+            return Err(bad("choose 3, 7, 14 or 30 days"));
+        }
+
+        info.aging_days = d;
+    }
+
     let id = project.id;
     project
         .db()
@@ -547,7 +576,7 @@ async fn update(
             let tx = c.transaction()?;
             tx.execute(
                 "UPDATE projects SET name = ?2, description = ?3, color = ?4, background = ?5,
-                 members_create_boards = ?6, members_invite = ?7 WHERE id = ?1",
+                 members_create_boards = ?6, members_invite = ?7, voting = ?8, aging = ?9, aging_days = ?10 WHERE id = ?1",
                 params![
                     id,
                     info.name,
@@ -555,7 +584,10 @@ async fn update(
                     info.color,
                     info.background,
                     info.members_create_boards,
-                    info.members_invite
+                    info.members_invite,
+                    info.voting,
+                    info.aging,
+                    info.aging_days
                 ],
             )?;
             events::record(
@@ -567,8 +599,20 @@ async fn update(
                     "name": info.name,
                     "members_create_boards": info.members_create_boards,
                     "members_invite": info.members_invite,
+                    "voting": info.voting,
+                    "aging": info.aging,
+                    "aging_days": info.aging_days,
                 }),
             )?;
+            if (before.voting, before.aging, before.aging_days) != (info.voting, info.aging, info.aging_days) {
+                let boards: Vec<i64> = tx
+                    .prepare("SELECT id FROM boards WHERE project_id = ?1 AND closed_at IS NULL")?
+                    .query_map([id], |r| r.get(0))?
+                    .collect::<Result<_, _>>()?;
+                for b in boards {
+                    events::record(&tx, by, "card_settings_changed", At::board(id, b), json!({ "voting": info.voting, "aging": info.aging, "aging_days": info.aging_days }))?;
+                }
+            }
             tx.commit()?;
             Ok(())
         })

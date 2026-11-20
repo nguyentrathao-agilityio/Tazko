@@ -6,21 +6,27 @@ export function ZenStrip({
   name,
   mine,
   hideDone,
+  hideStale,
   density,
   onMine,
   onHideDone,
+  onHideStale,
   onDensity,
   onSearch,
+  onPalette,
   onExit,
 }: {
   name: string
   mine: boolean
   hideDone: boolean
+  hideStale: boolean
   density: Settings['zen_density']
   onMine: () => void
   onHideDone: () => void
+  onHideStale: () => void
   onDensity: (d: Settings['zen_density']) => void
   onSearch: () => void
+  onPalette: () => void
   onExit: () => void
 }) {
   const options: [Settings['zen_density'], string][] = [
@@ -40,6 +46,9 @@ export function ZenStrip({
         <button type="button" className={`zc${hideDone ? ' on' : ''}`} aria-pressed={hideDone} onClick={onHideDone}>
           {t('zen.hideDone')}
         </button>
+        <button type="button" className={`zc${hideStale ? ' on' : ''}`} aria-pressed={hideStale} onClick={onHideStale}>
+          {t('zen.hideStale')}
+        </button>
         <span className="zsep" />
         <div className="seg" role="radiogroup" aria-label={t('zen.density')}>
           {options.map(([k, label]) => (
@@ -49,6 +58,9 @@ export function ZenStrip({
           ))}
         </div>
         <span className="sp" />
+        <button type="button" className="ibtn" aria-label={t('palette.title')} title={t('palette.button')} onClick={onPalette}>
+          <Icon name="cmd" />
+        </button>
         <button type="button" className="ibtn" aria-label={t('search.title')} title={t('zen.searchHint')} onClick={onSearch}>
           <Icon name="search" />
         </button>

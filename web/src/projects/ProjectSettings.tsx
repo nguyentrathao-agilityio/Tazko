@@ -8,6 +8,7 @@ import { useRun } from '@/projects/useRun'
 import { isOwner } from '@/roles'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { SwitchRow } from '@/ui/SwitchRow'
+import { AGING_DAYS } from '@/card/aging'
 import { projectApi } from '@/paths'
 
 export function ProjectSettings({ company, project, onSaved }: { company: Company; project: ProjectView; onSaved: () => void }) {
@@ -22,7 +23,7 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
 
   const save = () => patch({ name, description, color, background: bg })
 
-  const flip = (key: 'members_create_boards' | 'members_invite', value: boolean) => patch({ [key]: value })
+  const flip = (key: 'members_create_boards' | 'members_invite' | 'voting' | 'aging', value: boolean) => patch({ [key]: value })
 
   return (
     <>
@@ -74,6 +75,37 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
           onChange={(v) => flip('members_create_boards', v)}
         />
         <SwitchRow label={t('project.membersInvite')} hint={t('project.membersInviteHint')} on={project.members_invite} onChange={(v) => flip('members_invite', v)} />
+      </section>
+      <section className="box">
+        <h2>{t('project.cards')}</h2>
+        <SwitchRow label={t('project.voting')} hint={t('project.votingHint')} on={project.voting} onChange={(v) => flip('voting', v)} />
+      </section>
+      <section className="box">
+        <h2>{t('aging.title')}</h2>
+        <SwitchRow label={t('aging.switch')} hint={t('aging.hint')} on={project.aging} onChange={(v) => flip('aging', v)} />
+        {project.aging && (
+          <>
+            <div className="field" style={{ marginTop: 12 }}>
+              <label htmlFor="ag-d">{t('aging.after')}</label>
+              <select id="ag-d" value={project.aging_days} style={{ maxWidth: 260 }} onChange={(e) => void patch({ aging_days: Number(e.target.value) })}>
+                {AGING_DAYS.map((n) => (
+                  <option key={n} value={n}>
+                    {n === 7 ? t('aging.default') : t('aging.days', { n })}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="agprev" aria-hidden="true">
+              {[0, 1, 2, 3].map((k) => (
+                <div key={k} className={`cd${k ? ` age${k}` : ''}`}>
+                  <div className="cb">
+                    <span className="ttl">{k ? t('aging.quiet', { n: project.aging_days * k }) : t('aging.active')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </section>
       <section className="box danger-zone">
         <h2>{t('project.archiveOrDelete')}</h2>

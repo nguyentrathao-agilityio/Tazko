@@ -143,7 +143,7 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
         </div>
         <p className="hint">
           {t('search.try')} <span className="kbd">@Mai</span> {t('search.member')}, <span className="kbd">#Bug</span> {t('search.label')}, <span className="kbd">is:overdue</span>,{' '}
-          <span className="kbd">has:attachments</span>, <span className="kbd">is:archived</span>
+          <span className="kbd">has:attachments</span>, <span className="kbd">is:archived</span>, <span className="kbd">is:stale</span>
         </p>
       </div>
     </div>

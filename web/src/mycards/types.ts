@@ -10,5 +10,18 @@ export type MyCard = {
   items_done: number
   can_edit: boolean
   labels: { id: number; name: string; color: number }[]
+  recurrence?: string | null
+  company: { slug: string; name: string }
+}
+
+export type MyItem = {
+  id: number
+  text: string
+  done: boolean
+  due_at: number | null
+  card: { id: number; title: string }
+  board: { id: number; name: string }
+  project: { id: number; name: string }
+  can_edit: boolean
   company: { slug: string; name: string }
 }

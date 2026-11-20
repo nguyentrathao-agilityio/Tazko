@@ -518,6 +518,47 @@
   .drawer h4 {
     margin: 14px 0 4px;
   }
+
+  .cd.age1 {
+    opacity: 0.8;
+  }
+
+  .cd.age2 {
+    opacity: 0.62;
+  }
+
+  .cd.age3 {
+    opacity: 0.46;
+  }
+
+  .cd.age1,
+  .cd.age2,
+  .cd.age3 {
+    transition: opacity 0.15s;
+  }
+
+  .cd.age1:hover,
+  .cd.age2:hover,
+  .cd.age3:hover,
+  .cd.age1:focus-within,
+  .cd.age2:focus-within,
+  .cd.age3:focus-within {
+    opacity: 1;
+  }
+
+  .agprev {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 6px;
+    background: var(--lst);
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .agprev .cd {
+    cursor: default;
+  }
 }
 
 @media (max-width: 860px) {

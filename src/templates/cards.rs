@@ -177,12 +177,12 @@ async fn use_template(
                 let t = custom_title.clone().unwrap_or(title);
                 let new = copy_card(&tx, card, list, id, &t, &pos, Some(by), None)?;
                 tx.execute(
-                    "UPDATE cards SET start_at = NULL, due_at = NULL, done = 0, cover = NULL, is_template = 0 WHERE id = ?1",
+                    "UPDATE cards SET start_at = NULL, due_at = NULL, done = 0, cover = NULL, is_template = 0, recurrence = NULL WHERE id = ?1",
                     [new],
                 )?;
                 tx.execute("DELETE FROM card_members WHERE card_id = ?1", [new])?;
                 tx.execute(
-                    "UPDATE checklist_items SET done = 0 WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
+                    "UPDATE checklist_items SET done = 0, assignee_id = NULL, due_at = NULL WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
                     [new],
                 )?;
                 tx.execute(

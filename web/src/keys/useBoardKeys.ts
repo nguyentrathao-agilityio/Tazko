@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CardData, ListData } from '@/board/types'
 import { isTyping } from '@/ui/typing'
 import { ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, ARROW_UP, ENTER, ESCAPE } from '@/keys/keyNames'
@@ -15,6 +15,7 @@ export type KeyActions = {
   zen: () => void
   help: () => void
   leaveZen: () => boolean
+  vote?: (card: CardData) => void
   goToCard: (card: CardData) => void
 }
 
@@ -65,7 +66,7 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
   const hover = useRef<number | null>(null)
   const state = useRef({ lists, edit, cardOpen, zen, actions, selected })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     state.current = { lists, edit, cardOpen, zen, actions, selected }
   })
 
@@ -88,6 +89,8 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         return at ? s.lists[at[0]].cards[at[1]] : null
       }
       const handled = () => e.preventDefault()
+      const control = document.activeElement
+      if ((key === ' ' || key === ENTER) && control instanceof HTMLButtonElement && !control.classList.contains('cd')) return
 
       if (key === '`' || key === '?') {
         handled()
@@ -166,6 +169,9 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
       } else if (key === ' ') {
         handled()
         s.actions.done(card)
+      } else if (lower === 'v' && s.actions.vote) {
+        handled()
+        s.actions.vote(card)
       } else if (lower === 'x') {
         handled()
         s.actions.archive(card)

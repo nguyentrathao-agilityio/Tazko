@@ -1,5 +1,7 @@
 import type { Label, ListData } from '@/board/types'
 import type { ActivityEntry } from '@/card/types'
+import { shortDate } from '@/card/look'
+import { ruleText } from '@/card/repeat'
 
 type Ctx = { lists: ListData[]; labels: Label[]; people: { id: number; name: string; email: string }[] }
 
@@ -64,6 +66,26 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'reopened a checklist item'
     case 'item_changed':
       return 'changed a checklist item'
+    case 'card_settings_changed':
+      return "changed this project's card settings"
+    case 'card_voted':
+      return 'voted for this card'
+    case 'card_unvoted':
+      return 'removed their vote from this card'
+    case 'link_added':
+      return 'linked this card to another card'
+    case 'link_removed':
+      return 'removed a link to another card'
+    case 'card_repeated':
+      return `completed this card; it repeats ${ruleText(str(p.rule))}, next due ${shortDate(Number(p.to))}`
+    case 'card_repeat_undone':
+      return 'undid the last completion of this card'
+    case 'item_assigned':
+      return `assigned a checklist item to ${who(p.user)}`
+    case 'item_unassigned':
+      return 'cleared a checklist item assignee'
+    case 'item_dated':
+      return p.due_at ? 'changed a checklist item due date' : 'removed a checklist item due date'
     case 'item_deleted':
       return 'deleted a checklist item'
     case 'item_moved':

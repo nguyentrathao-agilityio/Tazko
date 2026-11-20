@@ -140,6 +140,27 @@
      },
      "description_html": {
       "type": "string"
+     },
+     "recurrence": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "daily",
+       "weekdays",
+       "weekly",
+       "biweekly",
+       "monthly",
+       null
+      ],
+      "description": "How often the card repeats; needs a due date"
+     },
+     "tz_offset": {
+      "type": "integer",
+      "minimum": -840,
+      "maximum": 840,
+      "description": "Minutes east of UTC, used with done: true to work out the next date of a repeating card"
      }
     }
    },
@@ -704,6 +725,9 @@
     ],
     "x-scope": "write",
     "responses": {
+     "200": {
+      "description": "A repeating card was completed and reopened: { repeated: { rule, from, to } }"
+     },
      "204": {
       "description": "OK"
      },
@@ -1412,6 +1436,35 @@
         "$ref": "#/components/schemas/On"
        }
       }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/boards/{board}/cards/{card}/repeat/undo": {
+   "post": {
+    "summary": "Undo the last completion of a repeating card",
+    "tags": [
+     "Cards"
+    ],
+    "x-scope": "write",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     },
+     "409": {
+      "description": "The card changed since it was completed"
      }
     }
    }

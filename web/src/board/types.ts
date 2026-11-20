@@ -27,6 +27,11 @@ export type CardData = {
   cover_image?: number | null
   attachments?: number
   is_template?: boolean
+  recurrence?: string | null
+  links?: number
+  blocked?: boolean
+  votes?: number
+  voted?: boolean
   updated_at?: number
   fields?: Record<string, FieldValue>
   comments?: number
@@ -50,6 +55,9 @@ export type BoardData = {
   starred: boolean
   watching?: boolean
   project: { id: number; name: string }
+  voting: boolean
+  aging?: boolean
+  aging_days?: number
   role: ProjectRole
   can: Can
   people: BoardPerson[]

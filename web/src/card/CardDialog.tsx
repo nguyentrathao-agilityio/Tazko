@@ -10,7 +10,7 @@ import { Popover } from '@/ui/Popover'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import { useRun } from '@/projects/useRun'
-import type { BoardData } from '@/board/types'
+import type { BoardData, BoardPerson } from '@/board/types'
 import { describe } from '@/card/activity'
 import { Editor, type DescriptionSave } from '@/card/Editor'
 import { ago, dateRange, dueState, labelStyle } from '@/card/look'
@@ -18,13 +18,18 @@ import { AttachPop, AttachmentsSection } from '@/card/Attachments'
 import { fileUrl } from '@/card/files'
 import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop } from '@/card/Pops'
 import { FieldsSection } from '@/card/Fields'
+import { LinkPop, LinksSection } from '@/card/Links'
+import { ruleText, useToggleDone } from '@/card/repeat'
+import { ageLevel, agingOf, quietDays } from '@/card/aging'
+import { useVote } from '@/card/vote'
+import { ItemBadges, ItemMetaPop } from '@/card/ItemMeta'
 import { MentionBox } from '@/card/MentionBox'
 import { Reactions } from '@/card/Reactions'
 import { CommentText } from '@/card/Rich'
 import type { CardDetail, Checklist, Comment } from '@/card/types'
 import { ARROW_DOWN, ARROW_UP, ENTER, ESCAPE } from '@/keys/keyNames'
 
-type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist' | 'attach'
+type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist' | 'attach' | 'links'
 type Pop = { kind: PopKind; at: Anchor } | null
 
 const ITEMS_SHOWN = 6
@@ -49,7 +54,7 @@ export function CardDialog({
   tick?: number
   onClose: () => void
   onChanged: () => void
-  onOpenCard?: (id: number) => void
+  onOpenCard?: (id: number, board?: number) => void
 }) {
   const path = `${base}/cards/${cardId}`
   const { data: card, error: loadError, reload } = useLoad(() => api<CardDetail>('GET', path), path)
@@ -58,6 +63,9 @@ export function CardDialog({
     onChanged()
   }, [reload, onChanged])
   const { error, run } = useRun(changed)
+  const toggleDone = useToggleDone(run)
+  const summary = board.lists.flatMap((l) => l.cards).find((c) => c.id === cardId)
+  const vote = useVote(run)
   const toast = useToast()
   const [pop, setPop] = useState<Pop>(null)
   const [editingTitle, setEditingTitle] = useState(false)
@@ -152,7 +160,7 @@ export function CardDialog({
                 aria-checked={card.done}
                 aria-label={t('card.markComplete')}
                 disabled={!edit}
-                onClick={() => void patch({ done: !card.done })}
+                onClick={() => toggleDone(base, card)}
               >
                 {card.done && <Icon name="check" />}
               </button>
@@ -181,6 +189,15 @@ export function CardDialog({
                 <>
                   {' '}
                   · <b style={{ color: 'var(--warn)' }}>{t('card.archivedNote')}</b>
+                </>
+              )}
+              {summary && ageLevel(summary, agingOf(board)) > 0 && (
+                <>
+                  {' '}
+                  ·{' '}
+                  <span className="pill warn" title={t('aging.pillHint')}>
+                    {t('aging.pill', { n: quietDays(summary.updated_at) })}
+                  </span>
                 </>
               )}
             </p>
@@ -215,6 +232,22 @@ export function CardDialog({
                   )}
                 </div>
               </div>
+              {board.voting && (
+                <div>
+                  <h4>{t('vote.title')}</h4>
+                  <div className="ln">
+                    <button type="button" className={`votebtn${card.voted ? ' on' : ''}`} aria-pressed={Boolean(card.voted)} disabled={!edit} onClick={() => vote(base, card)}>
+                      <Icon name="up" />
+                      {card.voted ? t('vote.voted') : t('vote.vote')} · {card.voters?.length ?? 0}
+                    </button>
+                    {(card.voters ?? []).slice(0, 5).map((p) => (
+                      <span key={p.id} title={displayName(p.name, p.email)}>
+                        <Avatar name={displayName(p.name, p.email)} />
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {(card.due_at || card.start_at) && (
                 <div>
                   <h4>{t('card.dates')}</h4>
@@ -226,12 +259,17 @@ export function CardDialog({
                       aria-checked={card.done}
                       aria-label={t('card.markComplete')}
                       disabled={!edit}
-                      onClick={() => void patch({ done: !card.done })}
+                      onClick={() => toggleDone(base, card)}
                     >
                       {card.done && <Icon name="check" />}
                     </button>
                     <button type="button" className="datebtn" onClick={edit ? open('dates') : undefined} disabled={!edit}>
                       {dateRange(card.start_at, card.due_at, true)}{' '}
+                      {card.recurrence && (
+                        <span className="pill">
+                          <Icon name="repeat" /> {ruleText(card.recurrence)}
+                        </span>
+                      )}{' '}
                       {card.done ? (
                         <span className="pill ok">{t('card.complete')}</span>
                       ) : state === 'bad' ? (
@@ -284,6 +322,7 @@ export function CardDialog({
                 all={card.checklists}
                 edit={edit}
                 base={base}
+                people={board.people}
                 run={run}
               />
             ))}
@@ -295,6 +334,15 @@ export function CardDialog({
                 </button>
               </div>
             )}
+            <LinksSection
+              card={card}
+              base={base}
+              here={board.id}
+              edit={edit}
+              run={run}
+              onAdd={(el) => setPop({ kind: 'links', at: anchorOf(el) })}
+              onOpen={(l) => onOpenCard?.(l.card.id, l.board.id)}
+            />
             <AttachmentsSection card={card} base={base} edit={edit} run={run} onAdd={(el) => setPop({ kind: 'attach', at: anchorOf(el) })} />
           </div>
           <aside className="cm-cm" aria-label={t('card.commentsAndActivity')}>
@@ -365,6 +413,7 @@ export function CardDialog({
             <DatesPop
               start={card.start_at}
               due={card.due_at}
+              recurrence={card.recurrence ?? null}
               onSave={(v) =>
                 void patch(v).then((ok) => {
                   if (ok) close()
@@ -417,6 +466,17 @@ export function CardDialog({
               }
             />
           )}
+          {pop.kind === 'links' && (
+            <LinkPop
+              base={base}
+              card={card.id}
+              onLink={(target, kind) =>
+                void run(() => api('POST', `${path}/links`, { card: target, kind })).then((ok) => {
+                  if (ok) close()
+                })
+              }
+            />
+          )}
           {pop.kind === 'attach' && (
             <AttachPop
               base={base}
@@ -456,6 +516,7 @@ function popTitle(kind: PopKind): string {
     copy: t('card.copyTitle'),
     checklist: t('card.addChecklist'),
     attach: t('attach.popTitle'),
+    links: t('links.pop'),
   }
   return titles[kind]
 }
@@ -555,6 +616,7 @@ function CardMenu({
           {item('user', t('card.members'), () => onPick('members'))}
           {item('tag', t('card.labels'), () => onPick('labels'))}
           {item('checksq', t('card.checklist'), () => onPick('checklist'))}
+          {item('link', t('links.title'), () => onPick('links'))}
           {item('clock', t('card.dates'), () => onPick('dates'))}
           {item('clip', t('attach.attachment'), () => onPick('attach'))}
           {item('image', t('card.cover'), () => onPick('cover'))}
@@ -577,6 +639,7 @@ function ChecklistBlock({
   all,
   edit,
   base,
+  people,
   run,
 }: {
   checklist: Checklist
@@ -584,8 +647,12 @@ function ChecklistBlock({
   all: Checklist[]
   edit: boolean
   base: string
+  people: BoardPerson[]
   run: (fn: () => Promise<unknown>) => Promise<boolean>
 }) {
+  const [meta, setMeta] = useState<{ item: number; at: Anchor } | null>(null)
+  const metaItem = checklist.items.find((i) => i.id === meta?.item)
+  const openMeta = (item: number, el: Element) => setMeta({ item, at: anchorOf(el) })
   const [hide, setHide] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -700,49 +767,55 @@ function ChecklistBlock({
             >
               {it.done && <Icon name="check" />}
             </button>
-            {editingItem === it.id ? (
-              <input
-                className="inl-i"
-                defaultValue={it.text}
-                aria-label={t('card.itemText')}
-                autoFocus
-                onBlur={(e) => {
-                  setEditingItem(null)
-                  const v = e.currentTarget.value.trim()
-                  if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === ENTER) e.currentTarget.blur()
-                  if (e.key === ESCAPE) {
-                    e.stopPropagation()
+            <div className="itb">
+              {editingItem === it.id ? (
+                <input
+                  className="inl-i"
+                  defaultValue={it.text}
+                  aria-label={t('card.itemText')}
+                  autoFocus
+                  onBlur={(e) => {
                     setEditingItem(null)
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className="itx"
-                onClick={() => edit && setEditingItem(it.id)}
-                onKeyDown={(e) => {
-                  if (!edit || !e.altKey) return
-                  if (e.key === ARROW_UP) {
-                    e.preventDefault()
-                    moveItem(at, -1)
-                  }
+                    const v = e.currentTarget.value.trim()
+                    if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === ENTER) e.currentTarget.blur()
+                    if (e.key === ESCAPE) {
+                      e.stopPropagation()
+                      setEditingItem(null)
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="itx"
+                  onClick={() => edit && setEditingItem(it.id)}
+                  onKeyDown={(e) => {
+                    if (!edit || !e.altKey) return
+                    if (e.key === ARROW_UP) {
+                      e.preventDefault()
+                      moveItem(at, -1)
+                    }
 
-                  if (e.key === ARROW_DOWN) {
-                    e.preventDefault()
-                    moveItem(at, 1)
-                  }
-                }}
-                title={edit ? t('card.itemMoveHint') : undefined}
-              >
-                {it.text}
-              </button>
-            )}
+                    if (e.key === ARROW_DOWN) {
+                      e.preventDefault()
+                      moveItem(at, 1)
+                    }
+                  }}
+                  title={edit ? t('card.itemMoveHint') : undefined}
+                >
+                  {it.text}
+                </button>
+              )}
+              {editingItem !== it.id && <ItemBadges item={it} people={people} edit={edit} onOpen={(el) => openMeta(it.id, el)} />}
+            </div>
             {edit && (
               <span className="acts">
+                <button type="button" className="ibtn sm" aria-label={t('item.meta', { text: it.text })} title={t('item.metaHint')} onClick={(e) => openMeta(it.id, e.currentTarget)}>
+                  <Icon name="user" />
+                </button>
                 <button type="button" className="ibtn sm" aria-label={t('card.deleteItem')} onClick={() => void run(() => api('DELETE', `${base}/items/${it.id}`))}>
                   <Icon name="trash" />
                 </button>
@@ -793,6 +866,11 @@ function ChecklistBlock({
             {t('card.addItem')}
           </button>
         ))}
+      {meta && metaItem && (
+        <Popover anchor={meta.at} title={t('item.title')} width={300} onClose={() => setMeta(null)}>
+          <ItemMetaPop item={metaItem} people={people} onChange={(change) => void run(() => api('PATCH', `${base}/items/${metaItem.id}`, change))} />
+        </Popover>
+      )}
     </section>
   )
 }

@@ -85,7 +85,7 @@ export function TemplatesPage({ company, project, go }: { company: Company; proj
                   </i>
                 ))}
               </div>
-              <div className="tb">
+              <div className="tcb">
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
                   <h3 style={{ flex: 1 }}>{x.name}</h3>
                   {x.admin && <span className="pill accent">{t('tpl.adminPill')}</span>}

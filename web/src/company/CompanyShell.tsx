@@ -9,6 +9,9 @@ import { useToast } from '@/ui/toast'
 import { companyRoleLabel, isOwner } from '@/roles'
 import { ESCAPE } from '@/keys/keyNames'
 import { companyRoute } from '@/paths'
+import { Palette } from '@/palette/Palette'
+import { usePalette, usePersonal } from '@/palette/usePalette'
+import { personalCommands } from '@/palette/commands'
 
 function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
   const [open, setOpen] = useState(false)
@@ -94,6 +97,8 @@ export function CompanyShell({
   const name = displayName(me.name, me.email)
   const base = companyRoute(company.slug)
   const owner = isOwner(company.role)
+  const palette = usePalette()
+  const personal = usePersonal(go, base)
 
   return (
     <div className="shell">
@@ -129,6 +134,12 @@ export function CompanyShell({
             </small>
           </div>
         </Link>
+        {palette.open && (
+          <Palette
+            items={personalCommands(personal)}
+            onClose={palette.close}
+          />
+        )}
         <button type="button" className="nav" onClick={onSignOut}>
           <Icon name="out" />
           {t('home.signOut')}

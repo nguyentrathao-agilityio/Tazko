@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MentionBox } from '@/card/MentionBox'
 import { mentionQuery } from '@/card/mention'
 import { Bell } from '@/notify/Bell'
-import { companyOf } from '@/notify/notes'
+import { companyOf, noteText, type Note } from '@/notify/notes'
 
 class FakeSocket {
   static OPEN = 1
@@ -90,6 +90,12 @@ describe('notification bell', () => {
     expect(companyOf('/c/acme/b/7')).toBe('acme')
     expect(companyOf('/c/acme')).toBe('acme')
     expect(companyOf('/settings')).toBeNull()
+  })
+
+  it('says when an assignment is for a checklist item', () => {
+    const base = notes[2] as Note
+    expect(noteText(base).what).toBe('added you to')
+    expect(noteText({ ...base, item: 'Write release notes' }).what).toBe('assigned you a checklist item on')
   })
 })
 

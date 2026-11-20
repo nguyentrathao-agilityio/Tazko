@@ -111,6 +111,51 @@ pub static TENANT: Migrations = Migrations {
             name: "0012_touch_cards.sql",
             sql: include_str!("../../migrations/tenant/0012_touch_cards.sql"),
         },
+        Migration {
+            version: 13,
+            name: "0013_item_meta.sql",
+            sql: include_str!("../../migrations/tenant/0013_item_meta.sql"),
+        },
+        Migration {
+            version: 14,
+            name: "0014_item_note_text.sql",
+            sql: include_str!("../../migrations/tenant/0014_item_note_text.sql"),
+        },
+        Migration {
+            version: 15,
+            name: "0015_recurring_cards.sql",
+            sql: include_str!("../../migrations/tenant/0015_recurring_cards.sql"),
+        },
+        Migration {
+            version: 16,
+            name: "0016_events_by_card.sql",
+            sql: include_str!("../../migrations/tenant/0016_events_by_card.sql"),
+        },
+        Migration {
+            version: 17,
+            name: "0017_card_links.sql",
+            sql: include_str!("../../migrations/tenant/0017_card_links.sql"),
+        },
+        Migration {
+            version: 18,
+            name: "0018_card_votes.sql",
+            sql: include_str!("../../migrations/tenant/0018_card_votes.sql"),
+        },
+        Migration {
+            version: 19,
+            name: "0019_voting_off_by_default.sql",
+            sql: include_str!("../../migrations/tenant/0019_voting_off_by_default.sql"),
+        },
+        Migration {
+            version: 20,
+            name: "0020_card_aging.sql",
+            sql: include_str!("../../migrations/tenant/0020_card_aging.sql"),
+        },
+        Migration {
+            version: 21,
+            name: "0021_touch_links_votes.sql",
+            sql: include_str!("../../migrations/tenant/0021_touch_links_votes.sql"),
+        },
     ],
 };
 

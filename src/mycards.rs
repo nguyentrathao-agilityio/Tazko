@@ -14,6 +14,14 @@ use crate::tenant::CurrentUser;
 
 pub const LIMIT: i64 = 500;
 
+const OPEN: &str = "JOIN lists l ON l.id = k.list_id
+         JOIN boards b ON b.id = k.board_id
+         JOIN projects p ON p.id = b.project_id
+         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?2";
+
+const LIVE: &str = "k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
+           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL";
+
 pub fn routes() -> Router<AppState> {
     Router::new().route("/api/v1/me/cards", get(mine))
 }
@@ -28,15 +36,11 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
         "SELECT k.id, k.title, k.done, k.due_at, l.title, b.id, b.name, p.id, p.name,
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id),
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id AND i.done = 1),
-                pm.role != 'observer'
+                pm.role != 'observer', k.recurrence
          FROM card_members cm
          JOIN cards k ON k.id = cm.card_id
-         JOIN lists l ON l.id = k.list_id
-         JOIN boards b ON b.id = k.board_id
-         JOIN projects p ON p.id = b.project_id
-         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ?2
-         WHERE cm.user_id = ?2 AND k.archived_at IS NULL AND k.is_template = 0 AND l.archived_at IS NULL
-           AND b.closed_at IS NULL AND p.deleted_at IS NULL AND p.archived_at IS NULL AND {VISIBLE}
+         {OPEN}
+         WHERE cm.user_id = ?2 AND {LIVE} AND {VISIBLE}
          ORDER BY k.done, k.due_at IS NULL, k.due_at, k.id LIMIT ?1"
     ))?;
     let rows: Vec<(Value, i64)> = stmt
@@ -54,6 +58,7 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
                     "items": r.get::<_, i64>(9)?,
                     "items_done": r.get::<_, i64>(10)?,
                     "can_edit": r.get::<_, bool>(11)?,
+                    "recurrence": r.get::<_, Option<String>>(12)?,
                 }),
                 card,
             ))
@@ -74,6 +79,31 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
         out.push(v);
     }
     Ok(out)
+}
+
+pub fn assigned_items(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
+    let mut stmt = c.prepare(&format!(
+        "SELECT i.id, i.text, i.done, i.due_at, k.id, k.title, b.id, b.name, p.id, p.name, pm.role != 'observer'
+         FROM checklist_items i
+         JOIN checklists x ON x.id = i.checklist_id
+         JOIN cards k ON k.id = x.card_id
+         {OPEN}
+         WHERE i.assignee_id = ?2 AND {LIVE} AND {VISIBLE}
+         ORDER BY i.done, i.due_at IS NULL, i.due_at, i.id LIMIT ?1"
+    ))?;
+    stmt.query_map(params![LIMIT, user], |r| {
+        Ok(json!({
+            "id": r.get::<_, i64>(0)?,
+            "text": r.get::<_, String>(1)?,
+            "done": r.get::<_, bool>(2)?,
+            "due_at": r.get::<_, Option<i64>>(3)?,
+            "card": { "id": r.get::<_, i64>(4)?, "title": r.get::<_, String>(5)? },
+            "board": { "id": r.get::<_, i64>(6)?, "name": r.get::<_, String>(7)? },
+            "project": { "id": r.get::<_, i64>(8)?, "name": r.get::<_, String>(9)? },
+            "can_edit": r.get::<_, bool>(10)?,
+        }))
+    })?
+    .collect()
 }
 
 async fn mine(
@@ -108,16 +138,21 @@ async fn mine(
     }
 
     let mut cards = Vec::new();
+    let mut items = Vec::new();
     for (slug, name) in companies {
         let Ok(db) = state.dbs.tenant(&slug) else {
             continue;
         };
-        let found = db.read(move |c| Ok(assigned(c, id)?)).await?;
+        let (found, found_items) = db
+            .read(move |c| Ok((assigned(c, id)?, assigned_items(c, id)?)))
+            .await?;
         let company = json!({ "slug": slug, "name": name });
-        for mut v in found {
-            v["company"] = company.clone();
-            cards.push(v);
+        for (list, rows) in [(&mut cards, found), (&mut items, found_items)] {
+            for mut v in rows {
+                v["company"] = company.clone();
+                list.push(v);
+            }
         }
     }
-    Ok(Json(json!({ "cards": cards })))
+    Ok(Json(json!({ "cards": cards, "items": items })))
 }

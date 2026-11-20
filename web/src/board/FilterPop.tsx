@@ -5,6 +5,7 @@ import { emptyFilter, type Filter } from '@/board/filter'
 import type { BoardPerson, Label } from '@/board/types'
 import { labelStyle } from '@/card/look'
 import type { FieldDef } from '@/card/fieldTypes'
+import type { Aging } from '@/card/aging'
 
 export function FilterPop({
   filter,
@@ -12,12 +13,14 @@ export function FilterPop({
   people,
   labels,
   fields = [],
+  aging,
 }: {
   filter: Filter
   onChange: (f: Filter) => void
   people: BoardPerson[]
   labels: Label[]
   fields?: FieldDef[]
+  aging?: Aging
 }) {
   const picked = filter.fields ?? []
   const fieldBox = (key: string, label: string) => (
@@ -76,6 +79,15 @@ export function FilterPop({
           </span>,
           l.name || t('cardPop.colorN', { n: l.color + 1 }),
         ),
+      )}
+      {aging?.on && (
+        <>
+          <div className="fsub">{t('filter.activity')}</div>
+          <label className="fopt">
+            <input type="checkbox" checked={Boolean(filter.stale)} onChange={() => onChange({ ...filter, stale: !filter.stale, hideStale: false })} aria-label={t('filter.stale', { n: aging.days })} />
+            {t('filter.stale', { n: aging.days })}
+          </label>
+        </>
       )}
       <div className="fsub">{t('filter.due')}</div>
       {box('due', 'none', t('filter.noDates'), t('filter.noDates'))}

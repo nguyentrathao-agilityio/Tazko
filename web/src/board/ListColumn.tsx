@@ -12,7 +12,8 @@ export type ListActions = {
   moveTo: (list: ListData, index: number) => void
   archive: (list: ListData) => void
   addCard: (list: ListData) => void
-  sort: (list: ListData, by: 'name' | 'new' | 'old') => void
+  sort: (list: ListData, by: 'name' | 'new' | 'old' | 'votes') => void
+  votes?: boolean
   moveAll: (list: ListData, to: ListData) => void
   archiveAll: (list: ListData) => void
 }
@@ -218,6 +219,11 @@ function ListMenu({
         <button type="button" className="mi" onClick={done(() => actions.sort(list, 'name'))}>
           {t('list.sortName')}
         </button>
+        {actions.votes && (
+          <button type="button" className="mi" onClick={done(() => actions.sort(list, 'votes'))}>
+            {t('list.sortVotes')}
+          </button>
+        )}
       </Popover>
     )
   if (page === 'moveall') {

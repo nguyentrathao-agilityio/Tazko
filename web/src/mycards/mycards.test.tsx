@@ -44,6 +44,18 @@ const here = [
 ]
 const there = mine(31, 'Lab report', { company: { slug: 'north', name: 'Northwind' }, board: { id: 2, name: 'Lab' }, project: { id: 1, name: 'Labs' }, due_at: NOW + 3 * DAY })
 
+const item = {
+  id: 91,
+  text: 'Write release notes',
+  done: false,
+  due_at: NOW + 3 * DAY,
+  card: { id: 23, title: 'Plan launch' },
+  board: { id: 8, name: 'Ops board' },
+  project: { id: 5, name: 'Ops' },
+  can_edit: true,
+  company: acme,
+}
+
 let calls: Call[] = []
 
 beforeEach(() => {
@@ -55,8 +67,8 @@ beforeEach(() => {
       const method = init.method ?? 'GET'
       calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined })
       if (url === '/api/v1/me') return json(me)
-      if (url === '/api/v1/me/cards?company=acme') return json({ cards: here })
-      if (url === '/api/v1/me/cards') return json({ cards: [...here, there] })
+      if (url === '/api/v1/me/cards?company=acme') return json({ cards: here, items: [item] })
+      if (url === '/api/v1/me/cards') return json({ cards: [...here, there], items: [item] })
       if (method === 'PATCH') return new Response(null, { status: 204 })
       return json({ error: 'not found' }, 404)
     }),
@@ -132,9 +144,22 @@ describe('my cards page', () => {
     open()
     const row = (await screen.findByText('Audit nav')).closest('.mc') as HTMLElement
     fireEvent.click(within(row).getByRole('checkbox', { name: 'Mark complete' }))
-    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true } }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true, tz_offset: expect.any(Number) } }))
     expect(window.location.pathname).toBe('/c/acme/my-cards')
     fireEvent.keyDown(row, { key: 'Enter' })
     await waitFor(() => expect(window.location.pathname).toBe('/c/acme/b/7/c/22'))
+  })
+
+  it('lists checklist items assigned to me with their due dates', async () => {
+    open()
+    await screen.findByText('Write copy')
+    fireEvent.click(screen.getByRole('tab', { name: 'Checklist items (1)' }))
+    const row = (await screen.findByText('Write release notes')).closest('.mc') as HTMLElement
+    expect(within(row).getByText('in Plan launch · Ops board')).toBeTruthy()
+    expect(groups()).toEqual(['This week · 1'])
+    fireEvent.click(within(row).getByRole('checkbox', { name: 'Mark item done' }))
+    await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/8/items/91', method: 'PATCH', body: { done: true } }))
+    fireEvent.click(row)
+    await waitFor(() => expect(window.location.pathname).toBe('/c/acme/b/8/c/23'))
   })
 })

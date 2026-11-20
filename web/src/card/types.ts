@@ -6,7 +6,11 @@ import type { FieldValue, Reaction } from '@/card/fieldTypes'
 
 export type Comment = { id: number; author: PersonRef; body: string; created_at: number; edited_at: number | null; reactions?: Reaction[] }
 
-export type ChecklistItem = { id: number; text: string; done: boolean }
+export type ChecklistItem = { id: number; text: string; done: boolean; assignee?: number | null; due_at?: number | null }
+
+export type LinkKind = 'relates' | 'blocks' | 'blocked_by' | 'duplicates' | 'duplicated_by'
+
+export type CardLink = { card: { id: number; title: string; done: boolean; archived: boolean }; board: { id: number; name: string }; list: string; kind: LinkKind }
 
 export type Checklist = { id: number; title: string; items: ChecklistItem[] }
 
@@ -27,10 +31,14 @@ export type CardDetail = {
   labels: number[]
   members: number[]
   checklists: Checklist[]
+  links?: CardLink[]
+  voted?: boolean
+  voters?: { id: number; name: string; email: string }[]
   attachments: Attachment[]
   fields?: Record<string, FieldValue>
   cover_image: number | null
   is_template?: boolean
+  recurrence?: string | null
   comments: Comment[]
   activity: ActivityEntry[]
   can: { edit: boolean }
