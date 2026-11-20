@@ -681,6 +681,51 @@
     opacity: 0;
   }
 
+  .itm {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    flex: none;
+  }
+
+  .itp .av {
+    width: 20px;
+    height: 20px;
+    font-size: 0.55rem;
+  }
+
+  .itd {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    border: 0;
+    background: var(--sunken);
+    border-radius: 5px;
+    font: inherit;
+    font-size: 0.74rem;
+    padding: 1px 7px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+
+  .itd:disabled {
+    cursor: default;
+  }
+
+  .itd .ic {
+    width: 12px;
+    height: 12px;
+  }
+
+  .itd.bad {
+    background: var(--bad-bg);
+    color: var(--bad);
+  }
+
+  .itd.warn {
+    color: var(--warn);
+  }
+
   .it:hover .acts,
   .it:focus-within .acts {
     opacity: 1;

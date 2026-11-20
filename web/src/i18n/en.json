@@ -837,5 +837,19 @@
   "palette.archive": "Archive \"{name}\"",
   "palette.archiveNone": "Archive the selected card",
   "palette.noCard": "Select a card first: press J or K on the board, or open a card",
-  "keys.palette": "Command palette"
+  "keys.palette": "Command palette",
+  "item.title": "Checklist item",
+  "item.assignTo": "Assign to",
+  "item.removeAssignee": "Remove assignee",
+  "item.dueDate": "Due date",
+  "item.removeDue": "Remove due date",
+  "item.assignedTo": "Assigned to {name}",
+  "item.due": "Due {date}",
+  "item.meta": "Assign or date \"{text}\"",
+  "item.metaHint": "Assign or set a due date",
+  "notify.itemAssigned": "assigned you a checklist item on",
+  "mycards.items": "Checklist items ({n})",
+  "mycards.itemIn": "in {card} · {board}",
+  "mycards.noItemsBody": "Checklist items assigned to you show up here with their due dates.",
+  "mycards.markItem": "Mark item done"
 }

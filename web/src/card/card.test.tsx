@@ -68,7 +68,7 @@ const card = () => ({
   created_by: null,
   labels: [31],
   members: [2],
-  checklists: [{ id: 41, title: 'Launch', items: Array.from({ length: 8 }, (_, i) => ({ id: 50 + i, text: `Step ${i + 1}`, done: i < 2 })) }],
+  checklists: [{ id: 41, title: 'Launch', items: Array.from({ length: 8 }, (_, i) => ({ id: 50 + i, text: `Step ${i + 1}`, done: i < 2, assignee: i === 2 ? 2 : null, due_at: i === 2 ? 1_900_000_000 : null })) }],
   comments: Array.from({ length: 5 }, (_, i) => ({ id: 60 + i, author: { id: i === 0 ? 1 : 2, name: i === 0 ? 'Mai Tran' : 'Jo Lee', email: 'x@example.com' }, body: `Note ${i + 1}`, created_at: 1_700_000_000 + i, edited_at: null, reactions: i === 4 ? [{ emoji: '👍', count: 2, mine: true, people: ['Mai Tran', 'Jo Lee'] }] : [] })),
   activity: [{ id: 1, type: 'card_created', actor: { id: 2, name: 'Jo Lee', email: 'jo@example.com' }, payload: { list: 11 }, created_at: 1_699_999_000 }],
   can: { edit: role !== 'observer' },
@@ -112,6 +112,39 @@ function open(path: string) {
 }
 
 describe('card dialog', () => {
+  it('shows an item\'s assignee and due date only when set, and sets them from its menu', async () => {
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    await within(dialog).findByText('Step 3')
+    const rows = [...dialog.querySelectorAll('.it')]
+    expect(rows.filter((r) => r.querySelector('.itm')).map((r) => r.querySelector('.itx')?.textContent)).toEqual(['Step 3'])
+    expect(within(rows[2] as HTMLElement).getByTitle('Assigned to Jo Lee')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Assign or date "Step 4"' }))
+    const pop = await screen.findByRole('dialog', { name: 'Checklist item' })
+    expect((within(pop).getByRole('button', { name: /Ana Reyes/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(pop).getByRole('button', { name: /Jo Lee/ }))
+    await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/items/53', method: 'PATCH', body: { assignee: 2 } }))
+    fireEvent.change(within(pop).getByLabelText('Due date'), { target: { value: '2026-12-24' } })
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/c/acme/boards/7/items/53' && typeof (c.body as { due_at?: number }).due_at === 'number')).toBe(true))
+
+    fireEvent.click(within(rows[2] as HTMLElement).getByRole('button', { name: /^Due / }))
+    const pop2 = await screen.findByRole('dialog', { name: 'Checklist item' })
+    fireEvent.click(within(pop2).getByRole('button', { name: 'Remove due date' }))
+    await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/items/52', method: 'PATCH', body: { due_at: null } }))
+    fireEvent.click(within(pop2).getByRole('button', { name: 'Remove assignee' }))
+    await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/items/52', method: 'PATCH', body: { assignee: null } }))
+  })
+
+  it('gives observers item dates and people without a menu', async () => {
+    role = 'observer'
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    await within(dialog).findByText('Step 3')
+    expect(within(dialog).queryByRole('button', { name: /^Assign or date/ })).toBeNull()
+    expect((within(dialog).getByRole('button', { name: /^Due / }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('opens from the tile, shows badges and long-card limits', async () => {
     open('/c/acme/b/7')
     const tile = await screen.findByRole('button', { name: 'Write copy' })
