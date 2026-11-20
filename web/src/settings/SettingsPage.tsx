@@ -3,6 +3,7 @@ import type { Company, Me } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
 import { when } from '@/ui/format'
+import { TokenTable } from '@/tokens/TokenTable'
 import { Icon } from '@/ui/Icon'
 import type { Go } from '@/ui/Link'
 import { displayName } from '@/ui/names'
@@ -17,7 +18,7 @@ import { ErrorNote } from '@/ui/ErrorNote'
 import { SwitchRow } from '@/ui/SwitchRow'
 import { companyRoute, ME_API } from '@/paths'
 
-export type SettingsTab = 'profile' | 'appearance' | 'sessions'
+export type SettingsTab = 'profile' | 'appearance' | 'tokens' | 'sessions'
 
 const zones = [
   'UTC',
@@ -73,6 +74,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
   const tabs: [SettingsTab, string][] = [
     ['profile', t('settings.tab.profile')],
     ['appearance', t('settings.tab.appearance')],
+    ['tokens', t('settings.tab.tokens')],
     ['sessions', t('settings.tab.sessions')],
   ]
 
@@ -96,6 +98,14 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
       <ErrorNote message={problem} />
       {tab === 'profile' && <Profile me={me} onSaved={onProfile} />}
       {tab === 'appearance' && <Appearance />}
+      {tab === 'tokens' && (
+        <TokenTable
+          path={`${ME_API}/tokens`}
+          title={t('tokens.personalTitle')}
+          lead={t('tokens.personalLead')}
+          footer={<p className="hint" style={{ marginTop: 10 }}>{t('tokens.personalHint')}</p>}
+        />
+      )}
       {tab === 'sessions' && <Sessions />}
     </>
   )

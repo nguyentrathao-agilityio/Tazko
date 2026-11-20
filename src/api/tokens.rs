@@ -520,10 +520,18 @@ async fn list_company(CompanyOwner(co): CompanyOwner) -> Result<Json<Value>, Api
         .db
         .read(|c| {
             let mut stmt = c.prepare(
-                "SELECT id, name, scope, projects, created_at, expires_at, last_used_at FROM api_tokens
-                 WHERE revoked_at IS NULL ORDER BY id DESC",
+                "SELECT t.id, t.name, t.scope, t.projects, t.created_at, t.expires_at, t.last_used_at,
+                        coalesce(nullif(p.name, ''), p.email, '')
+                 FROM api_tokens t LEFT JOIN people p ON p.id = t.created_by
+                 WHERE t.revoked_at IS NULL ORDER BY t.id DESC",
             )?;
-            Ok(stmt.query_map([], token_row)?.collect::<Result<Vec<_>, _>>()?)
+            Ok(stmt
+                .query_map([], |r| {
+                    let mut row = token_row(r)?;
+                    row["by"] = json!(r.get::<_, String>(7)?);
+                    Ok(row)
+                })?
+                .collect::<Result<Vec<_>, _>>()?)
         })
         .await?;
     Ok(Json(json!({ "tokens": tokens })))
