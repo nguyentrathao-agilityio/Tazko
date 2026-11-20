@@ -14,7 +14,7 @@ import { ProjectPage } from '@/projects/ProjectPage'
 import { BoardPage, type BoardView } from '@/board/BoardPage'
 import { YourProjects } from '@/projects/YourProjects'
 import { SearchHost } from '@/search/Search'
-import { SettingsPage } from '@/settings/SettingsPage'
+import { SettingsPage, type SettingsTab } from '@/settings/SettingsPage'
 import { MeContext } from '@/ui/meContext'
 import { companyRoute } from '@/paths'
 
@@ -29,7 +29,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/integrations|\/me(?<me>\/appearance|\/tokens|\/sessions)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/integrations|\/me(?<me>\/appearance|\/notifications|\/tokens|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const g = match?.groups ?? {}
   const company = me.companies.find((c) => c.slug === slug)
@@ -91,7 +91,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
       {projectId && g.tab !== '/templates' && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
       {section === 'me' && (
-        <SettingsPage me={me} company={company} tab={g.me === '/appearance' ? 'appearance' : g.me === '/tokens' ? 'tokens' : g.me === '/sessions' ? 'sessions' : 'profile'} go={go} onProfile={onProfile} />
+        <SettingsPage me={me} company={company} tab={g.me ? (g.me.slice(1) as SettingsTab) : 'profile'} go={go} onProfile={onProfile} />
       )}
       {section === 'integrations' && <IntegrationsPage key={company.slug} company={company} />}
       {section === 'mycards' && <MyCardsPage key={company.slug} company={company} go={go} />}
