@@ -1,14 +1,11 @@
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
 import { api } from '@/http'
+import { useCardToggle } from '@/card/toggle'
 
 export function useVote(run: (fn: () => Promise<unknown>) => Promise<boolean>) {
-  const pending = useRef(new Set<number>())
+  const toggle = useCardToggle()
   return useCallback(
-    (boardApi: string, card: { id: number; voted?: boolean }) => {
-      if (pending.current.has(card.id)) return
-      pending.current.add(card.id)
-      void run(() => api('PUT', `${boardApi}/cards/${card.id}/vote`, { on: !card.voted })).finally(() => pending.current.delete(card.id))
-    },
-    [run],
+    (boardApi: string, card: { id: number; voted?: boolean }) => toggle(card.id, Boolean(card.voted), (on) => run(() => api('PUT', `${boardApi}/cards/${card.id}/vote`, { on }))),
+    [run, toggle],
   )
 }

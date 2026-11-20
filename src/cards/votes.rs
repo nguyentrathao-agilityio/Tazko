@@ -5,7 +5,7 @@ use axum::extract::Path;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Json;
 use axum::routing::put;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -75,7 +75,10 @@ async fn vote(
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
-            if card_in_board(&tx, id, card, false)?.is_none() {
+            let template: Option<bool> = tx
+                .query_row("SELECT is_template FROM cards WHERE id = ?1", [card], |r| r.get(0))
+                .optional()?;
+            if card_in_board(&tx, id, card, false)?.is_none() || template != Some(false) {
                 return Ok(Err(ApiError::NotFound));
             }
 

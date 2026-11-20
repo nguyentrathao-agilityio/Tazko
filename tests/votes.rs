@@ -71,9 +71,66 @@ async fn one_vote_per_person_shown_on_tile_and_card_and_turned_off_by_owners() {
             None
         )
         .await["voting"],
-        true,
-        "voting is on by default"
+        false,
+        "voting is off until an owner turns it on"
     );
+    let b0 = req(
+        &app,
+        &boss,
+        Method::POST,
+        &format!("{C}/projects/{project}/boards"),
+        Some(json!({ "name": "Before" })),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let l0 =
+        req(&app, &boss, Method::GET, &format!("{C}/boards/{b0}"), None).await["lists"][0]["id"]
+            .as_i64()
+            .unwrap();
+    let c0 = req(
+        &app,
+        &boss,
+        Method::POST,
+        &format!("{C}/boards/{b0}/cards"),
+        Some(json!({ "list_id": l0, "title": "Early" })),
+    )
+    .await["cards"][0]["id"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(
+        call(
+            &app,
+            &dev,
+            Method::PUT,
+            &format!("{C}/boards/{b0}/cards/{c0}/vote"),
+            Some(json!({ "on": true }))
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &app,
+            &boss,
+            Method::POST,
+            &format!("{C}/boards/{b0}/lists/{l0}/sort"),
+            Some(json!({ "by": "votes" }))
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST,
+        "no sorting by votes while voting is off"
+    );
+    req(
+        &app,
+        &boss,
+        Method::PATCH,
+        &format!("{C}/projects/{project}"),
+        Some(json!({ "voting": true })),
+    )
+    .await;
     let b = req(
         &app,
         &boss,
@@ -263,6 +320,35 @@ async fn one_vote_per_person_shown_on_tile_and_card_and_turned_off_by_owners() {
         StatusCode::NOT_FOUND
     );
 
+    req(
+        &app,
+        &boss,
+        Method::PUT,
+        &format!("{C}/boards/{b}/cards/{many}/template"),
+        Some(json!({ "on": true })),
+    )
+    .await;
+    assert_eq!(
+        call(
+            &app,
+            &dev,
+            Method::PUT,
+            &vote(many),
+            Some(json!({ "on": true }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND,
+        "template cards take no votes"
+    );
+    req(
+        &app,
+        &boss,
+        Method::PUT,
+        &format!("{C}/boards/{b}/cards/{many}/template"),
+        Some(json!({ "on": false })),
+    )
+    .await;
     assert_eq!(
         call(
             &app,

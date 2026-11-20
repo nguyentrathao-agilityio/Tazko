@@ -69,8 +69,7 @@ export type BoardContext = {
   pop: (kind: 'members' | 'dates' | 'labels', c: CardData) => void
   move: (c: CardData, list: ListData) => void
   archive: (c: CardData) => void
-  voting: boolean
-  vote: (c: CardData) => void
+  vote?: (c: CardData) => void
   open: (c: CardData) => void
 }
 
@@ -103,7 +102,7 @@ export function boardCommands(b: BoardContext, p: Personal): Command[] {
       ...(c && list
         ? b.lists.filter((l) => l.id !== list.id).map((l): Command => ({ id: `card-move-${l.id}`, group: 'card', label: t('palette.moveTo', { name, list: l.title }), keys: 'M', run: () => b.move(c, l) }))
         : [cardCmd('move', 'move', 'M', () => undefined)]),
-      ...(b.voting ? [cardCmd('vote', 'vote', 'V', b.vote, c?.voted ? t('palette.unvote', { name }) : undefined)] : []),
+      ...(b.vote ? [cardCmd('vote', 'vote', 'V', b.vote, c?.voted ? t('palette.unvote', { name }) : undefined)] : []),
       cardCmd('archive', 'archive', 'X', b.archive),
     )
   }

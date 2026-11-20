@@ -575,7 +575,7 @@ async fn sort(
         "name" => "title COLLATE NOCASE, id",
         "new" => "created_at DESC, id DESC",
         "old" => "created_at, id",
-        "votes" => {
+        "votes" if board.project.info.voting => {
             "(SELECT count(*) FROM card_votes v WHERE v.card_id = cards.id) DESC, position, id"
         }
         _ => return Err(bad("choose how to sort")),

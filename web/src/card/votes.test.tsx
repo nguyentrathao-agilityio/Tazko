@@ -118,6 +118,19 @@ describe('voting', () => {
     expect(within(tileOf('Nobody wants this')).queryByRole('button', { name: /vote/i })).toBeNull()
   })
 
+  it('a quick second click takes the vote back, and Space on the badge votes instead of completing', async () => {
+    open('/c/acme/b/7')
+    await screen.findByText('Export CSV')
+    const badge = within(tileOf('Export CSV')).getByRole('button', { name: 'Vote' })
+    fireEvent.click(badge)
+    await waitFor(() => expect(votes().length).toBe(1))
+    fireEvent.click(badge)
+    await waitFor(() => expect(votes().map((c) => c.body)).toEqual([{ on: true }, { on: false }]))
+    badge.focus()
+    fireEvent.keyDown(badge, { key: ' ' })
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false)
+  })
+
   it('votes with V on the selected card and from the quick menu', async () => {
     open('/c/acme/b/7')
     await screen.findByText('Dark mode')

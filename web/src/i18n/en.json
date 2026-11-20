@@ -898,5 +898,6 @@
   "dash.noVotes": "No votes yet.",
   "project.cards": "Cards",
   "project.voting": "Card voting",
-  "project.votingHint": "Owners and members can vote for cards. Votes show on cards, in the table and on the dashboard."
+  "project.votingHint": "Owners and members can vote for cards. Votes show on cards, in the table and on the dashboard.",
+  "vote.one": "1 vote"
 }

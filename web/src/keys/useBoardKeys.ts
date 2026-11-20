@@ -89,6 +89,8 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         return at ? s.lists[at[0]].cards[at[1]] : null
       }
       const handled = () => e.preventDefault()
+      const control = document.activeElement
+      if ((key === ' ' || key === ENTER) && control instanceof HTMLButtonElement && !control.classList.contains('cd')) return
 
       if (key === '`' || key === '?') {
         handled()

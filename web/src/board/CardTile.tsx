@@ -108,7 +108,7 @@ export function CardTile({
               <button
                 type="button"
                 className={`bdg vote${card.voted ? ' me' : ''}`}
-                title={t('vote.count', { n: card.votes ?? 0 })}
+                title={card.votes === 1 ? t('vote.one') : t('vote.count', { n: card.votes ?? 0 })}
                 aria-label={card.voted ? t('vote.remove') : t('vote.add')}
                 aria-pressed={Boolean(card.voted)}
                 disabled={!edit}

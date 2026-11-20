@@ -77,7 +77,7 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
       </section>
       <section className="box">
         <h2>{t('project.cards')}</h2>
-        <SwitchRow label={t('project.voting')} hint={t('project.votingHint')} on={project.voting ?? true} onChange={(v) => flip('voting', v)} />
+        <SwitchRow label={t('project.voting')} hint={t('project.votingHint')} on={project.voting} onChange={(v) => flip('voting', v)} />
       </section>
       <section className="box danger-zone">
         <h2>{t('project.archiveOrDelete')}</h2>

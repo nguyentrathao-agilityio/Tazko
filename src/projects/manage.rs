@@ -135,7 +135,7 @@ pub async fn create(
             upsert_person(&tx, owner_id, &person_name, &person_email)?;
             let color = super::COLORS[stored.len() % super::COLORS.len()];
             tx.execute(
-                "INSERT INTO projects (name, color) VALUES (?1, ?2)",
+                "INSERT INTO projects (name, color, voting) VALUES (?1, ?2, 0)",
                 params![stored, color],
             )?;
             let id = tx.last_insert_rowid();

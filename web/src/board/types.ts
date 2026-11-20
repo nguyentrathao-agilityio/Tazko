@@ -55,7 +55,7 @@ export type BoardData = {
   starred: boolean
   watching?: boolean
   project: { id: number; name: string }
-  voting?: boolean
+  voting: boolean
   role: ProjectRole
   can: Can
   people: BoardPerson[]

@@ -242,8 +242,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         done: boardActions.done,
         pop: boardActions.pop,
         move: (c, l) => void run(() => api('POST', `${base}/cards/${c.id}/move`, { list_id: l.id, after: appendAfter(lists, l.id, c.id) })),
-        voting: Boolean(board.voting),
-        vote: (c) => vote(base, c),
+        vote: boardActions.vote,
         archive: (c) => {
           keys.setSelected(null)
           boardActions.archive(c)
@@ -429,7 +428,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         people={board.people}
         onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
         onToggleDone={(c) => toggleDone(base, c)}
-        onVote={board.voting ? (c) => vote(base, c) : undefined}
+        onVote={boardActions.vote}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         selected={keys.selected}
         after={
@@ -475,12 +474,11 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
               if (title !== pop.card.title) void run(() => api('PATCH', `${base}/cards/${pop.card.id}`, { title }))
             }}
             onVote={
-              board.voting
-                ? () => {
-                    setPop(null)
-                    vote(base, pop.card)
-                  }
-                : undefined
+              boardActions.vote &&
+              (() => {
+                setPop(null)
+                boardActions.vote?.(pop.card)
+              })
             }
             onArchive={() => {
               const card = pop.card
@@ -528,7 +526,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           )}
         </Popover>
       )}
-      {help && <Shortcuts onClose={() => setHelp(false)} />}
+      {help && <Shortcuts voting={board.voting} onClose={() => setHelp(false)} />}
       {palette.open && <Palette items={commands()} onClose={palette.close} />}
       {pop?.kind === 'cardtpl' && (
         <Popover anchor={pop.at} title={t('ctpl.title')} width={300} onClose={() => setPop(null)}>
