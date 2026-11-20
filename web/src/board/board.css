@@ -518,37 +518,6 @@
   .drawer h4 {
     margin: 14px 0 4px;
   }
-}
-
-@media (max-width: 860px) {
-  .ls {
-    flex-basis: 84vw;
-    width: 84vw;
-  }
-
-  .bh {
-    gap: 8px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .bh > * {
-    flex: 0 0 auto;
-  }
-}
-
-@media (hover: none) {
-  .lf,
-  .qe {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-  }
 
   .cd.age1 {
     opacity: 0.8;
@@ -589,5 +558,36 @@
 
   .agprev .cd {
     cursor: default;
+  }
+}
+
+@media (max-width: 860px) {
+  .ls {
+    flex-basis: 84vw;
+    width: 84vw;
+  }
+
+  .bh {
+    gap: 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .bh > * {
+    flex: 0 0 auto;
+  }
+}
+
+@media (hover: none) {
+  .lf,
+  .qe {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
   }
 }
