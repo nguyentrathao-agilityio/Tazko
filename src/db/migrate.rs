@@ -55,6 +55,11 @@ pub static CONTROL: Migrations = Migrations {
             name: "0006_email_attempt_time.sql",
             sql: include_str!("../../migrations/control/0006_email_attempt_time.sql"),
         },
+        Migration {
+            version: 7,
+            name: "0007_notification_emails.sql",
+            sql: include_str!("../../migrations/control/0007_notification_emails.sql"),
+        },
     ],
 };
 
@@ -170,6 +175,11 @@ pub static TENANT: Migrations = Migrations {
             version: 22,
             name: "0022_webhooks.sql",
             sql: include_str!("../../migrations/tenant/0022_webhooks.sql"),
+        },
+        Migration {
+            version: 23,
+            name: "0023_notification_emails.sql",
+            sql: include_str!("../../migrations/tenant/0023_notification_emails.sql"),
         },
     ],
 };

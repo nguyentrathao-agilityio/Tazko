@@ -6,6 +6,7 @@ import { ErrorNote } from '@/ui/ErrorNote'
 import { when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
 import { Modal } from '@/ui/Modal'
+import { Switch } from '@/ui/SwitchRow'
 import { useLoad } from '@/ui/useLoad'
 import { SecretModal } from '@/tokens/SecretModal'
 import { Deliveries } from '@/webhooks/Deliveries'
@@ -88,14 +89,7 @@ export function WebhookList({ path, projects }: { path: string; projects: Projec
                   })}
                 </small>
               </div>
-              <button
-                type="button"
-                className="switchbtn"
-                role="switch"
-                aria-checked={h.active}
-                aria-label={t('webhooks.active')}
-                onClick={() => void run(() => api('PATCH', `${path}/${h.id}`, { active: !h.active }))}
-              />
+              <Switch label={t('webhooks.active')} on={h.active} onChange={(active) => void run(() => api('PATCH', `${path}/${h.id}`, { active }))} />
               <button type="button" className="btn sm" aria-expanded={open === h.id} onClick={() => setOpen(open === h.id ? null : h.id)}>
                 {t(open === h.id ? 'webhooks.hide' : 'webhooks.deliveries')}
               </button>

@@ -17,8 +17,9 @@ import { companyRoleLabel, isOwner } from '@/roles'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { SwitchRow } from '@/ui/SwitchRow'
 import { companyRoute, ME_API } from '@/paths'
+import { Notifications } from '@/settings/Notifications'
 
-export type SettingsTab = 'profile' | 'appearance' | 'tokens' | 'sessions'
+export type SettingsTab = 'profile' | 'appearance' | 'notifications' | 'tokens' | 'sessions'
 
 const zones = [
   'UTC',
@@ -74,6 +75,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
   const tabs: [SettingsTab, string][] = [
     ['profile', t('settings.tab.profile')],
     ['appearance', t('settings.tab.appearance')],
+    ['notifications', t('settings.tab.notifications')],
     ['tokens', t('settings.tab.tokens')],
     ['sessions', t('settings.tab.sessions')],
   ]
@@ -98,6 +100,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
       <ErrorNote message={problem} />
       {tab === 'profile' && <Profile me={me} onSaved={onProfile} />}
       {tab === 'appearance' && <Appearance />}
+      {tab === 'notifications' && <Notifications emailOn={Boolean(me.email_enabled)} save={save} />}
       {tab === 'tokens' && (
         <TokenTable
           path={`${ME_API}/tokens`}

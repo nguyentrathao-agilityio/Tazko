@@ -31,9 +31,27 @@ Tazko refuses to start and names the problem if `TAZKO_SMTP_HOST` or `TAZKO_MAIL
 | Email | When | Limits |
 | --- | --- | --- |
 | Invitation | Someone ticks **Email the invitation** on a company invite (company settings or admin) or a project invite (project members or Share on a board) for an address that is not yet a member. Not sent to a disabled account or to an address with non-ASCII characters | 3 per address per day, 50 per company per hour. Over the limit the invite is still made and the screen shows the site address to share instead |
-| Test | A super admin clicks **Send test email** on the Server page; it goes to their own address | 5 per hour |
+| Test | A super admin clicks **Send test email** on the Server page, or anyone clicks **Send me a test email** under Settings, Notifications; it goes to their own address | 5 per hour for admins, 3 per hour for everyone else |
+| Notifications | Someone mentions you, adds you to a card or checklist item, adds a card to a board you watch, or a card you are on is coming due, and you chose email for that kind | See below |
 
-Mention, assignment and due-date emails, with each person's choices and an unsubscribe link, come with notification preferences (step 6.4).
+## Notification emails
+
+Each person chooses under **Settings → Notifications**:
+
+| Event | In the app (default) | By email (default) |
+| --- | --- | --- |
+| Someone mentions you | on | on |
+| You are added to a card or checklist item | on | on |
+| New cards on boards you watch | on | off |
+| Due-date reminders | always on | on |
+
+- **Send emails:** as they happen (default), in an hourly digest, in a daily digest at 08:00, or never. "As they happen" sends at most one email every 5 minutes per company; anything more waits and goes out together as a short digest. The daily hour is worked out from the browser's time zone when the choice is made, so it can move by an hour when daylight saving starts or ends; if the server is down at that hour, the digest goes out when it is back.
+- **Due-date reminder:** at the due time, 1 hour, 1 day (default) or 2 days before. The reminder always appears in the app; it is emailed only when due-date emails are on.
+- Turning an email off never hides the event in the app. Turning the app switch off hides that kind from the bell; emails still follow their own switch.
+- A worker checks every minute. Each notification is considered for email once, when that person's next email is due: if it was not wanted then, it is not emailed later. Before sending, Tazko checks again that the person is still in the company, not disabled, and can still see the board. Notifications already read in the app, older than three days, or due-date reminders for cards since completed or rescheduled are dropped. While email is not set up, notifications are settled without email, so turning email on later sends nothing from before.
+- A person's name in an email is their display name, cleaned so it cannot pose as a link, or their account email when they have no name.
+- Every notification email has a link to the notification settings and an **Unsubscribe** link, and carries `List-Unsubscribe` and `List-Unsubscribe-Post` headers, so mail programs can offer one-click unsubscribe. Unsubscribing sets Send emails to Never; the link is signed with the server secret and works for a year. Opening the link shows a page with an Unsubscribe button; only that button (a POST) changes anything, so link scanners cannot unsubscribe people.
+- **Preview emails** under Settings, Notifications shows each kind of email with sample content, rendered in a sandboxed frame.
 
 An invitation's subject is "You are invited to <company> on Tazko". The body names who sent it and the company (and project), says which address to sign in with, and links to the site's sign-in page. It contains nothing else from the company. Emails carry no tracking: no images, no pixels, no rewritten links.
 
