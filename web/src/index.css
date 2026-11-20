@@ -12,6 +12,8 @@
 @import './notify/notify.css';
 @import './templates/templates.css';
 @import './table/table.css';
+@import './dashboard/dashboard.css';
+@import './mycards/mycards.css';
 
 body {
   margin: 0;

@@ -6,7 +6,20 @@ export function labelStyle(color: number) {
   return { background: labelColors[color] ?? labelColors[0], color: color === 4 ? '#2b2100' : '#fff' }
 }
 
-const DAY = 86_400
+export const DAY = 86_400
+
+export type DueBucket = 'overdue' | 'day' | 'week' | 'later' | 'none' | 'done'
+
+export const dueBucketOrder: DueBucket[] = ['overdue', 'day', 'week', 'later', 'none', 'done']
+
+export function dueBucket(due: number | null | undefined, done: boolean | undefined, now = Date.now() / 1000): DueBucket {
+  if (done) return 'done'
+  if (!due) return 'none'
+  if (due < now) return 'overdue'
+  if (due - now < DAY) return 'day'
+  if (due - now < 7 * DAY) return 'week'
+  return 'later'
+}
 
 export function dueState(due: number | null | undefined, done: boolean | undefined, now = Date.now() / 1000): '' | 'ok' | 'warn' | 'bad' {
   if (!due) return ''
