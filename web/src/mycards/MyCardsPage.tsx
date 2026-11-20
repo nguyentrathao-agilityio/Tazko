@@ -71,7 +71,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
   const url = all ? `${ME_API}/cards` : `${ME_API}/cards?company=${encodeURIComponent(company.slug)}`
   const { data, error: loadError, reload } = useLoad(() => api<{ cards: MyCard[] }>('GET', url), url)
   const { error, run } = useRun(reload)
-  const cards = data?.cards ?? []
+  const cards = useMemo(() => data?.cards ?? [], [data])
   const projects = useMemo(
     () => [...new Map(cards.map((c) => [projectKey(c), all ? `${c.project.name} · ${c.company.name}` : c.project.name])).entries()].sort((a, b) => a[1].localeCompare(b[1])),
     [cards, all],
