@@ -145,10 +145,11 @@ async fn invitations_are_emailed_when_asked_and_email_is_on() {
         .find(|m| m.contains("To: new@b.example"))
         .unwrap();
     assert!(invite.contains("From: Tazko <no-reply@example.com>"));
-    assert!(invite.contains("Subject: boss@a.example invited you to COMPANY-A on Tazko"));
+    assert!(invite.contains("Subject: You are invited to COMPANY-A on Tazko"));
+    assert!(text_part(invite).contains("boss@a.example invited you to COMPANY-A on Tazko."));
     assert!(!invite.to_lowercase().contains("img"), "no tracking images");
     let text = text_part(invite);
-    assert!(text.contains("Sign in: http://localhost:8791/"));
+    assert!(text.contains("Sign in with Google: http://localhost:8791/"));
     let guest = text_part(
         mails
             .iter()
@@ -213,7 +214,6 @@ async fn the_admin_sees_email_status_and_can_send_a_test() {
     assert_eq!(deliver(&w.app).await, 1);
     assert!(outbox(&out)[0].contains("Subject: Tazko test email"));
     let (_, server) = req(&w.app, &w.boss, Method::GET, "/api/v1/admin/server", None).await;
-    assert_eq!(server["email"], "on");
     assert_eq!(server["email_server"]["host"], "127.0.0.1");
     assert!(server["email_server"].get("password").is_none());
     assert_eq!(server["email_queue"]["sent_24h"], 1);

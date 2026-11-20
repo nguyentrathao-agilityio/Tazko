@@ -15,9 +15,10 @@ use serde_json::{Value, json};
 use crate::admin::SuperAdmin;
 use crate::config::Smtp;
 use crate::error::{ApiError, bad};
-use crate::session::now;
+use crate::sanitize::escape_html;
+use crate::session::{SessionUser, now};
 use crate::state::AppState;
-use message::{Mailbox, Message, clean};
+use message::{Message, name};
 
 const TICK: Duration = Duration::from_secs(5);
 const SEND_BATCH: i64 = 10;
@@ -31,8 +32,9 @@ pub struct Outgoing {
     pub kind: &'static str,
     pub to: String,
     pub subject: String,
-    pub text: String,
-    pub html: String,
+    pub lines: Vec<String>,
+    pub link: String,
+    pub button: &'static str,
     pub org: Option<i64>,
     pub by: Option<i64>,
 }
@@ -45,7 +47,32 @@ pub fn enabled(state: &AppState) -> bool {
     state.settings.smtp.is_some()
 }
 
+fn count(c: &Connection, sql: &str, p: impl rusqlite::Params) -> rusqlite::Result<i64> {
+    c.query_row(sql, p, |r| r.get(0))
+}
+
+fn html(lines: &[String], link: &str, button: &str) -> String {
+    let body: String = lines
+        .iter()
+        .map(|l| format!("<p style=\"margin:0 0 14px\">{}</p>", escape_html(l)))
+        .collect();
+    let (link, button) = (escape_html(link), escape_html(button));
+    format!(
+        "<!doctype html><html><body style=\"margin:0;padding:24px;background:#f6f6fb;font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d1d2b\">\
+<div style=\"max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px\">\
+<p style=\"margin:0 0 18px;font-weight:700;font-size:18px\">Tazko</p>{body}\
+<p style=\"margin:22px 0\"><a href=\"{link}\" style=\"background:#4f46e5;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block\">{button}</a></p>\
+<p style=\"margin:0;color:#6b6b80;font-size:13px\">{link}</p></div></body></html>"
+    )
+}
+
 pub fn enqueue(c: &Connection, mail: &Outgoing) -> rusqlite::Result<i64> {
+    let text = format!(
+        "{}\n\n{}: {}\n",
+        mail.lines.join("\n\n"),
+        mail.button,
+        mail.link
+    );
     c.execute(
         "INSERT INTO email_queue (kind, to_addr, subject, body_text, body_html, org_id, created_by)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -53,8 +80,8 @@ pub fn enqueue(c: &Connection, mail: &Outgoing) -> rusqlite::Result<i64> {
             mail.kind,
             mail.to,
             mail.subject,
-            mail.text,
-            mail.html,
+            text,
+            html(&mail.lines, &mail.link, mail.button),
             mail.org,
             mail.by
         ],
@@ -62,84 +89,89 @@ pub fn enqueue(c: &Connection, mail: &Outgoing) -> rusqlite::Result<i64> {
     Ok(c.last_insert_rowid())
 }
 
-fn escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            _ => out.push(c),
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Emailed {
+    #[default]
+    Skipped,
+    Limited,
+    Sent,
+}
+
+impl Emailed {
+    pub fn json(self, result: &str, public_url: &str) -> Value {
+        json!({ "result": result, "emailed": self == Emailed::Sent, "email_limited": self == Emailed::Limited, "share_url": public_url })
+    }
+}
+
+pub struct InviteMail {
+    wanted: bool,
+    inviter: String,
+    public_url: String,
+}
+
+impl InviteMail {
+    pub fn new(state: &AppState, user: &SessionUser, send_email: bool) -> Self {
+        let inviter = if user.name.trim().is_empty() {
+            &user.email
+        } else {
+            &user.name
+        };
+        InviteMail {
+            wanted: send_email && enabled(state),
+            inviter: name(inviter),
+            public_url: state.settings.public_url.clone(),
         }
     }
-    out
-}
 
-fn page(lines: &[String], link: &str, button: &str) -> String {
-    let body: String = lines
-        .iter()
-        .map(|l| format!("<p style=\"margin:0 0 14px\">{}</p>", escape(l)))
-        .collect();
-    format!(
-        "<!doctype html><html><body style=\"margin:0;padding:24px;background:#f6f6fb;font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d1d2b\">\
-<div style=\"max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px\">\
-<p style=\"margin:0 0 18px;font-weight:700;font-size:18px\">Tazko</p>{body}\
-<p style=\"margin:22px 0\"><a href=\"{}\" style=\"background:#4f46e5;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block\">{}</a></p>\
-<p style=\"margin:0;color:#6b6b80;font-size:13px\">{}</p></div></body></html>",
-        escape(link),
-        escape(button),
-        escape(link)
-    )
-}
-
-pub struct Invitation<'a> {
-    pub to: &'a str,
-    pub inviter: &'a str,
-    pub company: &'a str,
-    pub project: Option<&'a str>,
-    pub public_url: &'a str,
-    pub org: i64,
-    pub by: i64,
-}
-
-impl Invitation<'_> {
-    pub fn mail(&self) -> Outgoing {
-        let inviter = clean(self.inviter);
-        let company = clean(self.company);
-        let place = match self.project {
-            Some(p) => format!("the {} project in {company}", clean(p)),
+    pub fn mail(
+        &self,
+        to: &str,
+        company: &str,
+        project: Option<&str>,
+        org: i64,
+        by: i64,
+    ) -> Outgoing {
+        let company = name(company);
+        let place = match project {
+            Some(p) => format!("the {} project in {company}", name(p)),
             None => company.clone(),
         };
-        let link = format!("{}/", self.public_url.trim_end_matches('/'));
-        let lines = vec![
-            format!("{inviter} invited you to {place} on Tazko."),
-            format!(
-                "Sign in with Google using this address ({}). You join automatically.",
-                self.to
-            ),
-        ];
-        let text = format!(
-            "{}\n\n{}\n\nSign in: {link}\n\nIf you did not expect this, you can ignore this email.\n",
-            lines[0], lines[1]
-        );
-        let mut html_lines = lines.clone();
-        html_lines.push("If you did not expect this, you can ignore this email.".into());
         Outgoing {
             kind: "invite",
-            to: self.to.to_string(),
-            subject: format!("{inviter} invited you to {company} on Tazko"),
-            text,
-            html: page(&html_lines, &link, "Sign in with Google"),
-            org: Some(self.org),
-            by: Some(self.by),
+            to: to.to_string(),
+            subject: format!("You are invited to {company} on Tazko"),
+            lines: vec![
+                format!("{} invited you to {place} on Tazko.", self.inviter),
+                format!("Sign in with Google using this address ({to}). You join automatically."),
+                "If you did not expect this, you can ignore this email.".into(),
+            ],
+            link: format!("{}/", self.public_url.trim_end_matches('/')),
+            button: "Sign in with Google",
+            org: Some(org),
+            by: Some(by),
         }
     }
-}
 
-fn count(c: &Connection, sql: &str, p: impl rusqlite::Params) -> rusqlite::Result<i64> {
-    c.query_row(sql, p, |r| r.get(0))
+    pub fn queue(
+        &self,
+        c: &Connection,
+        to: &str,
+        company: &str,
+        project: Option<&str>,
+        org: i64,
+        by: i64,
+    ) -> rusqlite::Result<Emailed> {
+        if !self.wanted {
+            return Ok(Emailed::Skipped);
+        }
+
+        if !invitation_allowed(c, org, to)? {
+            return Ok(Emailed::Limited);
+        }
+
+        enqueue(c, &self.mail(to, company, project, org, by))?;
+        Ok(Emailed::Sent)
+    }
 }
 
 pub fn invitation_allowed(c: &Connection, org: i64, to: &str) -> rusqlite::Result<bool> {
@@ -157,61 +189,15 @@ pub fn invitation_allowed(c: &Connection, org: i64, to: &str) -> rusqlite::Resul
     Ok(to_address < INVITES_PER_ADDRESS_PER_DAY && from_company < INVITES_PER_COMPANY_PER_HOUR)
 }
 
-#[derive(Default)]
-pub struct Invited {
-    pub emailed: bool,
-    pub limited: bool,
-}
-
-impl Invited {
-    pub fn json(&self, result: &str, public_url: &str) -> Value {
-        json!({ "result": result, "emailed": self.emailed, "email_limited": self.limited, "share_url": public_url })
-    }
-}
-
-pub fn inviter_name(user: &crate::session::SessionUser) -> String {
-    if user.name.trim().is_empty() {
-        user.email.clone()
-    } else {
-        user.name.clone()
-    }
-}
-
-pub fn invite_email(
-    c: &Connection,
-    wanted: bool,
-    invitation: &Invitation<'_>,
-) -> rusqlite::Result<Invited> {
-    if !wanted {
-        return Ok(Invited {
-            emailed: false,
-            limited: false,
-        });
-    }
-
-    if !invitation_allowed(c, invitation.org, invitation.to)? {
-        return Ok(Invited {
-            emailed: false,
-            limited: true,
-        });
-    }
-
-    enqueue(c, &invitation.mail())?;
-    Ok(Invited {
-        emailed: true,
-        limited: false,
-    })
-}
-
 pub fn status(c: &Connection) -> rusqlite::Result<Value> {
-    let day = now() - 86_400;
-    let n = |status: &str, since: i64| {
-        count(
-            c,
-            "SELECT count(*) FROM email_queue WHERE status = ?1 AND coalesce(sent_at, created_at) > ?2",
-            params![status, since],
-        )
-    };
+    let (pending, sent, failed): (i64, i64, i64) = c.query_row(
+        "SELECT coalesce(sum(status = 'pending'), 0),
+                coalesce(sum(status = 'sent' AND sent_at > ?1), 0),
+                coalesce(sum(status = 'failed' AND created_at > ?1), 0)
+         FROM email_queue",
+        [now() - 86_400],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
     let last_error: Option<(String, i64)> = c
         .query_row(
             "SELECT error, created_at FROM email_queue WHERE error IS NOT NULL ORDER BY id DESC LIMIT 1",
@@ -220,15 +206,15 @@ pub fn status(c: &Connection) -> rusqlite::Result<Value> {
         )
         .optional()?;
     Ok(json!({
-        "pending": count(c, "SELECT count(*) FROM email_queue WHERE status = 'pending'", [])?,
-        "sent_24h": n("sent", day)?,
-        "failed_24h": n("failed", day)?,
+        "pending": pending,
+        "sent_24h": sent,
+        "failed_24h": failed,
         "last_error": last_error.map(|(e, at)| json!({ "error": e, "at": at })),
     }))
 }
 
 pub fn describe(smtp: &Smtp) -> Value {
-    json!({ "host": smtp.host, "port": smtp.port, "from": smtp.from, "signs_in": smtp.user.is_some() })
+    json!({ "host": smtp.host, "port": smtp.port, "from": smtp.from.header(), "signs_in": smtp.user.is_some() })
 }
 
 async fn send_test(
@@ -256,15 +242,15 @@ async fn send_test(
                 return Ok(None);
             }
 
-            let lines = vec!["This is a test email from your Tazko server. Email is working.".to_string()];
             enqueue(
                 c,
                 &Outgoing {
                     kind: "test",
                     to: to.clone(),
                     subject: "Tazko test email".into(),
-                    text: format!("{}\n\n{link}\n", lines[0]),
-                    html: page(&lines, &link, "Open the admin console"),
+                    lines: vec!["This is a test email from your Tazko server. Email is working.".into()],
+                    link,
+                    button: "Open the admin console",
                     org: None,
                     by: Some(by),
                 },
@@ -302,10 +288,15 @@ pub async fn job(state: AppState) {
     }
 }
 
+fn unreachable(failure: &smtp::Failure) -> bool {
+    matches!(failure, smtp::Failure::Temporary(e) if e.starts_with("connection problem") || e.starts_with("could not find"))
+}
+
 pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize> {
-    let Some(smtp) = state.settings.smtp.clone() else {
+    if !enabled(state) {
         return Ok(0);
-    };
+    }
+
     let due = state
         .dbs
         .control()
@@ -322,39 +313,34 @@ pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize
             Ok(rows)
         })
         .await?;
-    if due.is_empty() {
+    let Some(smtp) = state.settings.smtp.clone().filter(|_| !due.is_empty()) else {
         return Ok(0);
-    }
-
-    let count = due.len();
+    };
     let results = tokio::task::spawn_blocking(move || {
-        let from = Mailbox::parse(&smtp.from);
-        due.into_iter()
-            .map(|d| {
-                let result = match &from {
-                    None => Err(smtp::Failure::Permanent(
-                        "TAZKO_MAIL_FROM is not a valid address".into(),
-                    )),
-                    Some(from) => Message {
-                        from,
-                        to: &d.to,
-                        subject: &d.subject,
-                        text: &d.text,
-                        html: &d.html,
-                        date: now(),
-                    }
-                    .render()
-                    .ok_or_else(|| {
-                        smtp::Failure::Permanent("the recipient address is not valid".into())
-                    })
-                    .and_then(|data| smtp::send(&smtp, &from.addr, &d.to, &data)),
-                };
-                (d.id, d.attempts, result)
-            })
-            .collect::<Vec<_>>()
+        let mut results = vec![];
+        for d in due {
+            let result = Message {
+                from: &smtp.from,
+                to: &d.to,
+                subject: &d.subject,
+                text: &d.text,
+                html: &d.html,
+                date: now(),
+            }
+            .render()
+            .ok_or_else(|| smtp::Failure::Permanent("the recipient address is not valid".into()))
+            .and_then(|data| smtp::send(&smtp, &d.to, &data));
+            let stop = result.as_ref().is_err_and(unreachable);
+            results.push((d.id, d.attempts, result));
+            if stop {
+                break;
+            }
+        }
+        results
     })
     .await
     .unwrap_or_default();
+    let count = results.len();
     let finished = now();
     state
         .dbs
@@ -362,13 +348,13 @@ pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize
         .write(move |c| {
             let tx = c.transaction()?;
             for (id, tried, result) in results {
-                let (status, next, error) = match &result {
+                let (status, next, error) = match result {
                     Ok(()) => ("sent", finished, None),
                     Err(smtp::Failure::Temporary(e)) => match BACKOFF.get(tried as usize) {
-                        Some(wait) => ("pending", finished + wait, Some(e.clone())),
-                        None => ("failed", finished, Some(e.clone())),
+                        Some(wait) => ("pending", finished + wait, Some(e)),
+                        None => ("failed", finished, Some(e)),
                     },
-                    Err(smtp::Failure::Permanent(e)) => ("failed", finished, Some(e.clone())),
+                    Err(smtp::Failure::Permanent(e)) => ("failed", finished, Some(e)),
                 };
                 tx.execute(
                     "UPDATE email_queue SET status = ?2, attempts = ?3, error = ?4, next_attempt_at = ?5,
@@ -376,10 +362,7 @@ pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize
                     params![id, status, tried + 1, error, next, finished],
                 )?;
             }
-            tx.execute(
-                "DELETE FROM email_queue WHERE status != 'pending' AND created_at < ?1",
-                [finished - KEEP],
-            )?;
+            tx.execute("DELETE FROM email_queue WHERE status != 'pending' AND created_at < ?1", [finished - KEEP])?;
             tx.commit()?;
             Ok(())
         })
@@ -392,25 +375,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn invitation_text_is_escaped_and_single_line() {
-        let mail = Invitation {
-            to: "mai@example.com",
-            inviter: "Lan <script>\r\nBcc: x@y.z",
-            company: "Acme & Co",
-            project: Some("Web"),
-            public_url: "https://tazko.example.com",
-            org: 1,
-            by: 2,
-        }
-        .mail();
-        assert_eq!(
-            mail.subject,
-            "Lan <script> Bcc: x@y.z invited you to Acme & Co on Tazko"
-        );
-        assert!(mail.html.contains(
-            "Lan &lt;script&gt; Bcc: x@y.z invited you to the Web project in Acme &amp; Co"
-        ));
-        assert!(!mail.html.contains("<script>"));
-        assert!(mail.text.contains("Sign in: https://tazko.example.com/"));
+    fn invitation_text_is_escaped_short_and_link_free() {
+        let invite = InviteMail {
+            wanted: true,
+            inviter: name(
+                "Lan <script>\r\nBcc: x@y.z visit https://evil.example and www.evil.example",
+            ),
+            public_url: "https://tazko.example.com".into(),
+        };
+        let mail = invite.mail("mai@example.com", "Acme & Co", Some("Web"), 1, 2);
+        assert_eq!(mail.subject, "You are invited to Acme & Co on Tazko");
+        assert!(!invite.inviter.contains("://") && !invite.inviter.contains("www."));
+        assert!(invite.inviter.chars().count() <= 60);
+        let page = html(&mail.lines, &mail.link, mail.button);
+        assert!(page.contains("Lan &lt;script&gt; Bcc: x@y.z"));
+        assert!(page.contains("the Web project in Acme &amp; Co"));
+        assert!(!page.contains("<script>"));
+        assert_eq!(mail.link, "https://tazko.example.com/");
     }
 }

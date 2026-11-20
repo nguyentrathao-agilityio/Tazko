@@ -44,7 +44,7 @@ pub struct Smtp {
     pub port: u16,
     pub user: Option<String>,
     pub password: Option<Secret>,
-    pub from: String,
+    pub from: crate::mail::message::Mailbox,
 }
 
 #[derive(Debug, Clone)]
@@ -253,22 +253,22 @@ fn smtp<'a>(get: &impl Fn(&str) -> Option<&'a str>, problems: &mut Vec<String>) 
     }
 
     let port = number(get("TAZKO_SMTP_PORT"), 587u16, "TAZKO_SMTP_PORT", problems);
-    if get("TAZKO_MAIL_FROM").is_some_and(|f| crate::mail::message::Mailbox::parse(f).is_none()) {
+    let from = get("TAZKO_MAIL_FROM").and_then(crate::mail::message::Mailbox::parse);
+    if get("TAZKO_MAIL_FROM").is_some() && from.is_none() {
         problems
             .push("TAZKO_MAIL_FROM must be an address like Tazko <no-reply@example.com>".into());
-        missing = true;
     }
 
-    if missing {
+    let (false, Some(from)) = (missing, from) else {
         return None;
-    }
+    };
 
     Some(Smtp {
         host: get("TAZKO_SMTP_HOST").unwrap().to_string(),
         port,
         user: get("TAZKO_SMTP_USER").map(str::to_string),
         password: get("TAZKO_SMTP_PASSWORD").map(Secret::new),
-        from: get("TAZKO_MAIL_FROM").unwrap().to_string(),
+        from,
     })
 }
 

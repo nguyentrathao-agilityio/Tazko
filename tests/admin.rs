@@ -698,7 +698,7 @@ async fn the_server_page_reports_version_uptime_and_data_size() {
     let s = body_json(a.app.get("/api/v1/admin/server", Some(&a.cookie)).await).await;
     assert_eq!(s["version"], env!("CARGO_PKG_VERSION"));
     assert!(s["data_bytes"].as_u64().unwrap() > 0);
-    assert_eq!(s["email"], "off");
+    assert!(s["email_server"].is_null());
     assert_eq!(s["public_url"], "http://localhost:8791");
 }
 

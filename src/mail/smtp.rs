@@ -1,30 +1,25 @@
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
 
+use super::message::Mailbox;
 use crate::config::Smtp;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 const LINE_LIMIT: usize = 4096;
+const REPLY_LINES: usize = 100;
+const SESSION: Duration = Duration::from_secs(120);
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Failure {
     Temporary(String),
     Permanent(String),
-}
-
-impl Failure {
-    pub fn text(&self) -> &str {
-        match self {
-            Failure::Temporary(t) | Failure::Permanent(t) => t,
-        }
-    }
 }
 
 trait Stream: Read + Write {}
@@ -33,6 +28,7 @@ impl<T: Read + Write> Stream for T {}
 struct Conn {
     stream: Box<dyn Stream>,
     buf: Vec<u8>,
+    deadline: Instant,
 }
 
 fn io_failure(e: io::Error) -> Failure {
@@ -42,6 +38,10 @@ fn io_failure(e: io::Error) -> Failure {
 impl Conn {
     fn line(&mut self) -> Result<String, Failure> {
         loop {
+            if Instant::now() > self.deadline {
+                return Err(Failure::Temporary("the mail server took too long".into()));
+            }
+
             if let Some(end) = self.buf.windows(2).position(|w| w == b"\r\n") {
                 let line: Vec<u8> = self.buf.drain(..end + 2).take(end).collect();
                 return Ok(String::from_utf8_lossy(&line).into_owned());
@@ -77,6 +77,12 @@ impl Conn {
             };
             let last = line.as_bytes().get(3) != Some(&b'-');
             lines.push(line.get(4..).unwrap_or("").to_string());
+            if lines.len() > REPLY_LINES {
+                return Err(Failure::Temporary(
+                    "the mail server sent too long a reply".into(),
+                ));
+            }
+
             if last {
                 return Ok((code, lines));
             }
@@ -177,12 +183,6 @@ fn auth_methods(caps: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn helo_name(from: &str) -> String {
-    from.rsplit_once('@')
-        .map_or("localhost", |(_, d)| d)
-        .to_string()
-}
-
 fn dot_stuffed(data: &str) -> String {
     let mut out = String::with_capacity(data.len() + 64);
     for line in data.split("\r\n") {
@@ -196,13 +196,12 @@ fn dot_stuffed(data: &str) -> String {
     out
 }
 
-pub fn send(cfg: &Smtp, from: &str, to: &str, data: &str) -> Result<(), Failure> {
-    for addr in [from, to] {
-        if addr.contains(['\r', '\n', '<', '>']) {
-            return Err(Failure::Permanent(
-                "an address contains characters that are not allowed".into(),
-            ));
-        }
+pub fn send(cfg: &Smtp, to: &str, data: &str) -> Result<(), Failure> {
+    let from: &Mailbox = &cfg.from;
+    if to.contains(['\r', '\n', '<', '>']) {
+        return Err(Failure::Permanent(
+            "the recipient address contains characters that are not allowed".into(),
+        ));
     }
 
     let tcp = connect(&cfg.host, cfg.port)?;
@@ -212,12 +211,14 @@ pub fn send(cfg: &Smtp, from: &str, to: &str, data: &str) -> Result<(), Failure>
     } else {
         Box::new(tcp.try_clone().map_err(io_failure)?)
     };
+    let deadline = Instant::now() + SESSION;
     let mut conn = Conn {
         stream,
         buf: vec![],
+        deadline,
     };
     conn.expect("greeting", &[220])?;
-    let helo = format!("EHLO {}", helo_name(from));
+    let helo = format!("EHLO {}", from.domain());
     let mut caps = conn.command("EHLO", &helo, &[250])?;
     if !implicit {
         if has(&caps, "STARTTLS") {
@@ -225,6 +226,7 @@ pub fn send(cfg: &Smtp, from: &str, to: &str, data: &str) -> Result<(), Failure>
             conn = Conn {
                 stream: wrap(tcp, &cfg.host)?,
                 buf: vec![],
+                deadline,
             };
             caps = conn.command("EHLO", &helo, &[250])?;
         } else if !loopback(&cfg.host) {
@@ -250,7 +252,7 @@ pub fn send(cfg: &Smtp, from: &str, to: &str, data: &str) -> Result<(), Failure>
         }
     }
 
-    conn.command("sender", &format!("MAIL FROM:<{from}>"), &[250])?;
+    conn.command("sender", &format!("MAIL FROM:<{}>", from.addr), &[250])?;
     conn.command("recipient", &format!("RCPT TO:<{to}>"), &[250, 251])?;
     conn.command("message", "DATA", &[354])?;
     conn.stream

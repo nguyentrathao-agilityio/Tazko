@@ -124,7 +124,6 @@
   "server.noBackup": "Not set up yet",
   "server.email": "Email",
   "server.emailOff": "Email is off. Invitations are shared by hand until email is set up in the server settings file.",
-  "server.emailOn": "Email is on.",
   "invite.emailOption": "Email the invitation",
   "invite.emailed": "Invitation emailed to {email}",
   "invite.share": "Invited {email}. Share {url} with them; they sign in with that Google account.",

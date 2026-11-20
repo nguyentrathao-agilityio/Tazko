@@ -140,10 +140,7 @@ async fn invite(
     let email = validate::email(&body.email).ok_or_else(|| bad(admin::INVALID_EMAIL))?;
     let role = admin::company_role(&body.role)?;
     let slug = owner.0.slug.clone();
-    let wanted = body.send_email && crate::mail::enabled(&state);
-    let inviter = crate::mail::inviter_name(&owner.0.user.0);
-    let public_url = state.settings.public_url.clone();
-    let share = public_url.clone();
+    let mail = crate::mail::InviteMail::new(&state, &owner.0.user.0, body.send_email);
     let outcome = state
         .dbs
         .control()
@@ -154,22 +151,17 @@ async fn invite(
                 return Ok(Err(msg));
             }
 
-            let invitation = crate::mail::Invitation {
-                to: &email,
-                inviter: &inviter,
-                company: &o.name,
-                project: None,
-                public_url: &public_url,
-                org: o.id,
-                by,
-            };
-            let sent = crate::mail::invite_email(&tx, wanted, &invitation)?;
+            let sent = mail.queue(&tx, &email, &o.name, None, o.id, by)?;
             tx.commit()?;
             Ok(Ok(sent))
         })
         .await?;
     Ok(match outcome {
-        Ok(sent) => (StatusCode::CREATED, Json(sent.json("invited", &share))).into_response(),
+        Ok(sent) => (
+            StatusCode::CREATED,
+            Json(sent.json("invited", &state.settings.public_url)),
+        )
+            .into_response(),
         Err(msg) => admin::conflict(msg),
     })
 }

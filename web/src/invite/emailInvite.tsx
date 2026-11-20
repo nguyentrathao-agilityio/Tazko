@@ -13,9 +13,10 @@ export function invitedMessage(res: InviteResult | undefined, email: string, add
   return t(res?.email_limited ? 'invite.limited' : 'invite.share', { email: who, url })
 }
 
+export const useEmailEnabled = () => Boolean(useMe()?.email_enabled)
+
 export function EmailInviteOption() {
-  const me = useMe()
-  if (!me?.email_enabled) return null
+  if (!useEmailEnabled()) return null
 
   return (
     <label className="opt" style={{ margin: 0 }}>
@@ -23,8 +24,4 @@ export function EmailInviteOption() {
       {t('invite.emailOption')}
     </label>
   )
-}
-
-export function useInviteHint(off: string, on: string): string {
-  return useMe()?.email_enabled ? on : off
 }

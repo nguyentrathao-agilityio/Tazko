@@ -33,7 +33,7 @@ impl Mailbox {
         self.addr.rsplit_once('@').map_or("localhost", |(_, d)| d)
     }
 
-    fn header(&self) -> String {
+    pub fn header(&self) -> String {
         match &self.name {
             Some(name) => format!("{} <{}>", encode_word(name), self.addr),
             None => self.addr.clone(),
@@ -42,6 +42,14 @@ impl Mailbox {
 }
 
 pub fn clean(text: &str) -> String {
+    clean_to(text, 200)
+}
+
+pub fn name(text: &str) -> String {
+    clean_to(&text.replace("://", " ").replace("www.", "www "), 60)
+}
+
+fn clean_to(text: &str, limit: usize) -> String {
     let mut out = String::new();
     for word in text.split(|c: char| c.is_whitespace() || c.is_control()) {
         if word.is_empty() {
@@ -54,7 +62,7 @@ pub fn clean(text: &str) -> String {
 
         out.push_str(word);
     }
-    out.chars().take(200).collect()
+    out.chars().take(limit).collect()
 }
 
 fn plain(text: &str) -> bool {
@@ -113,15 +121,7 @@ pub fn rfc2822_date(unix: i64) -> String {
     ];
     let days = unix.div_euclid(86_400);
     let secs = unix.rem_euclid(86_400);
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
+    let (year, month, day) = crate::cards::repeat::civil_from_days(days);
     format!(
         "{}, {:02} {} {} {:02}:{:02}:{:02} +0000",
         DAYS[days.rem_euclid(7) as usize],

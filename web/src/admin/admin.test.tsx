@@ -78,7 +78,6 @@ function respond(url: string, method: string): Response {
       data_bytes: 2 * 1024 ** 2,
       companies: 1,
       public_url: 'http://localhost:8791',
-      email: 'off',
       email_server: null,
       email_queue: { pending: 0, sent_24h: 0, failed_24h: 0, last_error: null },
       last_backup: { at: 1_700_000_000, ok: true, snapshot: '20231114-221320', databases: 3, files: 1, bytes: 1024 ** 2, problems: [] },

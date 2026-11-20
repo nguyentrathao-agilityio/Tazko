@@ -162,10 +162,8 @@ pub async fn invite(
         Target::Invite => {
             let project_name = project.info.name.clone();
             let company = project.company.name.clone();
-            let wanted = body.send_email && crate::mail::enabled(&state);
-            let inviter = crate::mail::inviter_name(&project.company.user.0);
-            let public_url = state.settings.public_url.clone();
-            let share = public_url.clone();
+            let mail =
+                crate::mail::InviteMail::new(&state, &project.company.user.0, body.send_email);
             let sent = state
                 .dbs
                 .control()
@@ -197,21 +195,15 @@ pub async fn invite(
                         &email,
                         json!({ "role": "member", "project": id, "project_name": project_name, "project_role": role.as_str(), "invite": invite }),
                     )?;
-                    let invitation = crate::mail::Invitation {
-                        to: &email,
-                        inviter: &inviter,
-                        company: &company,
-                        project: Some(&project_name),
-                        public_url: &public_url,
-                        org: org_id,
-                        by,
-                    };
-                    let sent = crate::mail::invite_email(&tx, wanted, &invitation)?;
+                    let sent = mail.queue(&tx, &email, &company, Some(&project_name), org_id, by)?;
                     tx.commit()?;
                     Ok(Ok(sent))
                 })
                 .await??;
-            Ok((StatusCode::CREATED, Json(sent.json("invited", &share))))
+            Ok((
+                StatusCode::CREATED,
+                Json(sent.json("invited", &state.settings.public_url)),
+            ))
         }
     }
 }

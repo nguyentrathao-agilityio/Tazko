@@ -696,10 +696,7 @@ async fn invite(
     let by = admin.writing(&headers)?;
     let email = validate::email(&body.email).ok_or_else(|| bad(INVALID_EMAIL))?;
     let role = company_role(&body.role)?;
-    let wanted = body.send_email && crate::mail::enabled(&state);
-    let inviter = crate::mail::inviter_name(&admin.0);
-    let public_url = state.settings.public_url.clone();
-    let share = public_url.clone();
+    let mail = crate::mail::InviteMail::new(&state, &admin.0, body.send_email);
     let outcome = state
         .dbs
         .control()
@@ -708,35 +705,25 @@ async fn invite(
             let Some(o) = org(&tx, &slug)? else {
                 return refuse(ApiError::NotFound);
             };
-            let invited = invite_or_add(&tx, &o, &email, role, by, true)?;
-            let sent = match invited {
+            let (result, sent) = match invite_or_add(&tx, &o, &email, role, by, true)? {
+                Err(msg) => return Ok(Outcome::Done(Err(msg))),
+                Ok(Invited::Added) => ("added", crate::mail::Emailed::Skipped),
                 Ok(Invited::Invited) => {
-                    let invitation = crate::mail::Invitation {
-                        to: &email,
-                        inviter: &inviter,
-                        company: &o.name,
-                        project: None,
-                        public_url: &public_url,
-                        org: o.id,
-                        by,
-                    };
-                    crate::mail::invite_email(&tx, wanted, &invitation)?
+                    ("invited", mail.queue(&tx, &email, &o.name, None, o.id, by)?)
                 }
-                _ => crate::mail::Invited::default(),
             };
-            if invited.is_ok() {
-                tx.commit()?;
-            }
-
-            Ok(Outcome::Done(invited.map(|i| (i, sent))))
+            tx.commit()?;
+            Ok(Outcome::Done(Ok((result, sent))))
         })
         .await?;
-    let (result, sent) = match finish(outcome)? {
-        Ok((Invited::Added, sent)) => ("added", sent),
-        Ok((Invited::Invited, sent)) => ("invited", sent),
-        Err(msg) => return Ok(conflict(msg)),
-    };
-    Ok((StatusCode::CREATED, Json(sent.json(result, &share))).into_response())
+    match finish(outcome)? {
+        Ok((result, sent)) => Ok((
+            StatusCode::CREATED,
+            Json(sent.json(result, &state.settings.public_url)),
+        )
+            .into_response()),
+        Err(msg) => Ok(conflict(msg)),
+    }
 }
 
 async fn revoke_invite(
@@ -1142,7 +1129,6 @@ async fn server(
         "data_bytes": dir_size(&state.dbs.layout().root),
         "companies": companies,
         "public_url": state.settings.public_url,
-        "email": if state.settings.smtp.is_some() { "on" } else { "off" },
         "email_server": state.settings.smtp.as_ref().map(crate::mail::describe),
         "email_queue": mail,
         "last_backup": crate::backup::read_status(&state.dbs.layout().root, "backup"),

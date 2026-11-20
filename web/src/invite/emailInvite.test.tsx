@@ -33,7 +33,6 @@ const server = () => ({
   data_bytes: 1,
   companies: 1,
   public_url: "http://localhost:8791",
-  email: emailOn ? "on" : "off",
   email_server: emailOn
     ? {
         host: "smtp.example.com",

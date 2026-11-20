@@ -1,4 +1,4 @@
-import { EmailInviteOption, invitedMessage, useInviteHint, wantsEmail, type InviteResult } from '@/invite/emailInvite'
+import { EmailInviteOption, invitedMessage, useEmailEnabled, wantsEmail, type InviteResult } from '@/invite/emailInvite'
 import type { FormEvent } from 'react'
 import { api } from '@/http'
 import { t } from '@/i18n'
@@ -61,7 +61,7 @@ export function MembersPanel({
     toast(t('toast.revoked', { email: v.email }), () => reinvite(v.email, v.role))
   }
 
-  const inviteHint = useInviteHint(t('members.inviteHint'), t('members.inviteHintEmail'))
+  const inviteHint = t(useEmailEnabled() ? 'members.inviteHintEmail' : 'members.inviteHint')
 
   const onInvite = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()

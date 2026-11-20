@@ -1,4 +1,4 @@
-import { EmailInviteOption, invitedMessage, useInviteHint, wantsEmail, type InviteResult } from '@/invite/emailInvite'
+import { EmailInviteOption, invitedMessage, useEmailEnabled, wantsEmail, type InviteResult } from '@/invite/emailInvite'
 import type { FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
@@ -27,7 +27,7 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
     onChange()
   })
   const can = data?.can ?? project.can
-  const inviteHint = useInviteHint(t('project.inviteHint', { company: company.name }), t('project.inviteHintEmail', { company: company.name }))
+  const inviteHint = t(useEmailEnabled() ? 'project.inviteHintEmail' : 'project.inviteHint', { company: company.name })
 
   const onInvite = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()

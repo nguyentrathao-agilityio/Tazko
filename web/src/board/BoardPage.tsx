@@ -628,14 +628,10 @@ function Share({ company, board, onDone }: { company: Company; board: BoardData;
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const email = String(f.get('email') ?? '').trim()
-    let res: InviteResult | undefined
     void run(async () => {
-      res = await api<InviteResult>('POST', `${projectApi(company.slug, board.project.id)}/invites`, { email, role: String(f.get('role')), send_email: wantsEmail(f) })
-    }).then((ok) => {
-      if (ok) {
-        toast(invitedMessage(res, email, 'project.toastAdded'))
-        onDone()
-      }
+      const res = await api<InviteResult>('POST', `${projectApi(company.slug, board.project.id)}/invites`, { email, role: String(f.get('role')), send_email: wantsEmail(f) })
+      toast(invitedMessage(res, email, 'project.toastAdded'))
+      onDone()
     })
   }
 

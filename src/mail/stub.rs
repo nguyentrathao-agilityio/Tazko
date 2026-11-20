@@ -35,12 +35,11 @@ fn session(stream: TcpStream, dir: &Path) -> std::io::Result<()> {
         let reply: &[u8] = match verb.as_str() {
             "EHLO" | "HELO" => b"250-tazko-dev-mail\r\n250-AUTH PLAIN LOGIN\r\n250 8BITMIME\r\n",
             "AUTH" => b"235 accepted\r\n",
-            "MAIL" | "RSET" | "NOOP" => {
-                if verb != "NOOP" {
-                    to.clear();
-                }
+            "MAIL" | "RSET" => {
+                to.clear();
                 b"250 ok\r\n"
             }
+            "NOOP" => b"250 ok\r\n",
             "RCPT" => {
                 to.push(line.trim().to_string());
                 b"250 ok\r\n"
