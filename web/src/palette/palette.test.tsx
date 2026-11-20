@@ -33,7 +33,7 @@ const board = () => ({
 let calls: Call[] = []
 
 const ctrlK = () => fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-const input = () => screen.getByRole('textbox', { name: 'Command palette' })
+const input = () => screen.getByRole('searchbox', { name: 'Command palette' })
 const press = (key: string, n = 1) => {
   for (let i = 0; i < n; i++) fireEvent.keyDown(input(), { key })
 }

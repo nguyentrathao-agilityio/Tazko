@@ -51,7 +51,7 @@ export function Palette({ items, onClose }: { items: Command[]; onClose: () => v
     >
       <div className="srch" onKeyDown={key}>
         <input
-          type="text"
+          type="search"
           value={q}
           onChange={(e) => {
             setQ(e.target.value)
