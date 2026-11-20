@@ -24,6 +24,7 @@ use crate::tenant::CurrentUser;
 
 const TICK: Duration = Duration::from_secs(60);
 const BATCH: i64 = 500;
+const MAX_PENDING: usize = 20_000;
 const INSTANT_GAP: i64 = 300;
 const HOURLY_GAP: i64 = 3600;
 const DAILY_GAP: i64 = 20 * 3600;
@@ -228,6 +229,20 @@ fn time_to_send(p: &Person, now: i64) -> bool {
 }
 
 fn pending(c: &Connection) -> rusqlite::Result<Vec<Item>> {
+    let mut all = vec![];
+    let mut after = 0;
+    loop {
+        let page = pending_page(c, after)?;
+        let full = page.len() as i64 == BATCH;
+        after = page.last().map_or(after, |i| i.id);
+        all.extend(page);
+        if !full || all.len() >= MAX_PENDING {
+            return Ok(all);
+        }
+    }
+}
+
+fn pending_page(c: &Connection, after: i64) -> rusqlite::Result<Vec<Item>> {
     let mut stmt = c.prepare(&format!(
         "SELECT n.id, n.user_id, n.kind, coalesce(nullif(a.name, ''), a.email), n.card_id, k.title, n.board_id, b.name,
                 cm.body, n.item_text, n.due_at, {CAN_SEE} AND k.archived_at IS NULL
@@ -236,9 +251,9 @@ fn pending(c: &Connection) -> rusqlite::Result<Vec<Item>> {
          JOIN boards b ON b.id = n.board_id
          LEFT JOIN people a ON a.id = n.actor_id
          LEFT JOIN comments cm ON cm.id = n.comment_id
-         WHERE n.emailed_at IS NULL ORDER BY n.id LIMIT ?1"
+         WHERE n.emailed_at IS NULL AND n.id > ?2 ORDER BY n.id LIMIT ?1"
     ))?;
-    stmt.query_map([BATCH], |r| {
+    stmt.query_map(params![BATCH, after], |r| {
         Ok(Item {
             id: r.get(0)?,
             user: r.get(1)?,
