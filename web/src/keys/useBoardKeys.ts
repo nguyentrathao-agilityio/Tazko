@@ -15,6 +15,7 @@ export type KeyActions = {
   zen: () => void
   help: () => void
   leaveZen: () => boolean
+  vote?: (card: CardData) => void
   goToCard: (card: CardData) => void
 }
 
@@ -88,6 +89,8 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
         return at ? s.lists[at[0]].cards[at[1]] : null
       }
       const handled = () => e.preventDefault()
+      const control = document.activeElement
+      if ((key === ' ' || key === ENTER) && control instanceof HTMLButtonElement && !control.classList.contains('cd')) return
 
       if (key === '`' || key === '?') {
         handled()
@@ -166,6 +169,9 @@ export function useBoardKeys({ lists, edit, cardOpen, zen, actions }: Opts) {
       } else if (key === ' ') {
         handled()
         s.actions.done(card)
+      } else if (lower === 'v' && s.actions.vote) {
+        handled()
+        s.actions.vote(card)
       } else if (lower === 'x') {
         handled()
         s.actions.archive(card)

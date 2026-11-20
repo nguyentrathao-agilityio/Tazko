@@ -21,6 +21,7 @@ export type Stats = {
   members: Bar[]
   labels: Bar[]
   due: Bar[]
+  votes: Bar[]
 }
 
 export function boardStats(lists: ListData[], people: BoardPerson[], labels: Label[], dueName: (b: DueBucket) => string, unassigned: string, now = Date.now() / 1000): Stats {
@@ -53,6 +54,12 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
       { key: 'none', name: unassigned, value: none },
     ],
     labels: labels.map((l) => ({ key: `b${l.id}`, name: l.name, value: byLabel.get(l.id) ?? 0, color: labelColors[l.color] ?? labelColors[0] })),
+    votes: lists
+      .flatMap((l) => l.cards)
+      .filter((c) => c.votes)
+      .sort((a, b) => (b.votes ?? 0) - (a.votes ?? 0))
+      .slice(0, 6)
+      .map((c) => ({ key: `v${c.id}`, name: c.title, value: c.votes ?? 0 })),
     due: dueBucketOrder.map((b) => ({ key: b, name: dueName(b), value: due.get(b) ?? 0, color: dueColors[b] })),
   }
 }

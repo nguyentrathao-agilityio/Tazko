@@ -30,6 +30,8 @@ export type CardData = {
   recurrence?: string | null
   links?: number
   blocked?: boolean
+  votes?: number
+  voted?: boolean
   updated_at?: number
   fields?: Record<string, FieldValue>
   comments?: number
@@ -53,6 +55,7 @@ export type BoardData = {
   starred: boolean
   watching?: boolean
   project: { id: number; name: string }
+  voting: boolean
   role: ProjectRole
   can: Can
   people: BoardPerson[]

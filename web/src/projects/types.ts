@@ -23,6 +23,7 @@ export type ProjectView = {
   background: string
   members_create_boards: boolean
   members_invite: boolean
+  voting: boolean
   role: ProjectRole
   member_count: number
   can: Can

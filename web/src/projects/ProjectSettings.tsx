@@ -22,7 +22,7 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
 
   const save = () => patch({ name, description, color, background: bg })
 
-  const flip = (key: 'members_create_boards' | 'members_invite', value: boolean) => patch({ [key]: value })
+  const flip = (key: 'members_create_boards' | 'members_invite' | 'voting', value: boolean) => patch({ [key]: value })
 
   return (
     <>
@@ -74,6 +74,10 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
           onChange={(v) => flip('members_create_boards', v)}
         />
         <SwitchRow label={t('project.membersInvite')} hint={t('project.membersInviteHint')} on={project.members_invite} onChange={(v) => flip('members_invite', v)} />
+      </section>
+      <section className="box">
+        <h2>{t('project.cards')}</h2>
+        <SwitchRow label={t('project.voting')} hint={t('project.votingHint')} on={project.voting} onChange={(v) => flip('voting', v)} />
       </section>
       <section className="box danger-zone">
         <h2>{t('project.archiveOrDelete')}</h2>

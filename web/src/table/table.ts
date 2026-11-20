@@ -10,7 +10,8 @@ export type Row = { card: CardData; list: ListData; listIndex: number }
 export type Sort = { key: string | null; dir: 1 | -1 }
 
 export function columns(board: BoardData, names: Record<string, string>): Column[] {
-  const base: Column[] = ['title', 'list', 'labels', 'members', 'start', 'due', 'check', 'att', 'cm', 'last'].map((key) => ({ key, name: names[key] ?? key }))
+  const keys = ['title', 'list', 'labels', 'members', 'start', 'due', 'check', ...(board.voting ? ['votes'] : []), 'att', 'cm', 'last']
+  const base: Column[] = keys.map((key) => ({ key, name: names[key] ?? key }))
   return base.concat((board.fields ?? []).map((f) => ({ key: `f:${f.id}`, name: f.name, field: f })))
 }
 
@@ -34,6 +35,7 @@ function key(r: Row, k: string): string | number | null {
   if (k === 'members') return c.members?.length ?? 0
   if (k === 'labels') return c.labels?.length ?? 0
   if (k === 'att') return c.attachments ?? 0
+  if (k === 'votes') return c.votes ?? 0
   if (k === 'cm') return c.comments ?? 0
   if (k === 'last') return c.updated_at ?? 0
   if (k.startsWith('f:')) {
@@ -83,6 +85,8 @@ function plain(r: Row, col: Column, board: BoardData): string {
       return toDateInput(c.due_at)
     case 'check':
       return c.items ? `${c.items_done ?? 0}/${c.items}` : ''
+    case 'votes':
+      return String(c.votes ?? 0)
     case 'att':
       return String(c.attachments ?? 0)
     case 'cm':

@@ -1,4 +1,5 @@
-import { useCallback, useRef } from 'react'
+import { useCallback } from 'react'
+import { useCardToggle } from '@/card/toggle'
 import { api } from '@/http'
 import { t, type MessageKey } from '@/i18n'
 import { shortDate } from '@/card/look'
@@ -18,18 +19,17 @@ function doneBody(done: boolean) {
 
 export function useToggleDone(run: (fn: () => Promise<unknown>) => Promise<boolean>) {
   const toast = useToast()
-  const pending = useRef(new Set<number>())
+  const toggle = useCardToggle()
   return useCallback(
-    (boardApi: string, card: { id: number; done?: boolean }) => {
-      if (pending.current.has(card.id)) return
-      pending.current.add(card.id)
-      void run(async () => {
-        const res = await api<{ repeated?: Repeated } | null>('PATCH', `${boardApi}/cards/${card.id}`, doneBody(!card.done))
-        if (res?.repeated) {
-          toast(t('repeat.toast', { rule: ruleText(res.repeated.rule), date: shortDate(res.repeated.to) }), () => run(() => api('POST', `${boardApi}/cards/${card.id}/repeat/undo`)))
-        }
-      }).finally(() => pending.current.delete(card.id))
-    },
-    [run, toast],
+    (boardApi: string, card: { id: number; done?: boolean }) =>
+      toggle(card.id, Boolean(card.done), (done) =>
+        run(async () => {
+          const res = await api<{ repeated?: Repeated } | null>('PATCH', `${boardApi}/cards/${card.id}`, doneBody(done))
+          if (res?.repeated) {
+            toast(t('repeat.toast', { rule: ruleText(res.repeated.rule), date: shortDate(res.repeated.to) }), () => run(() => api('POST', `${boardApi}/cards/${card.id}/repeat/undo`)))
+          }
+        }),
+      ),
+    [run, toast, toggle],
   )
 }

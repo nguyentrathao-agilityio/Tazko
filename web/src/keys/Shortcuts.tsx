@@ -28,7 +28,7 @@ const keys: [string, MessageKey][] = [
   ['Esc', 'keys.escape'],
 ]
 
-export function Shortcuts({ onClose }: { onClose: () => void }) {
+export function Shortcuts({ onClose, voting = false }: { onClose: () => void; voting?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === ESCAPE || e.key === '`' || e.key === '?') {
@@ -63,7 +63,7 @@ export function Shortcuts({ onClose }: { onClose: () => void }) {
           {t('keys.lead')}
         </p>
         <dl className="kt">
-          {keys.map(([k, label]) => (
+          {(voting ? [...keys.slice(0, keys.findIndex(([k]) => k === 'X')), ['V', 'keys.vote'] as [string, MessageKey], ...keys.slice(keys.findIndex(([k]) => k === 'X'))] : keys).map(([k, label]) => (
             <div key={k} style={{ display: 'contents' }}>
               <dt>
                 <span className="kbd">{k}</span>
