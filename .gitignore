@@ -21,6 +21,7 @@
 secret
 
 # Tool and editor state
+__pycache__/
 .claude/settings.local.json
 .DS_Store
 .idea/
