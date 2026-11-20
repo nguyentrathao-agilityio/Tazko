@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { t, type MessageKey } from '@/i18n'
-import { ARROW_DOWN, ARROW_UP, ENTER, ESCAPE } from '@/keys/keyNames'
+import { ARROW_DOWN, ARROW_UP, ENTER, ESCAPE, TAB } from '@/keys/keyNames'
 import { type Command, narrow } from '@/palette/commands'
 
 export function Palette({ items, onClose }: { items: Command[]; onClose: () => void }) {
@@ -23,6 +23,9 @@ export function Palette({ items, onClose }: { items: Command[]; onClose: () => v
 
   const key = (e: KeyboardEvent) => {
     const n = shown.length
+    if (e.nativeEvent.isComposing) return
+    if (e.key === TAB) e.preventDefault()
+
     if (e.key === ESCAPE) {
       e.stopPropagation()
       onClose()
@@ -68,7 +71,7 @@ export function Palette({ items, onClose }: { items: Command[]; onClose: () => v
           {shown.map((c, i) => (
             <div key={c.id}>
               {(i === 0 || shown[i - 1].group !== c.group) && <div className="sub">{t(`palette.group.${c.group}` as MessageKey)}</div>}
-              <button type="button" id={`pal-${c.id}`} role="option" aria-selected={i === at} tabIndex={-1} className={`hit${i === at ? ' on' : ''}`} onClick={() => runAt(i)} onMouseEnter={() => setOn(i)}>
+              <button type="button" id={`pal-${c.id}`} role="option" aria-selected={i === at} tabIndex={-1} className={`hit${i === at ? ' on' : ''}`} onClick={() => runAt(i)} onMouseMove={() => i !== at && setOn(i)}>
                 <span className="pl">
                   <b>{c.label}</b>
                 </span>

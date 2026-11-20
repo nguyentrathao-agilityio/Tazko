@@ -821,7 +821,7 @@
   "palette.quietOn": "Stay quiet in zen mode: turn on",
   "palette.quietOff": "Stay quiet in zen mode: turn off",
   "palette.settings": "Personal settings",
-  "palette.openCard": "Open \"{name}\"",
+  "palette.open": "Open \"{name}\"",
   "palette.openNone": "Open the selected card",
   "palette.done": "Mark \"{name}\" done",
   "palette.undone": "Mark \"{name}\" not done",

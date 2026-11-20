@@ -23,10 +23,10 @@ import { CardDialog } from '@/card/CardDialog'
 import { active, applyFilter, emptyFilter, toggleMine, type Filter } from '@/board/filter'
 import { FilterPop } from '@/board/FilterPop'
 import { Tools } from '@/ui/Tools'
-import { isTyping, openSearchEvent, popoverOpen } from '@/ui/typing'
+import { isTyping, popoverOpen } from '@/ui/typing'
 import { useBoardKeys, type KeyActions } from '@/keys/useBoardKeys'
 import { Palette } from '@/palette/Palette'
-import { usePalette } from '@/palette/usePalette'
+import { usePalette, usePersonal } from '@/palette/usePalette'
 import { boardCommands } from '@/palette/commands'
 import { Shortcuts } from '@/keys/Shortcuts'
 import { saveSettings, useSettings } from '@/settings/store'
@@ -95,7 +95,8 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   })
   const zen = settings.zen
   const [help, setHelp] = useState(false)
-  const palette = usePalette()
+  const palette = usePalette(Boolean(board))
+  const personal = usePersonal(go, `/c/${company.slug}`)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -207,8 +208,8 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   }
 
   const commands = () => {
-    const selectedId = keys.selected ?? cardId
-    const card = lists.flatMap((l) => l.cards).find((c) => c.id === selectedId) ?? null
+    const card =
+      (cardId !== null ? lists.flatMap((l) => l.cards).find((c) => c.id === cardId) : view === 'board' ? shownLists.flatMap((l) => l.cards).find((c) => c.id === keys.selected) : null) ?? null
     return boardCommands(
       {
         boardRoot,
@@ -234,18 +235,13 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         done: boardActions.done,
         pop: boardActions.pop,
         move: (c, l) => void run(() => api('POST', `${base}/cards/${c.id}/move`, { list_id: l.id, after: appendAfter(lists, l.id, c.id) })),
-        archive: boardActions.archive,
+        archive: (c) => {
+          keys.setSelected(null)
+          boardActions.archive(c)
+        },
         open: boardActions.open,
       },
-      {
-        density: settings.zen_density,
-        quiet: settings.zen_quiet,
-        setDensity: (d) => void saveSettings({ zen_density: d }).catch(() => undefined),
-        toggleQuiet: () => void saveSettings({ zen_quiet: !settings.zen_quiet }).catch(() => undefined),
-        search: () => window.dispatchEvent(new Event(openSearchEvent)),
-        go,
-        companyRoot: `/c/${company.slug}`,
-      },
+      personal,
     )
   }
 
@@ -277,8 +273,8 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           density={settings.zen_density}
           onMine={() => setFilter((f) => toggleMine(f))}
           onHideDone={() => setFilter((f) => ({ ...f, hideDone: !f.hideDone }))}
-          onDensity={(d) => void saveSettings({ zen_density: d }).catch(() => undefined)}
-          onSearch={() => window.dispatchEvent(new Event(openSearchEvent))}
+          onDensity={personal.setDensity}
+          onSearch={personal.search}
           onPalette={palette.show}
           onExit={() => setZen(false)}
         />

@@ -10,10 +10,8 @@ import { companyRoleLabel, isOwner } from '@/roles'
 import { ESCAPE } from '@/keys/keyNames'
 import { companyRoute } from '@/paths'
 import { Palette } from '@/palette/Palette'
-import { usePalette } from '@/palette/usePalette'
+import { usePalette, usePersonal } from '@/palette/usePalette'
 import { personalCommands } from '@/palette/commands'
-import { saveSettings, useSettings } from '@/settings/store'
-import { openSearchEvent } from '@/ui/typing'
 
 function Switcher({ me, company, go }: { me: Me; company: Company; go: Go }) {
   const [open, setOpen] = useState(false)
@@ -99,8 +97,8 @@ export function CompanyShell({
   const name = displayName(me.name, me.email)
   const base = companyRoute(company.slug)
   const owner = isOwner(company.role)
-  const settings = useSettings()
   const palette = usePalette()
+  const personal = usePersonal(go, base)
 
   return (
     <div className="shell">
@@ -138,15 +136,7 @@ export function CompanyShell({
         </Link>
         {palette.open && (
           <Palette
-            items={personalCommands({
-              density: settings.zen_density,
-              quiet: settings.zen_quiet,
-              setDensity: (d) => void saveSettings({ zen_density: d }).catch(() => undefined),
-              toggleQuiet: () => void saveSettings({ zen_quiet: !settings.zen_quiet }).catch(() => undefined),
-              search: () => window.dispatchEvent(new Event(openSearchEvent)),
-              go,
-              companyRoot: base,
-            })}
+            items={personalCommands(personal)}
             onClose={palette.close}
           />
         )}

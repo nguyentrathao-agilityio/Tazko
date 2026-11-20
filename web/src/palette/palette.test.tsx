@@ -19,8 +19,8 @@ const board = () => ({
   closed: false,
   starred: false,
   project: { id: 4, name: 'Website' },
-  role: 'member',
-  can: { edit: true, manage: false, invite: false, create_board: true },
+  role,
+  can: { edit: role !== 'observer', manage: false, invite: false, create_board: true },
   people: [{ id: 1, name: 'Mai Tran', email: 'mai@example.com', role: 'member', access: true }],
   lists: [
     { id: 11, title: 'To do', position: 'V', cards: [card(21, 'Write copy'), card(22, 'Audit nav', { members: [1] })] },
@@ -31,6 +31,7 @@ const board = () => ({
 })
 
 let calls: Call[] = []
+let role = 'member'
 
 const ctrlK = () => fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
 const input = () => screen.getByRole('searchbox', { name: 'Command palette' })
@@ -85,9 +86,19 @@ describe('palette keys', () => {
   })
 })
 
+function openAt(path: string) {
+  window.history.pushState(null, '', path)
+  render(
+    <Toaster>
+      <App />
+    </Toaster>,
+  )
+}
+
 describe('palette on a board', () => {
   beforeEach(() => {
     calls = []
+    role = 'member'
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit = {}) => {
@@ -102,12 +113,6 @@ describe('palette on a board', () => {
         return json({ error: 'not found' }, 404)
       }),
     )
-    window.history.pushState(null, '', '/c/acme/b/7')
-    render(
-      <Toaster>
-        <App />
-      </Toaster>,
-    )
   })
 
   afterEach(async () => {
@@ -118,6 +123,7 @@ describe('palette on a board', () => {
   })
 
   it('opens with Ctrl K and lists the groups with shortcuts', async () => {
+    openAt('/c/acme/b/7')
     await screen.findByText('Write copy')
     ctrlK()
     expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeTruthy()
@@ -130,6 +136,7 @@ describe('palette on a board', () => {
   })
 
   it('says so when a card action has no selected card', async () => {
+    openAt('/c/acme/b/7')
     await screen.findByText('Write copy')
     await choose(/^Mark the selected card done/)
     expect(await screen.findByText(/Select a card first/)).toBeTruthy()
@@ -137,6 +144,7 @@ describe('palette on a board', () => {
   })
 
   it('runs card actions on the card selected with J', async () => {
+    openAt('/c/acme/b/7')
     await screen.findByText('Write copy')
     fireEvent.keyDown(window, { key: 'j' })
     await choose(/^Mark "Write copy" done/)
@@ -148,6 +156,7 @@ describe('palette on a board', () => {
   })
 
   it('switches filter, density, quiet mode, zen and views', async () => {
+    openAt('/c/acme/b/7')
     await screen.findByText('Write copy')
     await choose(/^Just my cards/)
     expect(screen.queryByText('Write copy')).toBeNull()
@@ -163,5 +172,32 @@ describe('palette on a board', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/c/acme/b/7/dashboard'))
     await choose(/^My cards/)
     await waitFor(() => expect(window.location.pathname).toBe('/c/acme/my-cards'))
+  })
+
+  it('gives observers no card changes and no new card', async () => {
+    role = 'observer'
+    openAt('/c/acme/b/7')
+    await screen.findByText('Write copy')
+    fireEvent.keyDown(window, { key: 'j' })
+    ctrlK()
+    const o = options()
+    expect(o.some((x) => x.startsWith('Open "Write copy"'))).toBe(true)
+    expect(o.some((x) => /^(Mark|Move|Archive|Assign|Dates|Labels|New card)/.test(x))).toBe(false)
+  })
+
+  it('opens over an open card and acts on that card', async () => {
+    openAt('/c/acme/b/7/c/22')
+    await screen.findByRole('dialog', { name: 'Card' })
+    await choose(/^Mark "Audit nav" done/)
+    await waitFor(() => expect(writes()).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true } }))
+  })
+
+  it('offers no card actions for a card hidden by the filter', async () => {
+    openAt('/c/acme/b/7')
+    await screen.findByText('Write copy')
+    fireEvent.keyDown(window, { key: 'j' })
+    fireEvent.keyDown(window, { key: 'q' })
+    ctrlK()
+    expect(options().some((x) => x.includes('"Write copy"'))).toBe(false)
   })
 })
