@@ -33,30 +33,39 @@ export function TokenTable({
   footer?: React.ReactNode
 }) {
   const { data, error: loadError, reload } = useLoad(() => api<{ tokens: TokenRow[] }>('GET', path), path)
-  const { error, run, runAndToast } = useRun(reload)
+  const { error, runAndToast } = useRun(reload)
+  const creating = useRun(reload)
+  const [busy, setBusy] = useState(false)
   const [making, setMaking] = useState(false)
   const [made, setMade] = useState<{ name: string; token: string } | null>(null)
   const company = projects !== undefined
-  const projectName = (row: TokenRow) => {
-    const ids = (row.projects ?? []) as number[]
-    if (!company || !projects) return null
-    if (ids.length >= projects.length && projects.every((p) => ids.includes(p.id))) return t('tokens.allProjects')
-    return ids.map((id) => projects.find((p) => p.id === id)?.name ?? `#${id}`).join(', ')
+  const close = () => {
+    setMaking(false)
+    creating.setError(null)
   }
 
   const create = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const name = String(f.get('name') ?? '').trim()
+    if (!name) {
+      e.currentTarget.querySelector<HTMLInputElement>('#tk-n')?.focus()
+      return
+    }
+
+    if (busy) return
     const days = Number(f.get('expires'))
     const pick = String(f.get('projects') ?? '')
     const body: Record<string, unknown> = { name, scope: f.get('scope'), expires_in_days: days || undefined }
     if (company) body.projects = pick ? [Number(pick)] : (projects ?? []).map((p) => p.id)
-    void run(async () => {
-      const r = await api<{ token: string }>('POST', path, body)
-      setMaking(false)
-      setMade({ name, token: r.token })
-    })
+    setBusy(true)
+    void creating
+      .run(async () => {
+        const r = await api<{ token: string }>('POST', path, body)
+        setMaking(false)
+        setMade({ name, token: r.token })
+      })
+      .finally(() => setBusy(false))
   }
 
   return (
@@ -94,7 +103,7 @@ export function TokenTable({
                   {company && <small className="muted" style={{ display: 'block' }}>{t('tokens.createdBy', { date: shortDate(row.created_at), by: row.by ?? '' })}</small>}
                 </td>
                 <td>{scopeText(row.scope)}</td>
-                {company ? <td>{projectName(row)}</td> : <td className="muted">{shortDate(row.created_at)}</td>}
+                {company ? <td>{(row.project_names ?? []).join(', ')}</td> : <td className="muted">{shortDate(row.created_at)}</td>}
                 <td className="muted">{row.last_used_at ? when(row.last_used_at) : t('tokens.notUsed')}</td>
                 <td className="muted">{expires(row.expires_at)}</td>
                 <td className="num">
@@ -116,7 +125,7 @@ export function TokenTable({
       </div>
       {footer}
       {making && (
-        <Modal label={t(company ? 'tokens.newCompany' : 'tokens.newPersonal')} onClose={() => setMaking(false)}>
+        <Modal label={t(company ? 'tokens.newCompany' : 'tokens.newPersonal')} onClose={close}>
           <h2>{t(company ? 'tokens.newCompany' : 'tokens.newPersonal')}</h2>
           <form onSubmit={create} noValidate>
             <div className="field">
@@ -137,13 +146,14 @@ export function TokenTable({
               <div className="field">
                 <label htmlFor="tk-p">{t('tokens.projects')}</label>
                 <select id="tk-p" name="projects" style={{ width: '100%' }}>
-                  <option value="">{t('tokens.allProjects')}</option>
+                  {Boolean(projects?.length) && <option value="">{t('tokens.allMyProjects')}</option>}
                   {projects?.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
                   ))}
                 </select>
+                <small className="hint">{t('tokens.projectsHint')}</small>
               </div>
             )}
             <div className="field">
@@ -156,12 +166,12 @@ export function TokenTable({
                 ))}
               </select>
             </div>
-            <ErrorNote message={error} />
+            <ErrorNote message={creating.error} />
             <div className="acts">
-              <button type="button" className="btn" onClick={() => setMaking(false)}>
+              <button type="button" className="btn" onClick={close}>
                 {t('common.cancel')}
               </button>
-              <button type="submit" className="btn primary">
+              <button type="submit" className="btn primary" disabled={busy}>
                 {t('tokens.create')}
               </button>
             </div>

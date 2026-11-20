@@ -101,6 +101,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
       {tab === 'tokens' && (
         <TokenTable
           path={`${ME_API}/tokens`}
+          scopes={isOwner(company.role) ? undefined : ['read', 'write']}
           title={t('tokens.personalTitle')}
           lead={t('tokens.personalLead')}
           footer={<p className="hint" style={{ marginTop: 10 }}>{t('tokens.personalHint')}</p>}

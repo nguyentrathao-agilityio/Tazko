@@ -275,6 +275,14 @@ async fn a_project_limited_token_cannot_read_another_project() {
     let listed = req(&w.app, &w.boss, Method::GET, &format!("{C}/tokens"), None).await;
     assert_eq!(listed["tokens"][0]["name"], "CI");
     assert_eq!(
+        listed["tokens"][0]["project_names"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "project names come with the list"
+    );
+    assert_eq!(
         listed["tokens"][0]["by"], "boss@a.example",
         "the list says who made each token"
     );

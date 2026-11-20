@@ -9,7 +9,7 @@ let role = 'owner'
 let calls: Call[] = []
 const me = () => ({ id: 1, email: 'mai@example.com', name: 'Mai Tran', is_super_admin: false, csrf_token: 'c'.repeat(64), companies: [{ slug: 'acme', name: 'Acme Studio', role }] })
 const personal = [{ id: 3, name: 'laptop', scope: 'write', projects: null, created_at: 1_700_000_000, expires_at: null, last_used_at: null }]
-const company = [{ id: 7, name: 'CI', scope: 'read', projects: [4], created_at: 1_700_000_000, expires_at: 1_800_000_000, last_used_at: 1_700_100_000, by: 'Mai Tran' }]
+const company = [{ id: 7, name: 'CI', scope: 'read', projects: [4], created_at: 1_700_000_000, expires_at: 1_800_000_000, last_used_at: 1_700_100_000, by: 'Mai Tran', project_names: ['Website'] }]
 
 beforeEach(() => {
   calls = []
@@ -56,10 +56,15 @@ describe('access tokens', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New token' }))
     const form = await screen.findByRole('dialog', { name: 'New personal token' })
     expect(within(form).queryByLabelText('Projects')).toBeNull()
+    fireEvent.click(within(form).getByRole('button', { name: 'Create token' }))
+    expect(document.activeElement).toBe(within(form).getByLabelText('Name'))
+    expect(calls.some((c) => c.method === 'POST')).toBe(false)
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'release script' } })
     fireEvent.change(within(form).getByLabelText('Expires'), { target: { value: '0' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Create token' }))
+    fireEvent.click(within(form).getByRole('button', { name: 'Create token' }))
     const shown = await screen.findByRole('dialog', { name: 'Token created' })
+    expect(calls.filter((c) => c.method === 'POST').length).toBe(1)
     expect(within(shown).getByText('tzk_p_secret123')).toBeTruthy()
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ name: 'release script', scope: 'read' })
     fireEvent.click(within(shown).getByRole('button', { name: 'Done' }))
@@ -82,6 +87,14 @@ describe('access tokens', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Create token' }))
     expect(await screen.findByText('tzk_c_acme_secret456')).toBeTruthy()
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ name: 'Dashboard sync', scope: 'write', projects: [5], expires_in_days: 90 })
+  })
+
+  it('offers members read and write tokens only', async () => {
+    role = 'member'
+    open('/c/acme/me/tokens')
+    fireEvent.click(await screen.findByRole('button', { name: 'New token' }))
+    const form = await screen.findByRole('dialog', { name: 'New personal token' })
+    expect([...(within(form).getByLabelText('Access') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['read', 'write'])
   })
 
   it('keeps Integrations to company owners', async () => {

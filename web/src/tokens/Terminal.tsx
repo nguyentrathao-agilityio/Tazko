@@ -4,11 +4,17 @@ import { useToast } from '@/ui/toast'
 
 export function Terminal({ text, label }: { text: string; label: string }) {
   const toast = useToast()
-  const copy = () =>
-    void navigator.clipboard?.writeText(text).then(
+  const copy = () => {
+    if (!navigator.clipboard) {
+      toast(t('tokens.copyBlocked'))
+      return
+    }
+
+    void navigator.clipboard.writeText(text).then(
       () => toast(t('tokens.copied')),
       () => toast(t('tokens.copyBlocked')),
     )
+  }
   return (
     <div className="termw">
       <pre className="term" aria-label={label}>

@@ -9,6 +9,7 @@ export type TokenRow = {
   expires_at: number | null
   last_used_at: number | null
   by?: string
+  project_names?: string[]
 }
 
 export const SCOPES: Scope[] = ['read', 'write', 'manage']

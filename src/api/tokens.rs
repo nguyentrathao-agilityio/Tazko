@@ -525,10 +525,16 @@ async fn list_company(CompanyOwner(co): CompanyOwner) -> Result<Json<Value>, Api
                  FROM api_tokens t LEFT JOIN people p ON p.id = t.created_by
                  WHERE t.revoked_at IS NULL ORDER BY t.id DESC",
             )?;
+            let names: HashMap<i64, String> = c
+                .prepare("SELECT id, name FROM projects WHERE deleted_at IS NULL")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?;
             Ok(stmt
                 .query_map([], |r| {
                     let mut row = token_row(r)?;
                     row["by"] = json!(r.get::<_, String>(7)?);
+                    let ids: Vec<i64> = serde_json::from_value(row["projects"].clone()).unwrap_or_default();
+                    row["project_names"] = json!(ids.iter().filter_map(|i| names.get(i)).collect::<Vec<_>>());
                     Ok(row)
                 })?
                 .collect::<Result<Vec<_>, _>>()?)

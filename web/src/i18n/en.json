@@ -958,5 +958,7 @@
   "integrations.useToken": "Use a token",
   "integrations.reference": "The full list of endpoints is in the API reference at",
   "integrations.ownersOnly": "Integrations are for company owners",
-  "integrations.ownersOnlyBody": "Ask an owner of this company if you need an API token. Your own tokens are under Settings, Access tokens."
+  "integrations.ownersOnlyBody": "Ask an owner of this company if you need an API token. Your own tokens are under Settings, Access tokens.",
+  "tokens.allMyProjects": "All my projects",
+  "tokens.projectsHint": "The token covers the projects chosen now; projects added later are not included."
 }

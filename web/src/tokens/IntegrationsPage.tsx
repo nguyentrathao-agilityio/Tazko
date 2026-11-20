@@ -5,6 +5,7 @@ import { companyApi } from '@/paths'
 import type { MyProject } from '@/projects/types'
 import { PageHead } from '@/ui/PageHead'
 import { EmptyState } from '@/ui/EmptyState'
+import { ErrorNote } from '@/ui/ErrorNote'
 import { isOwner } from '@/roles'
 import { Tools } from '@/ui/Tools'
 import { useLoad } from '@/ui/useLoad'
@@ -14,7 +15,7 @@ import { TokenTable } from '@/tokens/TokenTable'
 export function IntegrationsPage({ company }: { company: Company }) {
   const base = companyApi(company.slug)
   const owner = isOwner(company.role)
-  const { data } = useLoad(() => (owner ? api<{ projects: MyProject[] }>('GET', `${base}/my-projects`) : Promise.resolve({ projects: [] })), `${base}/my-projects`)
+  const { data, error } = useLoad(() => (owner ? api<{ projects: MyProject[] }>('GET', `${base}/my-projects`) : Promise.resolve({ projects: [] })), `${base}/my-projects`)
   if (!owner) return <EmptyState title={t('integrations.ownersOnly')} body={t('integrations.ownersOnlyBody')} />
 
   return (
@@ -27,6 +28,7 @@ export function IntegrationsPage({ company }: { company: Company }) {
           {t('integrations.tokens')}
         </button>
       </div>
+      <ErrorNote message={error} />
       {data && (
         <TokenTable
           path={`${base}/tokens`}
