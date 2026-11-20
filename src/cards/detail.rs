@@ -202,6 +202,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             v["labels"] = json!(ids("SELECT label_id FROM card_labels WHERE card_id = ?1")?);
             v["members"] = json!(ids("SELECT user_id FROM card_members WHERE card_id = ?1")?);
             v["checklists"] = json!(checklists(c, card)?);
+            v["links"] = json!(super::links::for_card(c, card, me)?);
             v["attachments"] = json!(crate::files::attachments_of(c, card)?);
             v["fields"] = Value::Object(super::fields::card_values(c, card, false)?);
             v["created_by"] = person(c, creator)?;
