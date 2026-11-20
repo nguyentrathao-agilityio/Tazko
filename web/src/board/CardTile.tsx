@@ -6,7 +6,7 @@ import { Icon } from '@/ui/Icon'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { dateRange, dueState, labelStyle } from '@/card/look'
-import { ruleText } from '@/card/repeat'
+import { RepeatBadge } from '@/card/RepeatBadge'
 import type { BoardPerson, CardData, Label } from '@/board/types'
 import { fieldText, type FieldDef } from '@/card/fieldTypes'
 
@@ -102,11 +102,7 @@ export function CardTile({
                 {dateRange(card.start_at, card.due_at)}
               </span>
             )}
-            {card.recurrence && (
-              <span className="bdg" title={t('repeat.badge', { rule: ruleText(card.recurrence) })}>
-                <Icon name="repeat" />
-              </span>
-            )}
+            <RepeatBadge rule={card.recurrence} />
             {card.has_description && (
               <span className="bdg" title={t('card.hasDescription')}>
                 <Icon name="text" />

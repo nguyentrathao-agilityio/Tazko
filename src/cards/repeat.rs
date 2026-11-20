@@ -1,16 +1,10 @@
-pub const RULES: &[(&str, &str)] = &[
-    ("daily", "every day"),
-    ("weekdays", "every weekday"),
-    ("weekly", "every week"),
-    ("biweekly", "every 2 weeks"),
-    ("monthly", "every month"),
-];
+pub const RULES: &[&str] = &["daily", "weekdays", "weekly", "biweekly", "monthly"];
 
 const DAY: i64 = 86_400;
 const MAX_STEPS: usize = 4_000;
 
 pub fn valid(rule: &str) -> bool {
-    RULES.iter().any(|(r, _)| *r == rule)
+    RULES.contains(&rule)
 }
 
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
@@ -75,7 +69,19 @@ pub fn next_due(due: i64, rule: &str, now: i64, offset_minutes: i64) -> i64 {
     let off = offset_minutes * 60;
     let start = due + off;
     let (_, _, dom) = civil_from_days(start.div_euclid(DAY));
-    let mut local = step(start, rule, dom);
+    let period = match rule {
+        "daily" => DAY,
+        "biweekly" => 14 * DAY,
+        "monthly" => 0,
+        _ => 7 * DAY,
+    };
+    let behind = now + off - start;
+    let skip = if period > 0 && behind > period {
+        (behind / period - 1) * period
+    } else {
+        0
+    };
+    let mut local = step(start + skip, rule, dom);
     for _ in 0..MAX_STEPS {
         if local - off > now {
             break;
@@ -156,6 +162,21 @@ mod tests {
             next_due(thu_utc, "weekdays", 0, 0),
             at(2026, 11, 20, 20),
             "Thursday in UTC goes to Friday"
+        );
+    }
+
+    #[test]
+    fn a_card_years_late_still_moves_past_now() {
+        let now = at(2026, 11, 20, 10);
+        for rule in ["daily", "weekdays", "weekly", "biweekly", "monthly"] {
+            let next = next_due(at(2001, 3, 5, 9), rule, now, 0);
+            assert!(next > now && next - now <= 32 * DAY, "{rule}: {next}");
+            assert_eq!(next.rem_euclid(DAY), 9 * 3600, "{rule} keeps the time");
+        }
+        let next = next_due(at(2001, 3, 5, 9), "weekdays", now, 0);
+        assert!(
+            !matches!((next.div_euclid(DAY) + 4).rem_euclid(7), 0 | 6),
+            "lands on a weekday"
         );
     }
 

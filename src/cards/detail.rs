@@ -248,13 +248,19 @@ async fn update(
     board: Board,
     headers: HeaderMap,
     Path(params): Params,
-    Json(body): Json<Map<String, Value>>,
+    Json(mut body): Json<Map<String, Value>>,
 ) -> Result<Response, ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
     let card = path_id(&params, "card")?;
+    let offset = match body.remove("tz_offset") {
+        None => 0,
+        Some(v) => v
+            .as_i64()
+            .filter(|m| (-840..=840).contains(m))
+            .ok_or_else(|| bad("the time zone offset is not valid"))?,
+    };
     let mut sets: Vec<(&'static str, rusqlite::types::Value)> = Vec::new();
     let mut changed = Map::new();
-    let mut offset = 0;
     use rusqlite::types::Value as Sql;
     for (key, value) in &body {
         match key.as_str() {
@@ -311,12 +317,6 @@ async fn update(
                 changed.insert("recurrence".into(), json!(r));
                 sets.push(("recurrence", r.map_or(Sql::Null, Sql::Text)));
             }
-            "tz_offset" => {
-                offset = value
-                    .as_i64()
-                    .filter(|m| (-840..=840).contains(m))
-                    .ok_or_else(|| bad("the time zone offset is not valid"))?;
-            }
             "cover" => {
                 let cv = match value {
                     Value::Null => None,
@@ -344,12 +344,28 @@ async fn update(
                 return Ok(Err(ApiError::NotFound));
             }
 
+            let was_done: bool =
+                tx.query_row("SELECT done FROM cards WHERE id = ?1", [card], |r| r.get(0))?;
             for (col, v) in &sets {
                 tx.execute(
                     &format!("UPDATE cards SET {col} = ?2, updated_at = ?3 WHERE id = ?1"),
                     params![card, v, now()],
                 )?;
             }
+            let (rule, due): (Option<String>, Option<i64>) = tx.query_row(
+                "SELECT recurrence, due_at FROM cards WHERE id = ?1",
+                [card],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            if rule.is_some() && due.is_none() {
+                if changed.get("recurrence").is_some_and(|r| !r.is_null()) {
+                    return Ok(Err(bad("set a due date before making the card repeat")));
+                }
+
+                tx.execute("UPDATE cards SET recurrence = NULL WHERE id = ?1", [card])?;
+                changed.insert("recurrence".into(), Value::Null);
+            }
+
             let kind = if changed.len() == 1 && changed.contains_key("done") {
                 "card_done"
             } else if changed.len() == 1 && changed.contains_key("title") {
@@ -357,23 +373,22 @@ async fn update(
             } else {
                 "card_updated"
             };
-            let completing = changed.get("done") == Some(&json!(true));
+            let completing = !was_done && changed.get("done") == Some(&json!(true));
             let repeated = if completing {
                 reschedule(&tx, card, offset)?
             } else {
                 None
             };
+            let at = At::card(pid, id, card);
             match &repeated {
                 Some(r) => {
-                    events::record(&tx, by, "card_repeated", At::card(pid, id, card), r.clone())?
+                    changed.remove("done");
+                    if !changed.is_empty() {
+                        events::record(&tx, by, "card_updated", at, Value::Object(changed))?;
+                    }
+                    events::record(&tx, by, "card_repeated", at, r.clone())?
                 }
-                None => events::record(
-                    &tx,
-                    by,
-                    kind,
-                    At::card(pid, id, card),
-                    Value::Object(changed),
-                )?,
+                None => events::record(&tx, by, kind, at, Value::Object(changed))?,
             };
             tx.commit()?;
             Ok(Ok(repeated))
@@ -394,18 +409,19 @@ fn reschedule(c: &Connection, card: i64, offset: i64) -> rusqlite::Result<Option
     let (Some(rule), Some(due)) = (rule, due) else {
         return Ok(None);
     };
-    let next = super::repeat::next_due(due, &rule, now(), offset);
+    let at = now();
+    let next = super::repeat::next_due(due, &rule, at, offset);
     let ticked: Vec<i64> = c
         .prepare("SELECT i.id FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = ?1 AND i.done = 1")?
         .query_map([card], |r| r.get(0))?
         .collect::<Result<_, _>>()?;
     c.execute(
         "UPDATE cards SET done = 0, due_at = ?2, start_at = start_at + (?2 - ?3), updated_at = ?4 WHERE id = ?1",
-        params![card, next, due, now()],
+        params![card, next, due, at],
     )?;
     c.execute(
-        "UPDATE checklist_items SET done = 0 WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
-        [card],
+        "UPDATE checklist_items SET done = 0, due_at = due_at + ?2 WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
+        params![card, next - due],
     )?;
     Ok(Some(
         json!({ "rule": rule, "from": due, "to": next, "start_from": start, "items": ticked }),
@@ -447,9 +463,14 @@ async fn undo_repeat(
                 return Ok(Err(conflict("the card has changed since it was completed")));
             }
 
+            let (from, to) = (p["from"].as_i64(), p["to"].as_i64());
             tx.execute(
                 "UPDATE cards SET due_at = ?2, start_at = ?3, updated_at = ?4 WHERE id = ?1",
-                params![card, p["from"].as_i64(), p["start_from"].as_i64(), now()],
+                params![card, from, p["start_from"].as_i64(), now()],
+            )?;
+            tx.execute(
+                "UPDATE checklist_items SET due_at = due_at - ?2 WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
+                params![card, to.zip(from).map(|(t, f)| t - f)],
             )?;
             for item in p["items"].as_array().into_iter().flatten().filter_map(Value::as_i64) {
                 tx.execute(

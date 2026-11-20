@@ -103,6 +103,15 @@ async fn detail(w: &World, card: i64) -> Value {
     .await
 }
 
+fn kinds(card: &Value) -> Vec<String> {
+    card["activity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["type"].as_str().unwrap().to_string())
+        .collect()
+}
+
 fn now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -149,12 +158,21 @@ async fn completing_a_weekly_card_moves_it_a_week_and_unticks_until_undone() {
                 .unwrap(),
         );
     }
+    let item = |i: usize| format!("{C}/boards/{}/items/{}", w.board, items[i]);
     req(
         &w.app,
         &w.boss,
         Method::PATCH,
-        &format!("{C}/boards/{}/items/{}", w.board, items[0]),
+        &item(0),
         Some(json!({ "done": true })),
+    )
+    .await;
+    req(
+        &w.app,
+        &w.boss,
+        Method::PATCH,
+        &item(1),
+        Some(json!({ "due_at": due - 3600 })),
     )
     .await;
 
@@ -185,6 +203,11 @@ async fn completing_a_weekly_card_moves_it_a_week_and_unticks_until_undone() {
             .all(|i| i["done"] == false),
         "the checklist is unticked"
     );
+    assert_eq!(
+        after["checklists"][0]["items"][1]["due_at"],
+        due - 3600 + WEEK,
+        "item dates move with the card"
+    );
     let board = req(
         &w.app,
         &w.boss,
@@ -194,13 +217,7 @@ async fn completing_a_weekly_card_moves_it_a_week_and_unticks_until_undone() {
     )
     .await;
     assert_eq!(board["lists"][0]["cards"][0]["recurrence"], "weekly");
-    let kinds: Vec<String> = after["activity"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|a| a["type"].as_str().unwrap().to_string())
-        .collect();
-    assert!(kinds.contains(&"card_repeated".to_string()), "{kinds:?}");
+    assert!(kinds(&after).contains(&"card_repeated".to_string()));
 
     let undo = format!("{path}/repeat/undo");
     assert_eq!(
@@ -213,6 +230,11 @@ async fn completing_a_weekly_card_moves_it_a_week_and_unticks_until_undone() {
     let back = detail(&w, id).await;
     assert_eq!(back["due_at"], due);
     assert_eq!(back["start_at"], due - 86_400);
+    assert_eq!(
+        back["checklists"][0]["items"][1]["due_at"],
+        due - 3600,
+        "undo moves item dates back"
+    );
     let ticks: Vec<bool> = back["checklists"][0]["items"]
         .as_array()
         .unwrap()
@@ -226,6 +248,29 @@ async fn completing_a_weekly_card_moves_it_a_week_and_unticks_until_undone() {
             .status(),
         StatusCode::CONFLICT,
         "only the last completion can be undone"
+    );
+
+    let first = req(
+        &w.app,
+        &w.boss,
+        Method::PATCH,
+        &path,
+        Some(json!({ "done": true })),
+    )
+    .await;
+    let second = req(
+        &w.app,
+        &w.boss,
+        Method::PATCH,
+        &path,
+        Some(json!({ "done": true })),
+    )
+    .await;
+    assert_eq!(first["repeated"]["to"], due + WEEK);
+    assert_eq!(
+        second["repeated"]["to"],
+        due + 2 * WEEK,
+        "the reopened card repeats again from its new date"
     );
 }
 
@@ -248,7 +293,7 @@ async fn a_late_card_moves_past_today_and_plain_cards_just_complete() {
         &w.boss,
         Method::PATCH,
         &path,
-        Some(json!({ "done": true })),
+        Some(json!({ "done": true, "title": "Daily notes" })),
     )
     .await;
     let next = res["repeated"]["to"].as_i64().unwrap();
@@ -257,6 +302,12 @@ async fn a_late_card_moves_past_today_and_plain_cards_just_complete() {
         "next due is the next day after now"
     );
     assert_eq!((next - due) % 86_400, 0, "keeps the time of day");
+    let d = detail(&w, late).await;
+    assert_eq!(d["title"], "Daily notes");
+    assert!(
+        kinds(&d).contains(&"card_updated".to_string()),
+        "the rename sent with the completion is recorded"
+    );
 
     let plain = card(&w, "One-off").await;
     let res = call(
@@ -272,30 +323,40 @@ async fn a_late_card_moves_past_today_and_plain_cards_just_complete() {
 
     let undated = card(&w, "No date").await;
     let upath = format!("{C}/boards/{}/cards/{undated}", w.board);
-    req(
-        &w.app,
-        &w.boss,
-        Method::PATCH,
-        &upath,
-        Some(json!({ "recurrence": "monthly" })),
-    )
-    .await;
     assert_eq!(
         call(
             &w.app,
             &w.boss,
             Method::PATCH,
             &upath,
-            Some(json!({ "done": true }))
+            Some(json!({ "recurrence": "monthly" }))
         )
         .await
         .status(),
-        StatusCode::NO_CONTENT
+        StatusCode::BAD_REQUEST,
+        "repeating needs a due date"
     );
+    req(
+        &w.app,
+        &w.boss,
+        Method::PATCH,
+        &upath,
+        Some(json!({ "recurrence": "monthly", "due_at": now() + 86_400 })),
+    )
+    .await;
+    assert_eq!(detail(&w, undated).await["recurrence"], "monthly");
+    req(
+        &w.app,
+        &w.boss,
+        Method::PATCH,
+        &upath,
+        Some(json!({ "due_at": null })),
+    )
+    .await;
     assert_eq!(
-        detail(&w, undated).await["done"],
-        true,
-        "without a due date there is nothing to repeat"
+        detail(&w, undated).await["recurrence"],
+        Value::Null,
+        "removing the due date stops the repeat"
     );
 
     for bad in [
@@ -311,13 +372,4 @@ async fn a_late_card_moves_past_today_and_plain_cards_just_complete() {
             "{bad}"
         );
     }
-    req(
-        &w.app,
-        &w.boss,
-        Method::PATCH,
-        &upath,
-        Some(json!({ "recurrence": null })),
-    )
-    .await;
-    assert_eq!(detail(&w, undated).await["recurrence"], Value::Null);
 }

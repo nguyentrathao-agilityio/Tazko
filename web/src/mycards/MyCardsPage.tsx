@@ -6,7 +6,8 @@ import { dueState, labelStyle, shortDate, type DueBucket } from '@/card/look'
 import { ENTER } from '@/keys/keyNames'
 import { boardApiOf, cardRoute, ME_API } from '@/paths'
 import { useRun } from '@/projects/useRun'
-import { ruleText, useToggleDone } from '@/card/repeat'
+import { RepeatBadge } from '@/card/RepeatBadge'
+import { useToggleDone } from '@/card/repeat'
 import { EmptyState } from '@/ui/EmptyState'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { Icon } from '@/ui/Icon'
@@ -75,11 +76,7 @@ function Row({
 function CardBadges({ card }: { card: MyCard }) {
   return (
     <>
-      {card.recurrence && (
-        <span className="bdg" title={t('repeat.badge', { rule: ruleText(card.recurrence) })}>
-          <Icon name="repeat" />
-        </span>
-      )}
+      <RepeatBadge rule={card.recurrence} />
       {card.labels.map((l) => (
         <span key={l.id} className="lb" style={labelStyle(l.color)}>
           {l.name}

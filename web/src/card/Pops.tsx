@@ -198,7 +198,7 @@ export function DatesPop({
       </div>
       <div className="field">
         <label htmlFor="dt-rp">{t('repeat.label')}</label>
-        <select id="dt-rp" value={rule} onChange={(e) => setRule(e.target.value)} style={{ width: '100%' }}>
+        <select id="dt-rp" value={d ? rule : ''} disabled={!d} onChange={(e) => setRule(e.target.value)} style={{ width: '100%' }}>
           <option value="">{t('repeat.none')}</option>
           {RULES.map((r) => (
             <option key={r} value={r}>
@@ -209,7 +209,7 @@ export function DatesPop({
         <small className="hint">{t('repeat.hint')}</small>
       </div>
       <div className="row" style={{ marginTop: 12 }}>
-        <button type="button" className="btn primary sm" onClick={() => onSave({ start_at: fromInputs(s, '00:00'), due_at: fromInputs(d, tm), recurrence: rule || null })}>
+        <button type="button" className="btn primary sm" onClick={() => onSave({ start_at: fromInputs(s, '00:00'), due_at: fromInputs(d, tm), recurrence: (d && rule) || null })}>
           {t('boardMenu.save')}
         </button>
         <button type="button" className="btn sm" onClick={() => onSave({ start_at: null, due_at: null, recurrence: null })}>

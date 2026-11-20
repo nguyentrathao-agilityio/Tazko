@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
 import { Toaster } from '@/ui/Toaster'
 import { DatesPop } from '@/card/Pops'
+import { describe as describeEvent } from '@/card/activity'
 
 type Call = { url: string; method: string; body?: unknown }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -49,6 +50,17 @@ describe('repeat in the dates popover', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     expect(onSave.mock.calls[2][0]).toEqual({ start_at: null, due_at: null, recurrence: null })
   })
+
+  it('needs a due date before a card can repeat', () => {
+    const onSave = vi.fn()
+    render(<DatesPop start={null} due={null} recurrence={null} onSave={onSave} />)
+    expect((screen.getByLabelText('Repeat') as HTMLSelectElement).disabled).toBe(true)
+  })
+
+  it('describes a repeat in the activity', () => {
+    const entry = { id: 1, type: 'card_repeated', payload: { rule: 'weekly', from: DUE, to: DUE + 7 * 86_400 }, created_at: 0, actor: null }
+    expect(describeEvent(entry as never, { people: [], labels: [], lists: [] } as never)).toMatch(/^completed this card; it repeats every week, next due /)
+  })
 })
 
 describe('completing a repeating card', () => {
@@ -80,8 +92,11 @@ describe('completing a repeating card', () => {
     expect(within(tile).getByTitle('Repeats every week')).toBeTruthy()
     expect(within((screen.getByText('One-off').closest('.cd') as HTMLElement)).queryByTitle(/^Repeats/)).toBeNull()
 
-    fireEvent.click(within(tile).getByRole('checkbox', { name: 'Mark complete' }))
+    const box = within(tile).getByRole('checkbox', { name: 'Mark complete' })
+    fireEvent.click(box)
+    fireEvent.click(box)
     await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21', method: 'PATCH', body: { done: true, tz_offset: -new Date().getTimezoneOffset() } }))
+    expect(calls.filter((c) => c.method === 'PATCH').length).toBe(1)
     expect(await screen.findByText(/^Done\. Repeats every week\. Next due /)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21/repeat/undo', method: 'POST', body: undefined }))
