@@ -1,5 +1,5 @@
 import type { BoardPerson, Label, ListData } from '@/board/types'
-import { isStale } from '@/card/aging'
+import { isStale, type Aging } from '@/card/aging'
 import { DAY, dueBucket, dueBucketOrder, labelColors, type DueBucket } from '@/card/look'
 
 export type Bar = { key: string; name: string; value: number; color?: string; person?: string }
@@ -26,7 +26,7 @@ export type Stats = {
   votes: Bar[]
 }
 
-export function boardStats(lists: ListData[], people: BoardPerson[], labels: Label[], dueName: (b: DueBucket) => string, unassigned: string, now = Date.now() / 1000, staleDays = 7): Stats {
+export function boardStats(lists: ListData[], people: BoardPerson[], labels: Label[], dueName: (b: DueBucket) => string, unassigned: string, aging?: Aging, now = Date.now() / 1000): Stats {
   const due = new Map<DueBucket, number>()
   const byMember = new Map<number, number>()
   const byLabel = new Map<number, number>()
@@ -43,7 +43,7 @@ export function boardStats(lists: ListData[], people: BoardPerson[], labels: Lab
     const members = (c.members ?? []).filter((m) => known.has(m))
     for (const m of members) bump(byMember, m)
     for (const l of c.labels ?? []) bump(byLabel, l)
-    if (isStale(c, staleDays, now)) stale += 1
+    if (isStale(c, aging, now)) stale += 1
     if (!members.length) none += 1
   }
 

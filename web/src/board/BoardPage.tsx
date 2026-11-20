@@ -21,7 +21,8 @@ import { BoardLists } from '@/board/BoardLists'
 import type { ListActions } from '@/board/ListColumn'
 import type { BoardData, CardData, ListData } from '@/board/types'
 import { CardDialog } from '@/card/CardDialog'
-import { active, applyFilter, emptyFilter, toggleMine, type Filter } from '@/board/filter'
+import { active, applyFilter, emptyFilter, toggleHideStale, toggleMine, type Filter } from '@/board/filter'
+import { agingOf } from '@/card/aging'
 import { FilterPop } from '@/board/FilterPop'
 import { Tools } from '@/ui/Tools'
 import { isTyping, popoverOpen } from '@/ui/typing'
@@ -84,8 +85,9 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   const [adding, setAdding] = useState(false)
   const [composing, setComposing] = useState<number | null>(null)
   const [filter, setFilter] = useState<Filter>(emptyFilter)
+  const aging = useMemo(() => (board ? agingOf(board) : undefined), [board])
   const labelNames = useMemo(() => new Map((board?.labels ?? []).map((l) => [l.id, l.name])), [board])
-  const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames, board.aging_days) : []), [board, filter, me, labelNames])
+  const shownLists = useMemo(() => (board ? applyFilter(board.lists, filter, me, labelNames, aging) : []), [board, filter, me, labelNames, aging])
 
   const settings = useSettings()
   const [tick, setTick] = useState(0)
@@ -237,7 +239,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         help: boardActions.help,
         toggleMine: () => setFilter((f) => toggleMine(f)),
         toggleHideDone: () => setFilter((f) => ({ ...f, hideDone: !f.hideDone })),
-        toggleHideStale: () => setFilter((f) => ({ ...f, hideStale: !f.hideStale, stale: false })),
+        toggleHideStale: () => setFilter(toggleHideStale),
         openFilter: boardActions.filter,
         clearFilter: () => setFilter(emptyFilter),
         noCard: () => toast(t('palette.noCard')),
@@ -284,7 +286,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           density={settings.zen_density}
           onMine={() => setFilter((f) => toggleMine(f))}
           onHideDone={() => setFilter((f) => ({ ...f, hideDone: !f.hideDone }))}
-          onHideStale={() => setFilter((f) => ({ ...f, hideStale: !f.hideStale, stale: false }))}
+          onHideStale={() => setFilter(toggleHideStale)}
           onDensity={personal.setDensity}
           onSearch={personal.search}
           onPalette={palette.show}
@@ -433,7 +435,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
         onToggleDone={(c) => toggleDone(base, c)}
         onVote={boardActions.vote}
-        aging={{ on: Boolean(board.aging), days: board.aging_days ?? 7 }}
+        aging={aging}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         selected={keys.selected}
         after={
@@ -553,7 +555,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
       )}
       {pop?.kind === 'filter' && (
         <Popover anchor={pop.at} title={t('filter.title')} width={340} onClose={() => setPop(null)}>
-          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} fields={board.fields} staleDays={board.aging_days} />
+          <FilterPop filter={filter} onChange={setFilter} people={board.people} labels={board.labels} fields={board.fields} aging={aging} />
         </Popover>
       )}
       {pop?.kind === 'access' && (

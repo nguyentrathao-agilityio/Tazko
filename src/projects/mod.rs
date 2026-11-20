@@ -515,6 +515,7 @@ async fn update(
 ) -> Result<axum::http::StatusCode, ApiError> {
     let by = project.writing(&headers, Act::Manage)?;
     let mut info = project.info.clone();
+    let before = project.info.clone();
     if let Some(n) = &body.name {
         info.name = crate::admin::validate::name(n).ok_or_else(|| bad("enter a project name"))?;
     }
@@ -603,6 +604,15 @@ async fn update(
                     "aging_days": info.aging_days,
                 }),
             )?;
+            if (before.voting, before.aging, before.aging_days) != (info.voting, info.aging, info.aging_days) {
+                let boards: Vec<i64> = tx
+                    .prepare("SELECT id FROM boards WHERE project_id = ?1 AND closed_at IS NULL")?
+                    .query_map([id], |r| r.get(0))?
+                    .collect::<Result<_, _>>()?;
+                for b in boards {
+                    events::record(&tx, by, "card_settings_changed", At::board(id, b), json!({ "voting": info.voting, "aging": info.aging, "aging_days": info.aging_days }))?;
+                }
+            }
             tx.commit()?;
             Ok(())
         })

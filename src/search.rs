@@ -190,7 +190,7 @@ async fn search(
             if p.stale {
                 args.push(Sql::Integer(now()));
                 sql.push_str(&format!(
-                    " AND k.done = 0 AND k.updated_at <= ?{} - pr.aging_days * 86400",
+                    " AND pr.aging = 1 AND k.done = 0 AND k.is_template = 0 AND k.updated_at <= ?{} - pr.aging_days * 86400",
                     args.len()
                 ));
             }

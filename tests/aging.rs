@@ -157,11 +157,31 @@ async fn aging_is_a_project_setting_and_is_stale_finds_quiet_open_cards() {
     req(
         &app,
         &boss,
+        Method::POST,
+        &format!("{C}/boards/{b}/cards/{}/links", ids[1]),
+        Some(json!({ "card": ids[3], "kind": "relates" })),
+    )
+    .await;
+    assert!(
+        stale(&app, &dev).await.is_empty(),
+        "linking cards counts as activity on both"
+    );
+    age(&app, ids[3], 40).await;
+    let before = req(&app, &dev, Method::GET, &format!("{C}/boards/{b}"), None).await["last_event"]
+        .as_i64()
+        .unwrap();
+    req(
+        &app,
+        &boss,
         Method::PATCH,
         &format!("{C}/projects/{project}"),
         Some(json!({ "aging_days": 30 })),
     )
     .await;
+    let after = req(&app, &dev, Method::GET, &format!("{C}/boards/{b}"), None).await["last_event"]
+        .as_i64()
+        .unwrap();
+    assert!(after > before, "open boards hear about the new setting");
     assert_eq!(stale(&app, &dev).await, ["Old"]);
     req(
         &app,
@@ -179,6 +199,10 @@ async fn aging_is_a_project_setting_and_is_stale_finds_quiet_open_cards() {
         Some(json!({ "aging": false })),
     )
     .await;
+    assert!(
+        stale(&app, &dev).await.is_empty(),
+        "nothing is stale while aging is off"
+    );
     let board = req(&app, &boss, Method::GET, &format!("{C}/boards/{b}"), None).await;
     assert_eq!(
         (board["aging"].clone(), board["aging_days"].clone()),

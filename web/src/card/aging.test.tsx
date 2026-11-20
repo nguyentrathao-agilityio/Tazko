@@ -45,8 +45,8 @@ describe('aging levels', () => {
     expect([1, 7, 14, 21].map((d) => ageLevel({ updated_at: NOW - d * DAY }, on, NOW))).toEqual([0, 1, 2, 3])
     expect(ageLevel({ updated_at: NOW - 30 * DAY, done: true }, on, NOW)).toBe(0)
     expect(ageLevel({ updated_at: NOW - 30 * DAY }, { on: false, days: 7 }, NOW)).toBe(0)
-    expect(isStale({ updated_at: NOW - 7 * DAY }, 7, NOW)).toBe(true)
-    expect(isStale({ updated_at: NOW - 7 * DAY, done: true }, 7, NOW)).toBe(false)
+    expect(isStale({ updated_at: NOW - 7 * DAY }, { on: true, days: 7 }, NOW)).toBe(true)
+    expect(isStale({ updated_at: NOW - 7 * DAY, done: true }, { on: true, days: 7 }, NOW)).toBe(false)
   })
 })
 

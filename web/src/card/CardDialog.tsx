@@ -20,7 +20,7 @@ import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop }
 import { FieldsSection } from '@/card/Fields'
 import { LinkPop, LinksSection } from '@/card/Links'
 import { ruleText, useToggleDone } from '@/card/repeat'
-import { ageLevel, quietDays } from '@/card/aging'
+import { ageLevel, agingOf, quietDays } from '@/card/aging'
 import { useVote } from '@/card/vote'
 import { ItemBadges, ItemMetaPop } from '@/card/ItemMeta'
 import { MentionBox } from '@/card/MentionBox'
@@ -190,7 +190,7 @@ export function CardDialog({
                   · <b style={{ color: 'var(--warn)' }}>{t('card.archivedNote')}</b>
                 </>
               )}
-              {summary && ageLevel(summary, { on: Boolean(board.aging), days: board.aging_days ?? 7 }) > 0 && (
+              {summary && ageLevel(summary, agingOf(board)) > 0 && (
                 <>
                   {' '}
                   ·{' '}

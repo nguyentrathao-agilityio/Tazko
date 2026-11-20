@@ -8,6 +8,7 @@ import { useRun } from '@/projects/useRun'
 import { isOwner } from '@/roles'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { SwitchRow } from '@/ui/SwitchRow'
+import { AGING_DAYS } from '@/card/aging'
 import { projectApi } from '@/paths'
 
 export function ProjectSettings({ company, project, onSaved }: { company: Company; project: ProjectView; onSaved: () => void }) {
@@ -87,7 +88,7 @@ export function ProjectSettings({ company, project, onSaved }: { company: Compan
             <div className="field" style={{ marginTop: 12 }}>
               <label htmlFor="ag-d">{t('aging.after')}</label>
               <select id="ag-d" value={project.aging_days} style={{ maxWidth: 260 }} onChange={(e) => void patch({ aging_days: Number(e.target.value) })}>
-                {[3, 7, 14, 30].map((n) => (
+                {AGING_DAYS.map((n) => (
                   <option key={n} value={n}>
                     {n === 7 ? t('aging.default') : t('aging.days', { n })}
                   </option>

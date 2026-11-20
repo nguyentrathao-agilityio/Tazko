@@ -3,6 +3,7 @@ import type { BoardData, ListData } from '@/board/types'
 import { t } from '@/i18n'
 import { Avatar } from '@/ui/people'
 import { type Bar, boardStats } from '@/dashboard/stats'
+import { agingOf } from '@/card/aging'
 
 function Bars({ rows }: { rows: Bar[] }) {
   const most = Math.max(1, ...rows.map((r) => r.value))
@@ -25,7 +26,7 @@ function Bars({ rows }: { rows: Bar[] }) {
 }
 
 export function Dashboard({ board, lists }: { board: BoardData; lists: ListData[] }) {
-  const s = useMemo(() => boardStats(lists, board.people, board.labels, (b) => t(`dash.due.${b}`), t('dash.unassigned'), undefined, board.aging_days), [lists, board.people, board.labels, board.aging_days])
+  const s = useMemo(() => boardStats(lists, board.people, board.labels, (b) => t(`dash.due.${b}`), t('dash.unassigned'), agingOf(board)), [lists, board])
   const stat = (label: string, value: number, color?: string) => (
     <div className="dstat">
       <small>{label}</small>
@@ -40,7 +41,7 @@ export function Dashboard({ board, lists }: { board: BoardData; lists: ListData[
         {stat(t('dash.complete'), s.done)}
         {stat(t('dash.overdue'), s.overdue, 'var(--bad)')}
         {stat(t('dash.soon'), s.soon, 'var(--warn)')}
-        {stat(t('dash.stale'), s.stale)}
+        {board.aging && stat(t('dash.stale'), s.stale)}
       </div>
       <div className="dgrid">
         <section className="dcard" aria-label={t('dash.perList')}>
