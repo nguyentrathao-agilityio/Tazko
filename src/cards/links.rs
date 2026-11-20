@@ -54,7 +54,7 @@ fn reachable(c: &Connection, project: i64, card: i64, user: i64) -> rusqlite::Re
     c.query_row(
         &format!(
             "SELECT b.id FROM cards k JOIN boards b ON b.id = k.board_id
-             WHERE k.id = ?1 AND b.project_id = ?3 AND k.archived_at IS NULL AND k.is_template = 0 AND {VISIBLE}"
+             WHERE k.id = ?1 AND b.project_id = ?3 AND k.archived_at IS NULL AND k.is_template = 0 AND b.closed_at IS NULL AND {VISIBLE}"
         ),
         params![card, user, project],
         |r| r.get(0),

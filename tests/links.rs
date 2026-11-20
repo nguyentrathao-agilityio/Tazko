@@ -270,6 +270,16 @@ async fn links_only_reach_cards_the_person_can_see() {
     let hidden = card(&w, secret, "Hidden blocker").await;
     let far = card(&w, elsewhere, "Other project card").await;
     let archived = card(&w, one, "Archived card").await;
+    let shut = board(&w, w.project, "Closed").await;
+    let closed = card(&w, shut, "On a closed board").await;
+    req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/boards/{}/close", shut.0),
+        None,
+    )
+    .await;
     req(
         &w.app,
         &w.boss,
@@ -292,6 +302,7 @@ async fn links_only_reach_cards_the_person_can_see() {
         (&w.dev, hidden, StatusCode::NOT_FOUND),
         (&w.boss, far, StatusCode::NOT_FOUND),
         (&w.boss, archived, StatusCode::NOT_FOUND),
+        (&w.boss, closed, StatusCode::NOT_FOUND),
         (&w.boss, a, StatusCode::BAD_REQUEST),
         (&w.viewer, hidden, StatusCode::FORBIDDEN),
     ] {
