@@ -1,3 +1,5 @@
+import { EmailInviteOption } from '@/invite/EmailInviteOption'
+import { invitedMessage, wantsEmail, type InviteResult } from '@/invite/invite'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
@@ -627,11 +629,10 @@ function Share({ company, board, onDone }: { company: Company; board: BoardData;
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const email = String(f.get('email') ?? '').trim()
-    void run(() => api('POST', `${projectApi(company.slug, board.project.id)}/invites`, { email, role: String(f.get('role')) })).then((ok) => {
-      if (ok) {
-        toast(t('toast.invited', { email: email.toLowerCase() }))
-        onDone()
-      }
+    void run(async () => {
+      const res = await api<InviteResult>('POST', `${projectApi(company.slug, board.project.id)}/invites`, { email, role: String(f.get('role')), send_email: wantsEmail(f) })
+      toast(invitedMessage(res, email, 'project.toastAdded'))
+      onDone()
     })
   }
 
@@ -651,6 +652,9 @@ function Share({ company, board, onDone }: { company: Company; board: BoardData;
           <option value="observer">{t('projectRole.observer')}</option>
           {board.can.manage && <option value="owner">{t('projectRole.owner')}</option>}
         </select>
+      </div>
+      <div className="field">
+        <EmailInviteOption />
       </div>
       {error && (
         <p className="error" role="alert">

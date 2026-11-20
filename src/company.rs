@@ -126,6 +126,8 @@ async fn settings(
 struct NewInvite {
     email: String,
     role: String,
+    #[serde(default)]
+    send_email: bool,
 }
 
 async fn invite(
@@ -138,22 +140,28 @@ async fn invite(
     let email = validate::email(&body.email).ok_or_else(|| bad(admin::INVALID_EMAIL))?;
     let role = admin::company_role(&body.role)?;
     let slug = owner.0.slug.clone();
+    let mail = crate::mail::InviteMail::new(&state, &owner.0.user.0, body.send_email);
     let outcome = state
         .dbs
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
             let o = admin::org(&tx, &slug)?.ok_or(DbError::Closed)?;
-            let res = admin::invite_or_add(&tx, &o, &email, role, by, false)?;
-            if res.is_ok() {
-                tx.commit()?;
+            if let Err(msg) = admin::invite_or_add(&tx, &o, &email, role, by, false)? {
+                return Ok(Err(msg));
             }
 
-            Ok(res)
+            let sent = mail.queue(&tx, &email, &o.name, None, o.id, by)?;
+            tx.commit()?;
+            Ok(Ok(sent))
         })
         .await?;
     Ok(match outcome {
-        Ok(_) => (StatusCode::CREATED, Json(json!({ "result": "invited" }))).into_response(),
+        Ok(sent) => (
+            StatusCode::CREATED,
+            Json(sent.json("invited", &state.settings.public_url)),
+        )
+            .into_response(),
         Err(msg) => admin::conflict(msg),
     })
 }

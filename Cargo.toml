@@ -18,6 +18,7 @@ jsonwebtoken = { version = "10", default-features = false, features = ["rust_cry
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 rusqlite = { version = "0.37", features = ["bundled", "backup"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls-platform-verifier = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11.1"

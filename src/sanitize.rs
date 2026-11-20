@@ -45,6 +45,12 @@ const DROP_CONTENT: &[&str] = &[
     "head",
 ];
 
+pub fn escape_html(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    escape_text(&mut out, s);
+    out
+}
+
 fn escape_text(out: &mut String, s: &str) {
     for c in s.chars() {
         match c {
