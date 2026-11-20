@@ -1,11 +1,13 @@
+pub mod email;
 pub mod live;
 pub mod mentions;
+pub mod prefs;
 
 use std::collections::HashMap;
 use std::time::Duration;
 
 use axum::Router;
-use axum::extract::{Path, Query};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Json;
 use axum::routing::{get, post, put};
@@ -25,7 +27,7 @@ use crate::tenant::Company;
 pub const DUE_SOON: i64 = 24 * 60 * 60;
 pub const LIST_LIMIT: i64 = 50;
 
-const CAN_SEE: &str = "EXISTS (SELECT 1 FROM boards b
+pub(crate) const CAN_SEE: &str = "EXISTS (SELECT 1 FROM boards b
        JOIN projects p ON p.id = b.project_id
        JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = n.user_id
       WHERE b.id = n.board_id AND p.deleted_at IS NULL AND p.archived_at IS NULL
@@ -110,40 +112,74 @@ pub fn card_added(c: &Connection, board: i64, card: i64, actor: i64) -> rusqlite
     Ok(sent)
 }
 
-const DUE_CANDIDATES: &str = "FROM card_members m
+const DUE_CANDIDATES: &str = "SELECT m.user_id, k.board_id, k.id, k.due_at FROM card_members m
        JOIN cards k ON k.id = m.card_id
        JOIN boards b ON b.id = k.board_id
        JOIN projects p ON p.id = b.project_id
        JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = m.user_id
-      WHERE k.done = 0 AND k.archived_at IS NULL AND k.due_at > ?1 AND k.due_at <= ?1 + ?2
+      WHERE k.done = 0 AND k.archived_at IS NULL AND k.due_at > ?1 - ?3 AND k.due_at <= ?1 + ?2
         AND p.deleted_at IS NULL AND p.archived_at IS NULL
         AND (b.restricted = 0 OR EXISTS (SELECT 1 FROM board_access x WHERE x.board_id = b.id AND x.user_id = m.user_id))
         AND NOT EXISTS (SELECT 1 FROM notifications o
                          WHERE o.kind = 'due' AND o.user_id = m.user_id AND o.card_id = k.id AND o.due_at = k.due_at)";
 
-pub async fn due_soon(db: &Database, now: i64) -> Result<usize, ApiError> {
-    let waiting: i64 = db
+const LONGEST_REMINDER: i64 = 2 * 86_400;
+const AT_DUE_GRACE: i64 = 3600;
+
+pub fn reminder_due(due_at: i64, lead: i64, now: i64) -> bool {
+    if lead == 0 {
+        due_at <= now
+    } else {
+        due_at - lead <= now
+    }
+}
+
+pub async fn due_soon(state: &AppState, db: &Database, now: i64) -> Result<usize, ApiError> {
+    let candidates: Vec<(i64, i64, i64, i64)> = db
         .read(move |c| {
-            Ok(c.query_row(
-                &format!("SELECT count(*) {DUE_CANDIDATES}"),
-                params![now, DUE_SOON],
-                |r| r.get(0),
-            )?)
+            let mut stmt = c.prepare(DUE_CANDIDATES)?;
+            let rows = stmt
+                .query_map(params![now, LONGEST_REMINDER, AT_DUE_GRACE], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
         })
         .await?;
-    if waiting == 0 {
+    if candidates.is_empty() {
+        return Ok(0);
+    }
+
+    let mut users: Vec<i64> = candidates.iter().map(|c| c.0).collect();
+    users.sort_unstable();
+    users.dedup();
+    let leads = state
+        .dbs
+        .control()
+        .read(move |c| Ok(prefs::reminders(c, &users)?))
+        .await?;
+    let ready: Vec<_> = candidates
+        .into_iter()
+        .filter(|(user, _, _, due)| {
+            reminder_due(*due, leads.get(user).copied().unwrap_or(DUE_SOON), now)
+        })
+        .collect();
+    if ready.is_empty() {
         return Ok(0);
     }
 
     Ok(db
         .write(move |c| {
-            Ok(c.execute(
-                &format!(
-                    "INSERT OR IGNORE INTO notifications (user_id, kind, board_id, card_id, due_at)
-                     SELECT m.user_id, 'due', k.board_id, k.id, k.due_at {DUE_CANDIDATES}"
-                ),
-                params![now, DUE_SOON],
-            )?)
+            let tx = c.transaction()?;
+            let mut made = 0;
+            for (user, board, card, due) in ready {
+                made += tx.execute(
+                    "INSERT OR IGNORE INTO notifications (user_id, kind, board_id, card_id, due_at) VALUES (?1, 'due', ?2, ?3, ?4)",
+                    params![user, board, card, due],
+                )?;
+            }
+            tx.commit()?;
+            Ok(made)
         })
         .await?)
 }
@@ -153,7 +189,7 @@ pub const DUE_CHECK_EVERY: Duration = Duration::from_secs(5 * 60);
 pub async fn due_soon_all(state: &AppState, now: i64) -> usize {
     let mut sent = 0;
     for (slug, db) in crate::tenant::active_tenants(state).await {
-        match due_soon(&db, now).await {
+        match due_soon(state, &db, now).await {
             Ok(n) => sent += n,
             Err(e) => eprintln!("tazko: due-date alerts failed for {slug}: {e:?}"),
         }
@@ -169,9 +205,9 @@ pub async fn due_soon_job(state: AppState) {
     }
 }
 
-pub fn unread(c: &Connection, user: i64) -> rusqlite::Result<i64> {
+pub fn unread(c: &Connection, user: i64, hidden: &[&'static str]) -> rusqlite::Result<i64> {
     c.query_row(
-        &format!("SELECT count(*) FROM notifications n WHERE n.user_id = ?1 AND n.read_at IS NULL AND {CAN_SEE}"),
+        &format!("SELECT count(*) FROM notifications n WHERE n.user_id = ?1 AND n.read_at IS NULL AND {CAN_SEE}{}", prefs::hidden_clause(hidden)),
         [user],
         |r| r.get(0),
     )
@@ -182,7 +218,12 @@ struct ListQuery {
     unread: Option<String>,
 }
 
-fn rows(c: &Connection, user: i64, only_unread: bool) -> rusqlite::Result<Vec<Value>> {
+fn rows(
+    c: &Connection,
+    user: i64,
+    only_unread: bool,
+    hidden: &[&'static str],
+) -> rusqlite::Result<Vec<Value>> {
     let mut stmt = c.prepare(&format!(
         "SELECT n.id, n.kind, n.actor_id, coalesce(nullif(a.name, ''), a.email, ''), a.email,
                 n.card_id, k.title, n.board_id, b.name, n.created_at, n.read_at IS NOT NULL, n.due_at, n.item_text
@@ -190,8 +231,9 @@ fn rows(c: &Connection, user: i64, only_unread: bool) -> rusqlite::Result<Vec<Va
          JOIN cards k ON k.id = n.card_id
          JOIN boards b ON b.id = n.board_id
          LEFT JOIN people a ON a.id = n.actor_id
-         WHERE n.user_id = ?1 AND (?2 = 0 OR n.read_at IS NULL) AND {CAN_SEE}
-         ORDER BY n.id DESC LIMIT ?3"
+         WHERE n.user_id = ?1 AND (?2 = 0 OR n.read_at IS NULL) AND {CAN_SEE}{}
+         ORDER BY n.id DESC LIMIT ?3",
+        prefs::hidden_clause(hidden)
     ))?;
     stmt.query_map(params![user, only_unread, LIST_LIMIT], |r| {
         let actor: Option<i64> = r.get(2)?;
@@ -213,12 +255,30 @@ fn rows(c: &Connection, user: i64, only_unread: bool) -> rusqlite::Result<Vec<Va
     .collect()
 }
 
-async fn list(co: Company, Query(q): Query<ListQuery>) -> Result<Json<Value>, ApiError> {
+pub async fn hidden_for(state: &AppState, user: i64) -> Result<Vec<&'static str>, ApiError> {
+    Ok(state
+        .dbs
+        .control()
+        .read(move |c| Ok(prefs::Prefs::load(c, user)?.hidden()))
+        .await?)
+}
+
+async fn list(
+    State(state): State<AppState>,
+    co: Company,
+    Query(q): Query<ListQuery>,
+) -> Result<Json<Value>, ApiError> {
     let user = co.user.0.user_id;
     let only_unread = q.unread.is_some_and(|v| v != "0");
+    let hidden = hidden_for(&state, user).await?;
     let (items, count) = co
         .db
-        .read(move |c| Ok((rows(c, user, only_unread)?, unread(c, user)?)))
+        .read(move |c| {
+            Ok((
+                rows(c, user, only_unread, &hidden)?,
+                unread(c, user, &hidden)?,
+            ))
+        })
         .await?;
     Ok(Json(json!({ "notifications": items, "unread": count })))
 }

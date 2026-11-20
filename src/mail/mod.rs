@@ -29,13 +29,17 @@ const INVITES_PER_ADDRESS_PER_DAY: i64 = 3;
 const INVITES_PER_COMPANY_PER_HOUR: i64 = 50;
 const TESTS_PER_HOUR: i64 = 5;
 
+#[derive(Default)]
 pub struct Outgoing {
     pub kind: &'static str,
     pub to: String,
     pub subject: String,
     pub lines: Vec<String>,
+    pub items: Vec<(String, String)>,
     pub link: String,
     pub button: &'static str,
+    pub footer: Vec<(String, String)>,
+    pub unsubscribe: Option<String>,
     pub org: Option<i64>,
     pub by: Option<i64>,
 }
@@ -52,40 +56,70 @@ fn count(c: &Connection, sql: &str, p: impl rusqlite::Params) -> rusqlite::Resul
     c.query_row(sql, p, |r| r.get(0))
 }
 
-fn html(lines: &[String], link: &str, button: &str) -> String {
-    let body: String = lines
+const P: &str = "<p style=\"margin:0 0 14px\">";
+
+pub fn bodies(mail: &Outgoing) -> (String, String) {
+    let mut text: Vec<String> = mail.lines.clone();
+    if !mail.items.is_empty() {
+        text.push(
+            mail.items
+                .iter()
+                .map(|(t, l)| format!("- {t}\n  {l}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+    }
+    text.push(format!("{}: {}", mail.button, mail.link));
+    for (t, l) in &mail.footer {
+        text.push(format!("{t}: {l}"));
+    }
+
+    let mut body: String = mail
+        .lines
         .iter()
-        .map(|l| format!("<p style=\"margin:0 0 14px\">{}</p>", escape_html(l)))
+        .map(|l| format!("{P}{}</p>", escape_html(l)))
         .collect();
-    let (link, button) = (escape_html(link), escape_html(button));
-    format!(
+    if !mail.items.is_empty() {
+        body.push_str("<ul style=\"margin:0 0 14px;padding-left:20px\">");
+        for (t, l) in &mail.items {
+            body.push_str(&format!(
+                "<li style=\"margin:0 0 8px\"><a href=\"{}\" style=\"color:#4f46e5\">{}</a></li>",
+                escape_html(l),
+                escape_html(t)
+            ));
+        }
+        body.push_str("</ul>");
+    }
+    let (link, button) = (escape_html(&mail.link), escape_html(mail.button));
+    let footer: String = mail
+        .footer
+        .iter()
+        .map(|(t, l)| {
+            format!(
+                "<a href=\"{}\" style=\"color:#6b6b80\">{}</a>",
+                escape_html(l),
+                escape_html(t)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let html = format!(
         "<!doctype html><html><body style=\"margin:0;padding:24px;background:#f6f6fb;font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d1d2b\">\
 <div style=\"max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px\">\
 <p style=\"margin:0 0 18px;font-weight:700;font-size:18px\">Tazko</p>{body}\
 <p style=\"margin:22px 0\"><a href=\"{link}\" style=\"background:#4f46e5;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block\">{button}</a></p>\
-<p style=\"margin:0;color:#6b6b80;font-size:13px\">{link}</p></div></body></html>"
-    )
+<p style=\"margin:0;color:#6b6b80;font-size:13px\">{link}</p>\
+<p style=\"margin:14px 0 0;color:#6b6b80;font-size:13px\">{footer}</p></div></body></html>"
+    );
+    (text.join("\n\n") + "\n", html)
 }
 
 pub fn enqueue(c: &Connection, mail: &Outgoing) -> rusqlite::Result<i64> {
-    let text = format!(
-        "{}\n\n{}: {}\n",
-        mail.lines.join("\n\n"),
-        mail.button,
-        mail.link
-    );
+    let (text, html) = bodies(mail);
     c.execute(
-        "INSERT INTO email_queue (kind, to_addr, subject, body_text, body_html, org_id, created_by)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            mail.kind,
-            mail.to,
-            mail.subject,
-            text,
-            html(&mail.lines, &mail.link, mail.button),
-            mail.org,
-            mail.by
-        ],
+        "INSERT INTO email_queue (kind, to_addr, subject, body_text, body_html, org_id, created_by, unsubscribe_url)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![mail.kind, mail.to, mail.subject, text, html, mail.org, mail.by, mail.unsubscribe],
     )?;
     Ok(c.last_insert_rowid())
 }
@@ -150,6 +184,7 @@ impl InviteMail {
             button: "Sign in with Google",
             org: Some(org),
             by: Some(by),
+            ..Default::default()
         }
     }
 
@@ -261,6 +296,7 @@ async fn send_test(
                     button: "Open the admin console",
                     org: None,
                     by: Some(by),
+                    ..Default::default()
                 },
             )?;
             Ok(Some(to))
@@ -279,6 +315,7 @@ struct Due {
     text: String,
     html: String,
     attempts: i64,
+    unsubscribe: Option<String>,
 }
 
 pub async fn job(state: AppState) {
@@ -325,6 +362,7 @@ fn send_one(smtp: &Smtp, d: &Due) -> Result<(), smtp::Failure> {
         text: &d.text,
         html: &d.html,
         date: now(),
+        unsubscribe: d.unsubscribe.as_deref(),
     }
     .render()
     .ok_or_else(|| smtp::Failure::Permanent("the recipient address is not valid".into()))?;
@@ -341,12 +379,12 @@ pub async fn deliver_due(state: &AppState, at: i64) -> crate::db::DbResult<usize
         .control()
         .read(move |c| {
             let mut stmt = c.prepare(
-                "SELECT id, to_addr, subject, body_text, body_html, attempts FROM email_queue
+                "SELECT id, to_addr, subject, body_text, body_html, attempts, unsubscribe_url FROM email_queue
                  WHERE status = 'pending' AND next_attempt_at <= ?1 ORDER BY next_attempt_at, id LIMIT ?2",
             )?;
             let rows = stmt
                 .query_map(params![at, SEND_BATCH], |r| {
-                    Ok(Due { id: r.get(0)?, to: r.get(1)?, subject: r.get(2)?, text: r.get(3)?, html: r.get(4)?, attempts: r.get(5)? })
+                    Ok(Due { id: r.get(0)?, to: r.get(1)?, subject: r.get(2)?, text: r.get(3)?, html: r.get(4)?, attempts: r.get(5)?, unsubscribe: r.get(6)? })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
@@ -421,7 +459,7 @@ mod tests {
         assert_eq!(mail.subject, "You are invited to Acme & Co on Tazko");
         assert!(!invite.inviter.contains("://") && !invite.inviter.contains("www.evil"));
         assert!(invite.inviter.chars().count() <= 60);
-        let page = html(&mail.lines, &mail.link, mail.button);
+        let page = bodies(&mail).1;
         assert!(page.contains("Lan &lt;script&gt; Bcc: x@y. z"));
         assert!(page.contains("the Web project in Acme &amp; Co"));
         assert!(!page.contains("<script>"));

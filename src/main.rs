@@ -161,6 +161,7 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
     tokio::spawn(tazko::notifications::due_soon_job(state.clone()));
     tokio::spawn(tazko::webhooks::worker::job(state.clone()));
     tokio::spawn(tazko::mail::job(state.clone()));
+    tokio::spawn(tazko::notifications::email::job(state.clone()));
     if let Err(e) = axum::serve(listener, tazko::http::router(state.clone()))
         .with_graceful_shutdown(shutdown())
         .await

@@ -19,6 +19,7 @@ enum Kind {
     Zoom,
     Text(usize),
     TimeZone,
+    Hour,
 }
 
 const KEYS: &[(&str, Kind)] = &[
@@ -40,6 +41,19 @@ const KEYS: &[(&str, Kind)] = &[
     ("date_format", Kind::Choice(&["MDY", "DMY", "ISO"])),
     ("time_format", Kind::Choice(&["12", "24"])),
     ("week_start", Kind::Choice(&["mon", "sun", "sat"])),
+    ("notify_mention_app", Kind::Bool),
+    ("notify_mention_email", Kind::Bool),
+    ("notify_assigned_app", Kind::Bool),
+    ("notify_assigned_email", Kind::Bool),
+    ("notify_card_added_app", Kind::Bool),
+    ("notify_card_added_email", Kind::Bool),
+    ("notify_due_email", Kind::Bool),
+    (
+        "email_frequency",
+        Kind::Choice(&["instant", "hourly", "daily", "never"]),
+    ),
+    ("due_reminder", Kind::Choice(&["at", "1h", "1d", "2d"])),
+    ("daily_hour_utc", Kind::Hour),
 ];
 
 pub fn defaults() -> Map<String, Value> {
@@ -59,6 +73,16 @@ pub fn defaults() -> Map<String, Value> {
         ("date_format", json!("MDY")),
         ("time_format", json!("12")),
         ("week_start", json!("mon")),
+        ("notify_mention_app", json!(true)),
+        ("notify_mention_email", json!(true)),
+        ("notify_assigned_app", json!(true)),
+        ("notify_assigned_email", json!(true)),
+        ("notify_card_added_app", json!(true)),
+        ("notify_card_added_email", json!(false)),
+        ("notify_due_email", json!(true)),
+        ("email_frequency", json!("instant")),
+        ("due_reminder", json!("1d")),
+        ("daily_hour_utc", json!(1)),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
@@ -91,6 +115,7 @@ fn check(key: &str, value: &Value) -> Result<(), ApiError> {
             .as_str()
             .is_some_and(|t| t.chars().count() <= max && !t.chars().any(char::is_control)),
         Kind::TimeZone => value.as_str().is_some_and(valid_time_zone),
+        Kind::Hour => value.as_i64().is_some_and(|h| (0..24).contains(&h)),
     };
     if ok {
         Ok(())
@@ -116,6 +141,18 @@ pub fn load(c: &Connection, user: i64) -> rusqlite::Result<Map<String, Value>> {
         }
     }
     Ok(out)
+}
+
+pub fn set(c: &Connection, user: i64, key: &str, value: Value) -> Result<(), ApiError> {
+    check(key, &value)?;
+    let mut current = load(c, user)?;
+    current.insert(key.to_string(), value);
+    c.execute(
+        "INSERT INTO user_settings (user_id, settings, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (user_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at",
+        params![user, Value::Object(current).to_string(), now()],
+    )?;
+    Ok(())
 }
 
 pub fn routes() -> Router<AppState> {

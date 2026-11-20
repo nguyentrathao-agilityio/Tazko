@@ -25,9 +25,14 @@ async fn run(state: AppState, co: Company, session: String, mut socket: WebSocke
     let db = co.db.clone();
     let control = state.dbs.control().clone();
     let still_in = || still_signed_in(&control, &session, org, user);
+    let hidden = super::hidden_for(&state, user).await.unwrap_or_default();
     let count = || {
-        let db = db.clone();
-        async move { db.read(move |c| Ok(super::unread(c, user)?)).await.ok() }
+        let (db, hidden) = (db.clone(), hidden.clone());
+        async move {
+            db.read(move |c| Ok(super::unread(c, user, &hidden)?))
+                .await
+                .ok()
+        }
     };
     let mut changes = db.subscribe();
     let mut last = count().await.unwrap_or(0);

@@ -46,8 +46,14 @@ pub fn clean(text: &str) -> String {
 }
 
 pub fn name(text: &str) -> String {
+    safe(text, 60)
+}
+
+pub fn safe(text: &str, limit: usize) -> String {
     let mut out = String::new();
-    let chars: Vec<char> = clean_to(&text.replace("://", " "), 200).chars().collect();
+    let chars: Vec<char> = clean_to(&text.replace("://", " "), limit + 100)
+        .chars()
+        .collect();
     for (i, c) in chars.iter().enumerate() {
         out.push(*c);
         let joins = |j: Option<&char>| j.is_some_and(|c| c.is_alphanumeric());
@@ -60,7 +66,7 @@ pub fn name(text: &str) -> String {
     }
     out.trim_end()
         .chars()
-        .take(60)
+        .take(limit)
         .collect::<String>()
         .trim_end()
         .to_string()
@@ -158,6 +164,7 @@ pub struct Message<'a> {
     pub text: &'a str,
     pub html: &'a str,
     pub date: i64,
+    pub unsubscribe: Option<&'a str>,
 }
 
 impl Message<'_> {
@@ -181,6 +188,15 @@ impl Message<'_> {
         ] {
             out.push_str(&format!("{name}: {value}\r\n"));
         }
+        if let Some(url) = self
+            .unsubscribe
+            .filter(|u| !u.contains(['\r', '\n', '<', '>', ' ']))
+        {
+            out.push_str(&format!(
+                "List-Unsubscribe: <{url}>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n"
+            ));
+        }
+
         out.push_str("\r\n");
         for (kind, body) in [("text/plain", self.text), ("text/html", self.html)] {
             out.push_str(&format!(
@@ -221,12 +237,14 @@ mod tests {
             text: "body",
             html: "<p>body</p>",
             date: 0,
+            unsubscribe: Some("https://t.example/u?t=a.b"),
         }
         .render()
         .unwrap();
         let head = msg.split("\r\n\r\n").next().unwrap();
         assert!(!head.contains("\r\nBcc:") && !head.contains("\nX:"));
         assert!(head.contains("Subject: Hi Bcc: evil@example.com X: y"));
+        assert!(head.contains("List-Unsubscribe: <https://t.example/u?t=a.b>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click"));
         assert!(
             Message {
                 to: "a@b.com\r\nBcc: c@d.com",
@@ -236,7 +254,8 @@ mod tests {
                     subject: "",
                     text: "",
                     html: "",
-                    date: 0
+                    date: 0,
+                    unsubscribe: None,
                 }
             }
             .render()
