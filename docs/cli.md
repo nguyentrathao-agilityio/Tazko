@@ -17,11 +17,11 @@ tazko auth login --host https://<server>
 ```
 
 1. The program asks the server for a one-time code (`POST /api/v1/cli/device`) and prints it, for example `WDJB-MJHT`.
-2. It opens `https://<server>/cli/authorize?code=WDJB-MJHT` in the browser (or prints the address with `--no-browser`). The signed-in person checks that the code matches, sees which computer is asking and what the program will be able to do, and presses **Authorize** or **Cancel**. A token cannot approve a sign-in; it takes a browser session.
+2. It opens `https://<server>/cli/authorize` in the browser (or prints the address with `--no-browser`). The signed-in person types the code from their terminal; the code is never carried in a link, so nobody can send someone a ready-made approval link. The page then shows the computer name the program gave (marked as what it says it is), what the program will be able to do, and a warning to continue only for a sign-in they started themselves; they press **Authorize** or **Cancel**. A token cannot approve a sign-in; it takes a browser session.
 3. The program asks every 5 seconds (`POST /api/v1/cli/token`). After approval it receives a personal token once: scope "read and write cards", valid 90 days, named "Command line on <computer>", listed under Settings → Access tokens where it can be revoked. Codes expire after 10 minutes and can be used once.
 4. The token is saved in `~/.config/tazko/token` (or `$XDG_CONFIG_HOME/tazko`, `%APPDATA%\tazko` on Windows, or `TAZKO_CONFIG_DIR`). The folder is readable only by you (0700) and the file too (0600). The token is never printed, except by `tazko auth token`, which exists for scripts. The server address goes in `config.json` next to it.
 
-`TAZKO_TOKEN` and `TAZKO_HOST` override the stored token and server, for scripts and CI. The server address must be `https://`; plain `http://` is only allowed for `localhost` and `127.0.0.1`.
+`TAZKO_TOKEN` and `TAZKO_HOST` override the stored token and server, for scripts and CI. The stored token is only ever sent to the server it was issued by: pointing a command at another server with `--host` or `TAZKO_HOST` asks you to sign in there instead. The server address must be `https://`; plain `http://` is only allowed for `localhost` and `127.0.0.1`.
 
 `tazko auth logout` deletes the stored token on this computer. Revoke the token under Settings, Access tokens to stop it working everywhere.
 

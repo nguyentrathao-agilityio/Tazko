@@ -64,8 +64,12 @@ async fn the_device_code_flow_hands_out_one_token_after_approval() {
     let code = start["user_code"].as_str().unwrap().to_string();
     let device = start["device_code"].as_str().unwrap().to_string();
     assert_eq!(
-        start["verification_uri_complete"],
-        format!("http://localhost:8791/cli/authorize?code={code}")
+        start["verification_uri"],
+        "http://localhost:8791/cli/authorize"
+    );
+    assert!(
+        start.get("verification_uri_complete").is_none(),
+        "the code is typed, not carried in a link"
     );
 
     assert_eq!(
@@ -371,6 +375,11 @@ async fn the_command_line_signs_in_through_the_browser_and_makes_a_card() {
     );
     assert!(!ok && !err.is_empty());
 
+    let (ok, _, err) = tazko(dir.path(), "http://127.0.0.1:9", &["board", "list"]);
+    assert!(
+        !ok && err.contains("not signed in to http://127.0.0.1:9"),
+        "the stored token only goes to its own server: {err}"
+    );
     let (ok, _, _) = tazko(dir.path(), &host, &["auth", "logout"]);
     assert!(ok && !token_file.exists());
 }

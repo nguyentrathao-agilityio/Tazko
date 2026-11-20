@@ -8,7 +8,7 @@ use serde_json::json;
 use crate::state::AppState;
 use crate::web::{self, Asset};
 
-const RESERVED: [&str; 4] = ["/api/", "/auth/", "/cli/", "/ws"];
+const RESERVED: [&str; 3] = ["/api/", "/auth/", "/ws"];
 
 pub fn router(state: AppState) -> Router {
     Router::new()

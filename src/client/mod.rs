@@ -95,6 +95,7 @@ fn agent() -> ureq::Agent {
 impl Api {
     fn new(host_flag: Option<&str>, need_token: bool) -> Res<Api> {
         let cfg = store::load();
+        let stored_for = cfg.host.as_deref().and_then(|h| normalise_host(h).ok());
         let host = host_flag
             .map(str::to_string)
             .or_else(|| std::env::var("TAZKO_HOST").ok())
@@ -103,12 +104,20 @@ impl Api {
                 Fail::SignIn("not signed in; run tazko auth login --host <server>".into())
             })?;
         let host = normalise_host(&host)?;
-        let token = std::env::var("TAZKO_TOKEN")
-            .ok()
-            .filter(|t| !t.is_empty())
-            .or_else(store::read_token);
+        let token = if need_token {
+            std::env::var("TAZKO_TOKEN")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .or_else(|| {
+                    store::read_token().filter(|_| stored_for.as_deref() == Some(host.as_str()))
+                })
+        } else {
+            None
+        };
         if need_token && token.is_none() {
-            return Err(Fail::SignIn("not signed in; run tazko auth login".into()));
+            return Err(Fail::SignIn(format!(
+                "not signed in to {host}; run tazko auth login --host {host}"
+            )));
         }
 
         Ok(Api {
@@ -425,16 +434,14 @@ fn login(host: Option<String>, no_browser: bool) -> Res<()> {
         .as_str()
         .ok_or("the server did not send a code")?
         .to_string();
-    let url = start["verification_uri_complete"]
-        .as_str()
-        .unwrap_or_default();
+    let url = start["verification_uri"].as_str().unwrap_or_default();
     let interval = start["interval"].as_u64().unwrap_or(5).max(1);
     let expires = start["expires_in"].as_u64().unwrap_or(600);
     eprintln!("! First copy your one-time code: {code}");
     if no_browser || !open_in_browser(url) {
-        eprintln!("Open {url} in your browser and approve the sign-in.");
+        eprintln!("Open {url} in your browser, enter the code and approve the sign-in.");
     } else {
-        eprintln!("Opening {url} in your browser...");
+        eprintln!("Opening {url} in your browser; enter the code there...");
     }
 
     let mut wait = interval;

@@ -87,7 +87,11 @@ async fn start(
         .write(move |c| {
             let tx = c.transaction()?;
             tx.execute("DELETE FROM device_codes WHERE expires_at < ?1", [at - 3600])?;
-            let waiting: i64 = tx.query_row("SELECT count(*) FROM device_codes WHERE expires_at > ?1 AND approved_at IS NULL", [at], |r| r.get(0))?;
+            let waiting: i64 = tx.query_row(
+                "SELECT count(*) FROM device_codes WHERE expires_at > ?1 AND approved_at IS NULL AND denied_at IS NULL AND used_at IS NULL",
+                [at],
+                |r| r.get(0),
+            )?;
             if waiting >= MAX_WAITING {
                 return Ok(None);
             }
@@ -109,7 +113,6 @@ async fn start(
         "device_code": device,
         "user_code": code,
         "verification_uri": format!("{}/cli/authorize", state.settings.public_url),
-        "verification_uri_complete": format!("{}/cli/authorize?code={code}", state.settings.public_url),
         "expires_in": LIFETIME,
         "interval": INTERVAL,
     })))

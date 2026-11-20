@@ -41,23 +41,33 @@ function open(path: string) {
   )
 }
 
+async function enter(code: string) {
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Code from your terminal' }), { target: { value: code } })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+}
+
 describe('command line sign-in', () => {
-  it('shows the code and the device, and approves', async () => {
-    open('/cli/authorize?code=wdjb-mjht')
-    expect(await screen.findByText(/A program on trung-laptop \(linux\) is asking to sign in as you/)).toBeTruthy()
-    expect(screen.getByText('WDJB-MJHT')).toBeTruthy()
+  it('asks for the code instead of trusting one in the link, then approves', async () => {
+    open('/cli/authorize?code=WDJB-MJHT')
+    expect(await screen.findByRole('heading', { name: 'Sign in the command line' })).toBeTruthy()
+    expect((screen.getByRole('textbox', { name: 'Code from your terminal' }) as HTMLInputElement).value).toBe('')
+    await enter('wdjb mjht')
+    expect(await screen.findByText(/A program that says it is on trung-laptop \(linux\) is asking to sign in as you/)).toBeTruthy()
+    expect(screen.getByText(/Never enter a code someone else sent you/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Authorize' }))
     expect(await screen.findByRole('heading', { name: 'You are signed in' })).toBeTruthy()
     expect(calls.some((c) => c.method === 'POST' && c.url === '/api/v1/cli/device/WDJB-MJHT/approve')).toBe(true)
   })
 
   it('cancels, and says when a code is unknown', async () => {
-    open('/cli/authorize?code=WDJB-MJHT')
+    open('/cli/authorize')
+    await enter('WDJB-MJHT')
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
     expect(await screen.findByRole('heading', { name: 'Sign-in cancelled' })).toBeTruthy()
     cleanup()
     device = null
-    open('/cli/authorize?code=WDJB-MJHT')
+    open('/cli/authorize')
+    await enter('WDJB-MJHT')
     await waitFor(() => expect(screen.getByText(/This code is not known/)).toBeTruthy())
     expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull()
   })
