@@ -59,7 +59,7 @@
     font-size: 0.88rem;
   }
 
-  .tb th {
+  table.tb th {
     position: sticky;
     top: 0;
     z-index: 3;
@@ -76,17 +76,17 @@
     color: var(--muted);
   }
 
-  .tb th:hover {
+  table.tb th:hover {
     background: var(--accent-soft);
   }
 
-  .tb th .sa {
+  table.tb th .sa {
     font-style: normal;
     color: var(--accent);
     font-size: 0.7rem;
   }
 
-  .tb td {
+  table.tb td {
     padding: 5px 10px;
     border-bottom: 1px solid var(--line);
     vertical-align: middle;
@@ -94,40 +94,40 @@
     background: var(--surface);
   }
 
-  .tb td:first-child,
-  .tb th:first-child {
+  table.tb td:first-child,
+  table.tb th:first-child {
     position: sticky;
     left: 0;
     z-index: 2;
     box-shadow: 1px 0 0 var(--line);
   }
 
-  .tb th:first-child {
+  table.tb th:first-child {
     z-index: 4;
   }
 
-  .tb tr:hover td,
-  .tb tr.sel td {
+  table.tb tr:hover td,
+  table.tb tr.sel td {
     background: var(--accent-soft);
   }
 
-  .tb tr.gh td {
+  table.tb tr.gh td {
     background: var(--sunken);
     font-weight: 700;
     position: sticky;
     left: 0;
   }
 
-  .tb tr.addrow td {
+  table.tb tr.addrow td {
     background: var(--surface);
   }
 
-  .tb .tt {
+  table.tb .tt {
     min-width: 300px;
     max-width: 380px;
   }
 
-  .tb .tl {
+  table.tb .tl {
     border: 0;
     background: none;
     color: var(--ink);
@@ -142,33 +142,33 @@
     max-width: 280px;
   }
 
-  .tb .tl:hover {
+  table.tb .tl:hover {
     color: var(--accent);
     text-decoration: underline;
   }
 
-  .tb .tl.dn {
+  table.tb .tl.dn {
     color: var(--muted);
     text-decoration: line-through;
   }
 
-  .tb .chk {
+  table.tb .chk {
     width: 18px;
     opacity: 1;
     margin: 0;
   }
 
-  .tb input[type='checkbox'] {
+  table.tb input[type='checkbox'] {
     width: 16px;
     height: 16px;
     accent-color: var(--accent);
     flex: none;
   }
 
-  .tb input[type='date'],
-  .tb input[type='number'],
-  .tb input[type='text'],
-  .tb select {
+  table.tb input[type='date'],
+  table.tb input[type='number'],
+  table.tb input[type='text'],
+  table.tb select {
     height: 30px;
     font-size: 0.85rem;
     border: 1px solid transparent;
@@ -179,37 +179,37 @@
     color: var(--ink);
   }
 
-  .tb input[type='date']:hover,
-  .tb input[type='number']:hover,
-  .tb input[type='text']:hover,
-  .tb select:hover {
+  table.tb input[type='date']:hover,
+  table.tb input[type='number']:hover,
+  table.tb input[type='text']:hover,
+  table.tb select:hover {
     border-color: var(--line);
   }
 
-  .tb input.d-bad {
+  table.tb input.d-bad {
     color: var(--bad);
     font-weight: 600;
   }
 
-  .tb input.d-warn {
+  table.tb input.d-warn {
     color: var(--warn);
     font-weight: 600;
   }
 
-  .tb input.d-ok {
+  table.tb input.d-ok {
     color: var(--ok);
   }
 
-  .tb .num {
+  table.tb .num {
     text-align: right;
   }
 
-  .tb .addb {
+  table.tb .addb {
     width: 24px;
     height: 24px;
   }
 
-  .tb .row {
+  table.tb .row {
     flex-wrap: nowrap;
     gap: 8px;
   }
