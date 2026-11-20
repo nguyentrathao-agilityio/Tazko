@@ -320,6 +320,13 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
                 "SELECT id, title, position FROM lists WHERE board_id = ?1 AND archived_at IS NULL ORDER BY position",
             )?;
             let mut cards = crate::cards::summaries(c, id)?;
+            let flags = crate::cards::links::board_flags(c, id, user)?;
+            for card in cards.values_mut().flatten() {
+                if let Some((links, blocked)) = card["id"].as_i64().and_then(|k| flags.get(&k)) {
+                    card["links"] = json!(links);
+                    card["blocked"] = json!(blocked);
+                }
+            }
             let lists = stmt
                 .query_map([id], |r| {
                     let list: i64 = r.get(0)?;

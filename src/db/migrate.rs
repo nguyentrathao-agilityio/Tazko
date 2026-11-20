@@ -131,6 +131,11 @@ pub static TENANT: Migrations = Migrations {
             name: "0016_events_by_card.sql",
             sql: include_str!("../../migrations/tenant/0016_events_by_card.sql"),
         },
+        Migration {
+            version: 17,
+            name: "0017_card_links.sql",
+            sql: include_str!("../../migrations/tenant/0017_card_links.sql"),
+        },
     ],
 };
 

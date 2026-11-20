@@ -28,6 +28,8 @@ export type CardData = {
   attachments?: number
   is_template?: boolean
   recurrence?: string | null
+  links?: number
+  blocked?: boolean
   updated_at?: number
   fields?: Record<string, FieldValue>
   comments?: number

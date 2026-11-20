@@ -3,6 +3,7 @@ import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
 import { appendAfter } from '@/board/order'
+import { cardRoute } from '@/paths'
 import { Icon } from '@/ui/Icon'
 import { Link, type Go } from '@/ui/Link'
 import { displayName } from '@/ui/names'
@@ -573,7 +574,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           onClose={() => go(boardPath)}
           onChanged={reload}
           tick={tick}
-          onOpenCard={(c) => go(`${boardPath}/c/${c}`)}
+          onOpenCard={(c, b) => go(b && b !== id ? cardRoute(company.slug, b, c) : `${boardPath}/c/${c}`)}
         />
       )}
       {menu && (

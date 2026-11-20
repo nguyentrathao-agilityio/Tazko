@@ -66,6 +66,10 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'reopened a checklist item'
     case 'item_changed':
       return 'changed a checklist item'
+    case 'link_added':
+      return 'linked this card to another card'
+    case 'link_removed':
+      return 'removed a link to another card'
     case 'card_repeated':
       return `completed this card; it repeats ${ruleText(str(p.rule))}, next due ${shortDate(Number(p.to))}`
     case 'card_repeat_undone':

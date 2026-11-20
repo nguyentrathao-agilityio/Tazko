@@ -18,6 +18,7 @@ import { AttachPop, AttachmentsSection } from '@/card/Attachments'
 import { fileUrl } from '@/card/files'
 import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop } from '@/card/Pops'
 import { FieldsSection } from '@/card/Fields'
+import { LinkPop, LinksSection } from '@/card/Links'
 import { ruleText, useToggleDone } from '@/card/repeat'
 import { ItemBadges, ItemMetaPop } from '@/card/ItemMeta'
 import { MentionBox } from '@/card/MentionBox'
@@ -25,7 +26,7 @@ import { Reactions } from '@/card/Reactions'
 import { CommentText } from '@/card/Rich'
 import type { CardDetail, Checklist, Comment } from '@/card/types'
 
-type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist' | 'attach'
+type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist' | 'attach' | 'links'
 type Pop = { kind: PopKind; at: Anchor } | null
 
 const ITEMS_SHOWN = 6
@@ -50,7 +51,7 @@ export function CardDialog({
   tick?: number
   onClose: () => void
   onChanged: () => void
-  onOpenCard?: (id: number) => void
+  onOpenCard?: (id: number, board?: number) => void
 }) {
   const path = `${base}/cards/${cardId}`
   const { data: card, error: loadError, reload } = useLoad(() => api<CardDetail>('GET', path), path)
@@ -303,6 +304,15 @@ export function CardDialog({
                 </button>
               </div>
             )}
+            <LinksSection
+              card={card}
+              base={base}
+              here={board.id}
+              edit={edit}
+              run={run}
+              onAdd={(el) => setPop({ kind: 'links', at: anchorOf(el) })}
+              onOpen={(l) => onOpenCard?.(l.card.id, l.board.id)}
+            />
             <AttachmentsSection card={card} base={base} edit={edit} run={run} onAdd={(el) => setPop({ kind: 'attach', at: anchorOf(el) })} />
           </div>
           <aside className="cm-cm" aria-label={t('card.commentsAndActivity')}>
@@ -426,6 +436,17 @@ export function CardDialog({
               }
             />
           )}
+          {pop.kind === 'links' && (
+            <LinkPop
+              base={base}
+              card={card.id}
+              onLink={(target, kind) =>
+                void run(() => api('POST', `${path}/links`, { card: target, kind })).then((ok) => {
+                  if (ok) close()
+                })
+              }
+            />
+          )}
           {pop.kind === 'attach' && (
             <AttachPop
               base={base}
@@ -465,6 +486,7 @@ function popTitle(kind: PopKind): string {
     copy: t('card.copyTitle'),
     checklist: t('card.addChecklist'),
     attach: t('attach.popTitle'),
+    links: t('links.pop'),
   }
   return titles[kind]
 }
@@ -564,6 +586,7 @@ function CardMenu({
           {item('user', t('card.members'), () => onPick('members'))}
           {item('tag', t('card.labels'), () => onPick('labels'))}
           {item('checksq', t('card.checklist'), () => onPick('checklist'))}
+          {item('link', t('links.title'), () => onPick('links'))}
           {item('clock', t('card.dates'), () => onPick('dates'))}
           {item('clip', t('attach.attachment'), () => onPick('attach'))}
           {item('image', t('card.cover'), () => onPick('cover'))}

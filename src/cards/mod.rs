@@ -1,5 +1,6 @@
 pub mod detail;
 pub mod fields;
+pub mod links;
 pub mod reactions;
 pub mod repeat;
 
@@ -39,6 +40,7 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/lists/{list}/archive-cards"), post(archive_all))
         .merge(detail::routes())
         .merge(fields::routes())
+        .merge(links::routes())
         .merge(reactions::routes())
 }
 
