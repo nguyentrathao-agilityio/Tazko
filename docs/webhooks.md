@@ -105,7 +105,7 @@ A delivery that gets no `2xx` answer is tried again after 1 minute, 5 minutes, 3
 
 ## Addresses
 
-Addresses must start with `https://` and must reach the public internet. Tazko refuses addresses that resolve to private, loopback, link-local or other internal ranges (for example `10.x`, `192.168.x`, `127.0.0.1`, `169.254.169.254`, `::1`, `fd00::/8`), addresses with a user name or password, and other schemes. The address is checked when it is saved and again at every delivery, and the connection only goes to the addresses that passed the check, so a name that later points somewhere internal is refused. Webhook connections never use a proxy from the server's environment (`HTTPS_PROXY` and similar), because a proxy would connect on its own and skip this check.
+Addresses must start with `https://` and must reach the public internet. Tazko refuses addresses that resolve to private, loopback, link-local or other internal ranges (for example `10.x`, `192.168.x`, `127.0.0.1`, `169.254.169.254`, `::1`, `fd00::/8`, IPv4-compatible `::/96`, Teredo `2001::/32`), addresses with a user name or password, and other schemes. The address is checked when it is saved and again at every delivery, and the connection only goes to the addresses that passed the check, so a name that later points somewhere internal is refused. Webhook connections never use a proxy from the server's environment (`HTTPS_PROXY` and similar), because a proxy would connect on its own and skip this check.
 
 For local development only, `TAZKO_WEBHOOKS_ALLOW_LOCAL=1` lets webhooks use `http://` and loopback addresses (`127.0.0.1`, `::1`, `localhost`). Private network ranges stay refused. Do not set it on a public server.
 
