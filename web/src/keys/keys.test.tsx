@@ -144,7 +144,7 @@ describe('keyboard shortcuts', () => {
 
     press(' ')
     await waitFor(() => expect(writes().some((c) => c.method === 'PATCH' && c.url.endsWith('/cards/21'))).toBe(true))
-    expect(writes().find((c) => c.url.endsWith('/cards/21'))?.body).toEqual({ done: true })
+    expect(writes().find((c) => c.url.endsWith('/cards/21'))?.body).toEqual({ done: true, tz_offset: expect.any(Number) })
     press('1')
     await waitFor(() => expect(writes().some((c) => c.url.endsWith('/cards/21/labels/31'))).toBe(true))
     press('x')

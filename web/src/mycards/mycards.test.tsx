@@ -144,7 +144,7 @@ describe('my cards page', () => {
     open()
     const row = (await screen.findByText('Audit nav')).closest('.mc') as HTMLElement
     fireEvent.click(within(row).getByRole('checkbox', { name: 'Mark complete' }))
-    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true } }))
+    await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')).toEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true, tz_offset: expect.any(Number) } }))
     expect(window.location.pathname).toBe('/c/acme/my-cards')
     fireEvent.keyDown(row, { key: 'Enter' })
     await waitFor(() => expect(window.location.pathname).toBe('/c/acme/b/7/c/22'))

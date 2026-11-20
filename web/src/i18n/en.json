@@ -851,5 +851,16 @@
   "mycards.items": "Checklist items ({n})",
   "mycards.itemIn": "in {card} · {board}",
   "mycards.noItemsBody": "Checklist items assigned to you show up here with their due dates.",
-  "mycards.markItem": "Mark item done"
+  "mycards.markItem": "Mark item done",
+  "repeat.daily": "every day",
+  "repeat.weekdays": "every weekday",
+  "repeat.weekly": "every week",
+  "repeat.biweekly": "every 2 weeks",
+  "repeat.monthly": "every month",
+  "repeat.label": "Repeat",
+  "repeat.none": "Does not repeat",
+  "repeat.option": "Repeats {rule}",
+  "repeat.hint": "Mark it complete and it reopens with the next due date.",
+  "repeat.toast": "Done. Repeats {rule}. Next due {date}",
+  "repeat.badge": "Repeats {rule}"
 }

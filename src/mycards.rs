@@ -36,7 +36,7 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
         "SELECT k.id, k.title, k.done, k.due_at, l.title, b.id, b.name, p.id, p.name,
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id),
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id AND i.done = 1),
-                pm.role != 'observer'
+                pm.role != 'observer', k.recurrence
          FROM card_members cm
          JOIN cards k ON k.id = cm.card_id
          {OPEN}
@@ -58,6 +58,7 @@ pub fn assigned(c: &Connection, user: i64) -> rusqlite::Result<Vec<Value>> {
                     "items": r.get::<_, i64>(9)?,
                     "items_done": r.get::<_, i64>(10)?,
                     "can_edit": r.get::<_, bool>(11)?,
+                    "recurrence": r.get::<_, Option<String>>(12)?,
                 }),
                 card,
             ))

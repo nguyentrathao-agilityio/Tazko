@@ -153,7 +153,7 @@ describe('palette on a board', () => {
     await screen.findByText('Write copy')
     fireEvent.keyDown(window, { key: 'j' })
     await choose(/^Mark "Write copy" done/)
-    await waitFor(() => expect(writes()).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21', method: 'PATCH', body: { done: true } }))
+    await waitFor(() => expect(writes()).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21', method: 'PATCH', body: { done: true, tz_offset: expect.any(Number) } }))
     await choose(/^Move "Write copy" to Done/)
     await waitFor(() => expect(writes()).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21/move', method: 'POST', body: { list_id: 12, after: 23 } }))
     await choose(/^Archive "Write copy"/)
@@ -194,7 +194,7 @@ describe('palette on a board', () => {
     openAt('/c/acme/b/7/c/22')
     await screen.findByRole('dialog', { name: 'Card' })
     await choose(/^Mark "Audit nav" done/)
-    await waitFor(() => expect(writes()).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true } }))
+    await waitFor(() => expect(writes()).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/22', method: 'PATCH', body: { done: true, tz_offset: expect.any(Number) } }))
   })
 
   it('offers no card actions for a card hidden by the filter', async () => {

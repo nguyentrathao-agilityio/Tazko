@@ -31,6 +31,7 @@ export type CardDetail = {
   fields?: Record<string, FieldValue>
   cover_image: number | null
   is_template?: boolean
+  recurrence?: string | null
   comments: Comment[]
   activity: ActivityEntry[]
   can: { edit: boolean }

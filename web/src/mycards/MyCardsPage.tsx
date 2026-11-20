@@ -6,6 +6,7 @@ import { dueState, labelStyle, shortDate, type DueBucket } from '@/card/look'
 import { ENTER } from '@/keys/keyNames'
 import { boardApiOf, cardRoute, ME_API } from '@/paths'
 import { useRun } from '@/projects/useRun'
+import { ruleText, useToggleDone } from '@/card/repeat'
 import { EmptyState } from '@/ui/EmptyState'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { Icon } from '@/ui/Icon'
@@ -74,6 +75,11 @@ function Row({
 function CardBadges({ card }: { card: MyCard }) {
   return (
     <>
+      {card.recurrence && (
+        <span className="bdg" title={t('repeat.badge', { rule: ruleText(card.recurrence) })}>
+          <Icon name="repeat" />
+        </span>
+      )}
       {card.labels.map((l) => (
         <span key={l.id} className="lb" style={labelStyle(l.color)}>
           {l.name}
@@ -111,6 +117,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
   const url = all ? `${ME_API}/cards` : `${ME_API}/cards?company=${encodeURIComponent(company.slug)}`
   const { data, error: loadError, reload } = useLoad(() => api<{ cards: MyCard[]; items?: MyItem[] }>('GET', url), url)
   const { error, run } = useRun(reload)
+  const toggleDone = useToggleDone(run)
   const cards = useMemo(() => data?.cards ?? [], [data])
   const items = useMemo(() => data?.items ?? [], [data])
   const projects = useMemo(
@@ -181,7 +188,7 @@ export function MyCardsPage({ company, go }: { company: Company; go: Go }) {
                 sub={place(c, c.project.name, c.board.name, c.list)}
                 due={c.due_at}
                 onOpen={() => go(cardRoute(c.company.slug, c.board.id, c.id))}
-                onDone={() => void run(() => api('PATCH', `${boardApiOf(c.company.slug, c.board.id)}/cards/${c.id}`, { done: !c.done }))}
+                onDone={() => toggleDone(boardApiOf(c.company.slug, c.board.id), c)}
               >
                 <CardBadges card={c} />
               </Row>
