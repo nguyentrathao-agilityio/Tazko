@@ -162,6 +162,18 @@ expect pass "no prototype-only controls" checks prototype-only
 printf 'export const t = "View as"\n' > web/src/b.ts; git add -A
 expect fail "prototype role switch built" checks prototype-only
 
+# web-paths
+new_repo webpaths; mkdir -p web/src; printf "export const companyApi = (s: string) => \`/api/v1/c/\${s}\`\n" > web/src/paths.ts
+printf "import { companyApi } from '@/paths'\nexport const x = companyApi('a')\n" > web/src/a.ts
+printf "const url = '/api/v1/me'\n" > web/src/a.test.ts; git add -A
+expect pass "paths only in paths.ts and tests" checks web-paths
+printf "export const y = \`/api/v1/c/\${1}/boards\`\n" > web/src/b.ts; git add -A
+expect fail "API path built by hand" checks web-paths
+rm web/src/b.ts; printf "export const z = (s: string) => \`/c/\${s}/b/1\`\n" > web/src/c.tsx; git add -A
+expect fail "route built by hand" checks web-paths
+rm web/src/c.tsx; printf "export const w = (b: string) => \`\${b}/c/\${2}\`\n" > web/src/d.js; git add -A
+expect fail "card route appended by hand in a JS file" checks web-paths
+
 # design
 new_repo design; mkdir -p design scripts; echo a > design/a.html; git add -A
 expect fail "no design list yet" checks design

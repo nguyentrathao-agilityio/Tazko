@@ -4,6 +4,7 @@ import { Icon } from '@/ui/Icon'
 import { anchorOf, type Anchor } from '@/ui/anchor'
 import { Popover } from '@/ui/Popover'
 import type { ListData } from '@/board/types'
+import { ESCAPE } from '@/keys/keyNames'
 
 export type ListActions = {
   rename: (list: ListData, title: string) => void
@@ -93,7 +94,7 @@ export function ListColumn({
               autoFocus
               onBlur={(e) => e.currentTarget.form?.requestSubmit()}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') {
+                if (e.key === ESCAPE) {
                   e.stopPropagation()
                   setRenaming(false)
                 }

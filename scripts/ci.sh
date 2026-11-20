@@ -15,6 +15,7 @@ step "secrets";              run "$PY" scripts/checks.py secrets
 step "commits";              run "$PY" scripts/checks.py commits
 step "no comments in source"; run "$PY" scripts/checks.py comments
 step "prototype-only controls"; run "$PY" scripts/checks.py prototype-only
+step "web paths from one file"; run "$PY" scripts/checks.py web-paths
 step "design is read-only";   run "$PY" scripts/checks.py design
 step "committed migrations unchanged"; run "$PY" scripts/checks.py migrations
 step "agent settings";        run "$PY" scripts/checks.py settings

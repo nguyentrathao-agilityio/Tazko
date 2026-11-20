@@ -7,6 +7,7 @@ import { isTyping, openSearchEvent, popoverOpen } from '@/ui/typing'
 import { shortDate } from '@/card/look'
 import { background } from '@/projects/look'
 import { ESCAPE, ENTER, ARROW_UP, ARROW_DOWN } from '@/keys/keyNames'
+import { boardApiOf, boardRoute, cardRoute, companyApi } from '@/paths'
 
 type Hit = { id: number; title: string; board: { id: number; name: string; background: string }; list: string; due_at: number | null; archived: boolean; project: string }
 type BoardHit = { id: number; name: string; background: string; project: string }
@@ -43,7 +44,7 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
   useEffect(() => {
     if (!q.trim()) return
     const timer = window.setTimeout(() => {
-      void api<Result>('GET', `/api/v1/c/${company.slug}/search?q=${encodeURIComponent(q)}`).then(
+      void api<Result>('GET', `${companyApi(company.slug)}/search?q=${encodeURIComponent(q)}`).then(
         (data) => {
           setResult({ q, data })
           setOn(0)
@@ -56,12 +57,12 @@ function SearchDialog({ company, go, onClose }: { company: Company; go: Go; onCl
   }, [q, company.slug])
 
   const data = q.trim() && result ? result.data : null
-  const boardBackground = (bg: string, board: number) => background(bg, `/api/v1/c/${company.slug}/boards/${board}`)
+  const boardBackground = (bg: string, board: number) => background(bg, boardApiOf(company.slug, board))
   const hits: { key: string; to: string; title: string; sub: string; bg: string }[] = [
-    ...(data?.boards ?? []).map((b) => ({ key: `b${b.id}`, to: `/c/${company.slug}/b/${b.id}`, title: b.name, sub: b.project, bg: boardBackground(b.background, b.id) })),
+    ...(data?.boards ?? []).map((b) => ({ key: `b${b.id}`, to: boardRoute(company.slug, b.id), title: b.name, sub: b.project, bg: boardBackground(b.background, b.id) })),
     ...(data?.cards ?? []).map((c) => ({
       key: `c${c.id}`,
-      to: `/c/${company.slug}/b/${c.board.id}/c/${c.id}`,
+      to: cardRoute(company.slug, c.board.id, c.id),
       title: c.title,
       sub: [c.board.name, c.archived ? t('search.archived') : c.list, c.due_at ? t('search.due', { date: shortDate(c.due_at) }) : ''].filter(Boolean).join(' · '),
       bg: boardBackground(c.board.background, c.board.id),

@@ -11,6 +11,7 @@ import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
 import { FieldsPage } from '@/card/Fields'
 import type { BoardData } from '@/board/types'
+import { ESCAPE } from '@/keys/keyNames'
 
 type Page = 'main' | 'about' | 'bg' | 'tpl' | 'fields' | 'arch' | 'access' | 'copy' | 'activity'
 
@@ -33,7 +34,7 @@ export function BoardMenu({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === ESCAPE) onClose()
     }
     window.addEventListener('keydown', onKey)
 

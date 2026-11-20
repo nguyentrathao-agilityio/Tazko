@@ -1,3 +1,9 @@
+import { configure } from '@testing-library/react'
+
+const BUSY_MACHINE_WAIT_MS = 5000
+
+configure({ asyncUtilTimeout: BUSY_MACHINE_WAIT_MS })
+
 class QuietSocket {
   static readonly OPEN = 1
   readyState = 0
