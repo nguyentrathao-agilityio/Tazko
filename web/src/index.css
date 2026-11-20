@@ -14,6 +14,7 @@
 @import './table/table.css';
 @import './dashboard/dashboard.css';
 @import './mycards/mycards.css';
+@import './palette/palette.css';
 
 body {
   margin: 0;

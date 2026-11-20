@@ -6,6 +6,7 @@ import { ESCAPE } from '@/keys/keyNames'
 const keys: [string, MessageKey][] = [
   ['` ?', 'keys.help'],
   ['Z', 'keys.zen'],
+  ['Ctrl K', 'keys.palette'],
   ['/', 'keys.search'],
   ['F', 'keys.filter'],
   ['Q', 'keys.mine'],

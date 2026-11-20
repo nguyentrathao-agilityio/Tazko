@@ -24,7 +24,10 @@ import { active, applyFilter, emptyFilter, toggleMine, type Filter } from '@/boa
 import { FilterPop } from '@/board/FilterPop'
 import { Tools } from '@/ui/Tools'
 import { isTyping, openSearchEvent, popoverOpen } from '@/ui/typing'
-import { useBoardKeys } from '@/keys/useBoardKeys'
+import { useBoardKeys, type KeyActions } from '@/keys/useBoardKeys'
+import { Palette } from '@/palette/Palette'
+import { usePalette } from '@/palette/usePalette'
+import { boardCommands } from '@/palette/commands'
 import { Shortcuts } from '@/keys/Shortcuts'
 import { saveSettings, useSettings } from '@/settings/store'
 import { ZenStrip } from '@/zen/ZenStrip'
@@ -92,6 +95,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
   })
   const zen = settings.zen
   const [help, setHelp] = useState(false)
+  const palette = usePalette()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -116,38 +120,39 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
 
   const boardRoot = `/c/${company.slug}/b/${id}`
   const boardBase = view === 'board' ? boardRoot : `${boardRoot}/${view}`
+  const boardActions: KeyActions = {
+    open: (c) => go(`${boardBase}/c/${c.id}`),
+    goToCard: (c) => go(`${boardBase}/c/${c.id}`, true),
+    quick: (c) => setPop({ kind: 'quick', at: anchorFor(c), card: c }),
+    done: (c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done })),
+    pop: (kind, c) => setPop({ kind: `k-${kind}`, at: anchorFor(c), card: c }),
+    archive: (c) =>
+      void run(() => api('POST', `${base}/cards/${c.id}/archive`)).then((ok) => {
+        if (ok) toast(t('card.archived'), () => run(() => api('POST', `${base}/cards/${c.id}/restore`)))
+      }),
+    label: (c, index) => {
+      const label = board?.labels[index]
+      if (label) void run(() => api('PUT', `${base}/cards/${c.id}/labels/${label.id}`, { on: !(c.labels ?? []).includes(label.id) }))
+    },
+    compose: (list) => setComposing(list),
+    filter: () => {
+      const el = document.querySelector('[data-filter]')
+      if (el) setPop({ kind: 'filter', at: anchorOf(el) })
+    },
+    zen: () => setZen(!zen),
+    help: () => setHelp((h) => !h),
+    leaveZen: () => {
+      if (!zen) return false
+      setZen(false)
+      return true
+    },
+  }
   const keys = useBoardKeys({
     lists: view === 'board' ? shownLists : [],
     edit: Boolean(board?.can.edit),
     cardOpen: cardId,
     zen,
-    actions: {
-      open: (c) => go(`${boardBase}/c/${c.id}`),
-      goToCard: (c) => go(`${boardBase}/c/${c.id}`, true),
-      quick: (c) => setPop({ kind: 'quick', at: anchorFor(c), card: c }),
-      done: (c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done })),
-      pop: (kind, c) => setPop({ kind: `k-${kind}`, at: anchorFor(c), card: c }),
-      archive: (c) =>
-        void run(() => api('POST', `${base}/cards/${c.id}/archive`)).then((ok) => {
-          if (ok) toast(t('card.archived'), () => run(() => api('POST', `${base}/cards/${c.id}/restore`)))
-        }),
-      label: (c, index) => {
-        const label = board?.labels[index]
-        if (label) void run(() => api('PUT', `${base}/cards/${c.id}/labels/${label.id}`, { on: !(c.labels ?? []).includes(label.id) }))
-      },
-      compose: (list) => setComposing(list),
-      filter: () => {
-        const el = document.querySelector('[data-filter]')
-        if (el) setPop({ kind: 'filter', at: anchorOf(el) })
-      },
-      zen: () => setZen(!zen),
-      help: () => setHelp((h) => !h),
-      leaveZen: () => {
-        if (!zen) return false
-        setZen(false)
-        return true
-      },
-    },
+    actions: boardActions,
   })
   const collapsed = useCollapsed(id)
 
@@ -201,6 +206,49 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
       }),
   }
 
+  const commands = () => {
+    const selectedId = keys.selected ?? cardId
+    const card = lists.flatMap((l) => l.cards).find((c) => c.id === selectedId) ?? null
+    return boardCommands(
+      {
+        boardRoot,
+        view,
+        zen,
+        edit,
+        mine: filter.members.includes('me'),
+        hideDone: Boolean(filter.hideDone),
+        filtered: active(filter),
+        card,
+        lists,
+        zenToggle: boardActions.zen,
+        newCard: () => {
+          if (view !== 'board') go(boardRoot)
+          setComposing((lists.find((l) => l.cards.some((c) => c.id === card?.id)) ?? lists[0])?.id ?? null)
+        },
+        help: boardActions.help,
+        toggleMine: () => setFilter((f) => toggleMine(f)),
+        toggleHideDone: () => setFilter((f) => ({ ...f, hideDone: !f.hideDone })),
+        openFilter: boardActions.filter,
+        clearFilter: () => setFilter(emptyFilter),
+        noCard: () => toast(t('palette.noCard')),
+        done: boardActions.done,
+        pop: boardActions.pop,
+        move: (c, l) => void run(() => api('POST', `${base}/cards/${c.id}/move`, { list_id: l.id, after: appendAfter(lists, l.id, c.id) })),
+        archive: boardActions.archive,
+        open: boardActions.open,
+      },
+      {
+        density: settings.zen_density,
+        quiet: settings.zen_quiet,
+        setDensity: (d) => void saveSettings({ zen_density: d }).catch(() => undefined),
+        toggleQuiet: () => void saveSettings({ zen_quiet: !settings.zen_quiet }).catch(() => undefined),
+        search: () => window.dispatchEvent(new Event(openSearchEvent)),
+        go,
+        companyRoot: `/c/${company.slug}`,
+      },
+    )
+  }
+
   const addCards = (l: ListData, titles: string[]) =>
     run(() => api('POST', `${base}/cards`, titles.length === 1 ? { list_id: l.id, title: titles[0] } : { list_id: l.id, titles }))
 
@@ -231,6 +279,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           onHideDone={() => setFilter((f) => ({ ...f, hideDone: !f.hideDone }))}
           onDensity={(d) => void saveSettings({ zen_density: d }).catch(() => undefined)}
           onSearch={() => window.dispatchEvent(new Event(openSearchEvent))}
+          onPalette={palette.show}
           onExit={() => setZen(false)}
         />
       )}
@@ -465,6 +514,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         </Popover>
       )}
       {help && <Shortcuts onClose={() => setHelp(false)} />}
+      {palette.open && <Palette items={commands()} onClose={palette.close} />}
       {pop?.kind === 'cardtpl' && (
         <Popover anchor={pop.at} title={t('ctpl.title')} width={300} onClose={() => setPop(null)}>
           <CardTemplatePop
