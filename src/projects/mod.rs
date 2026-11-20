@@ -72,6 +72,8 @@ pub struct ProjectInfo {
     pub members_create_boards: bool,
     pub members_invite: bool,
     pub voting: bool,
+    pub aging: bool,
+    pub aging_days: i64,
 }
 
 pub struct Project {
@@ -141,7 +143,7 @@ pub fn path_id(params: &HashMap<String, String>, key: &str) -> Result<i64, ApiEr
 
 pub fn project_info(c: &Connection, id: i64) -> rusqlite::Result<Option<ProjectInfo>> {
     c.query_row(
-        "SELECT name, description, color, background, members_create_boards, members_invite, voting
+        "SELECT name, description, color, background, members_create_boards, members_invite, voting, aging, aging_days
          FROM projects WHERE id = ?1 AND deleted_at IS NULL AND archived_at IS NULL",
         [id],
         |r| {
@@ -153,6 +155,8 @@ pub fn project_info(c: &Connection, id: i64) -> rusqlite::Result<Option<ProjectI
                 members_create_boards: r.get(4)?,
                 members_invite: r.get(5)?,
                 voting: r.get(6)?,
+                aging: r.get(7)?,
+                aging_days: r.get(8)?,
             })
         },
     )
@@ -483,6 +487,8 @@ async fn view(State(state): State<AppState>, project: Project) -> Result<Json<Va
         "members_create_boards": i.members_create_boards,
         "members_invite": i.members_invite,
         "voting": i.voting,
+        "aging": i.aging,
+        "aging_days": i.aging_days,
         "role": project.role.as_str(),
         "member_count": members,
         "can": project.permissions(),
@@ -498,6 +504,8 @@ pub struct ProjectChange {
     members_create_boards: Option<bool>,
     members_invite: Option<bool>,
     voting: Option<bool>,
+    aging: Option<bool>,
+    aging_days: Option<i64>,
 }
 
 async fn update(
@@ -548,6 +556,18 @@ async fn update(
         info.voting = v;
     }
 
+    if let Some(v) = body.aging {
+        info.aging = v;
+    }
+
+    if let Some(d) = body.aging_days {
+        if ![3, 7, 14, 30].contains(&d) {
+            return Err(bad("choose 3, 7, 14 or 30 days"));
+        }
+
+        info.aging_days = d;
+    }
+
     let id = project.id;
     project
         .db()
@@ -555,7 +575,7 @@ async fn update(
             let tx = c.transaction()?;
             tx.execute(
                 "UPDATE projects SET name = ?2, description = ?3, color = ?4, background = ?5,
-                 members_create_boards = ?6, members_invite = ?7, voting = ?8 WHERE id = ?1",
+                 members_create_boards = ?6, members_invite = ?7, voting = ?8, aging = ?9, aging_days = ?10 WHERE id = ?1",
                 params![
                     id,
                     info.name,
@@ -564,7 +584,9 @@ async fn update(
                     info.background,
                     info.members_create_boards,
                     info.members_invite,
-                    info.voting
+                    info.voting,
+                    info.aging,
+                    info.aging_days
                 ],
             )?;
             events::record(
@@ -577,6 +599,8 @@ async fn update(
                     "members_create_boards": info.members_create_boards,
                     "members_invite": info.members_invite,
                     "voting": info.voting,
+                    "aging": info.aging,
+                    "aging_days": info.aging_days,
                 }),
             )?;
             tx.commit()?;

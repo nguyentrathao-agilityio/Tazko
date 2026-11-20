@@ -25,6 +25,7 @@ pub struct Parsed {
     pub open: bool,
     pub done: bool,
     pub attachments: bool,
+    pub stale: bool,
     pub mine: bool,
     pub unknown: Vec<String>,
 }
@@ -38,6 +39,7 @@ impl Parsed {
             || self.open
             || self.done
             || self.attachments
+            || self.stale
             || self.mine
     }
 }
@@ -59,6 +61,7 @@ pub fn parse(q: &str) -> Parsed {
             "is:open" => p.open = true,
             "is:done" | "is:complete" => p.done = true,
             "has:attachments" => p.attachments = true,
+            "is:stale" => p.stale = true,
             "@me" => p.mine = true,
             t if t.starts_with('@') && t.len() > 1 => p.members.push(clean(&t[1..])),
             t if t.starts_with('#') && t.len() > 1 => p.labels.push(clean(&t[1..])),
@@ -183,6 +186,13 @@ async fn search(
             }
             if p.attachments {
                 sql.push_str(" AND EXISTS (SELECT 1 FROM attachments a WHERE a.card_id = k.id)");
+            }
+            if p.stale {
+                args.push(Sql::Integer(now()));
+                sql.push_str(&format!(
+                    " AND k.done = 0 AND k.updated_at <= ?{} - pr.aging_days * 86400",
+                    args.len()
+                ));
             }
             if !p.unknown.is_empty() {
                 sql.push_str(" AND 0");
