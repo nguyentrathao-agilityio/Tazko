@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::{Html, IntoResponse, Json, Response};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{Json, Response};
 use axum::routing::{get, post};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
@@ -15,7 +15,7 @@ use super::prefs::{Frequency, Prefs};
 use crate::auth::{check_csrf, cookies};
 use crate::db::{Database, DbResult};
 use crate::error::{ApiError, bad};
-use crate::mail::message::{name, safe};
+use crate::mail::message::{display, name, safe};
 use crate::mail::{self, Outgoing};
 use crate::sanitize::escape_html;
 use crate::session::now;
@@ -67,7 +67,7 @@ pub struct Place<'a> {
 
 impl Place<'_> {
     fn base(&self) -> String {
-        format!("{}/c/{}", self.public_url.trim_end_matches('/'), self.slug)
+        format!("{}/c/{}", self.public_url, self.slug)
     }
 
     fn card(&self, i: &Item) -> String {
@@ -79,9 +79,12 @@ impl Place<'_> {
     }
 }
 
+fn due_phrase(i: &Item, now: i64) -> String {
+    i.due_at.map_or("soon".into(), |d| when(d, now))
+}
+
 fn when(due: i64, now: i64) -> String {
-    let left = due - now;
-    match left {
+    match due - now {
         l if l <= 60 => "now".into(),
         l if l < 2 * 3600 => "within 2 hours".into(),
         l if l < 86_400 => format!("in {} hours", l / 3600),
@@ -91,10 +94,9 @@ fn when(due: i64, now: i64) -> String {
 }
 
 fn who(i: &Item) -> String {
-    let shown = |a: &str| crate::admin::validate::email(a).unwrap_or_else(|| name(a));
     i.actor
         .as_deref()
-        .map(shown)
+        .map(display)
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| "Someone".into())
 }
@@ -108,10 +110,7 @@ pub fn summary(i: &Item, now: i64) -> String {
         }
         "assigned" => format!("{} added you to {card}", who(i)),
         "card_added" => format!("New card on {}: {card}", name(&i.board)),
-        "due" => format!(
-            "{card} is due {}",
-            i.due_at.map_or("soon".into(), |d| when(d, now))
-        ),
+        "due" => format!("{card} is due {}", due_phrase(i, now)),
         _ => card,
     }
 }
@@ -127,12 +126,13 @@ fn detail(i: &Item, now: i64) -> Vec<String> {
     lines
 }
 
+fn unsubscribe_link(public_url: &str, token: &str) -> String {
+    format!("{public_url}/api/v1/email/unsubscribe?t={token}")
+}
+
 fn unsubscribe_url(state: &AppState, user: i64) -> String {
     let token = cookies::seal(state.secret.expose(), UNSUBSCRIBE, UNSUBSCRIBE_TTL, user);
-    format!(
-        "{}/api/v1/email/unsubscribe?t={token}",
-        state.settings.public_url.trim_end_matches('/')
-    )
+    unsubscribe_link(&state.settings.public_url, &token)
 }
 
 pub fn compose(
@@ -165,11 +165,7 @@ pub fn compose(
             _ => "Open card",
         };
         let subject = match one.kind.as_str() {
-            "due" => format!(
-                "Due {}: {}",
-                one.due_at.map_or("soon".into(), |d| when(d, now)),
-                safe(&one.card, 120)
-            ),
+            "due" => format!("Due {}: {}", due_phrase(one, now), safe(&one.card, 120)),
             _ => summary(one, now),
         };
         return Outgoing {
@@ -301,10 +297,6 @@ fn person(c: &Connection, user: i64, org: i64) -> rusqlite::Result<Option<Person
 }
 
 pub async fn job(state: AppState) {
-    if !mail::enabled(&state) {
-        return;
-    }
-
     let mut tick = tokio::time::interval(TICK);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
@@ -424,14 +416,13 @@ struct Token {
 }
 
 fn page(title: &str, body: &str) -> Response {
-    (
-        [(header::CONTENT_SECURITY_POLICY, "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")],
-        Html(format!(
+    crate::api::docs::with_headers(
+        format!(
             "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>{title}</title></head>\
 <body style=\"font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:48px auto;padding:0 16px;color:#1d1d2b\"><h1 style=\"font-size:22px\">{title}</h1>{body}</body></html>"
-        )),
+        ),
+        "text/html; charset=utf-8",
     )
-        .into_response()
 }
 
 async fn unsubscribe_page(Query(q): Query<Token>) -> Response {
@@ -455,14 +446,12 @@ async fn unsubscribe(
         .dbs
         .control()
         .write(move |c| {
-            Ok(
-                match crate::settings::set(c, user, "email_frequency", json!("never")) {
-                    Ok(()) => Ok(()),
-                    Err(e) => Err(e),
-                },
-            )
+            let change = [("email_frequency".to_string(), json!("never"))]
+                .into_iter()
+                .collect();
+            Ok(crate::settings::store(c, user, change)?)
         })
-        .await??;
+        .await?;
     Ok(page(
         "You are unsubscribed",
         "<p>Tazko will not email you notifications any more. You still see them in the app, and you can turn emails back on under Settings, Notifications.</p>",
@@ -520,10 +509,7 @@ async fn previews(
         slug: "your-company",
         company: "Your company",
     };
-    let unsub = format!(
-        "{}/api/v1/email/unsubscribe?t=preview",
-        state.settings.public_url.trim_end_matches('/')
-    );
+    let unsub = unsubscribe_link(&state.settings.public_url, "preview");
     let invite = mail::InviteMail::new(&state, &user, true).mail(
         &to,
         "Your company",
@@ -535,11 +521,7 @@ async fn previews(
     let mut list: Vec<(&str, Outgoing)> = vec![("invite", invite)];
     for i in &items {
         list.push((
-            if i.kind == "due" {
-                "reminder"
-            } else {
-                i.kind.as_str()
-            },
+            i.kind.as_str(),
             compose(std::slice::from_ref(i), &to, &place, unsub.clone(), at),
         ));
     }
@@ -565,48 +547,21 @@ async fn send_test(
         return Err(ApiError::Forbidden);
     }
 
-    if !mail::enabled(&state) {
-        return Err(bad("email is not set up on this server"));
-    }
-
-    let (by, to) = (user.0.user_id, user.0.email.clone());
-    let link = state.settings.public_url.trim_end_matches('/').to_string() + "/";
-    let unsub = unsubscribe_url(&state, by);
-    let queued = state
-        .dbs
-        .control()
-        .write(move |c| {
-            let recent: i64 = c.query_row(
-                "SELECT count(*) FROM email_queue WHERE kind = 'test' AND created_by = ?1 AND created_at > ?2",
-                params![by, now() - 3600],
-                |r| r.get(0),
-            )?;
-            if recent >= TESTS_PER_HOUR {
-                return Ok(false);
-            }
-
-            mail::enqueue(
-                c,
-                &Outgoing {
-                    kind: "test",
-                    to: to.clone(),
-                    subject: "Tazko test email".into(),
-                    lines: vec!["This is a test email from Tazko. Your notification emails will look like this.".into()],
-                    link,
-                    button: "Open Tazko",
-                    unsubscribe: Some(unsub),
-                    by: Some(by),
-                    ..Default::default()
-                },
-            )?;
-            Ok(true)
-        })
-        .await?;
-    if !queued {
-        return Err(ApiError::TooMany(3600));
-    }
-
-    Ok((StatusCode::ACCEPTED, Json(json!({ "to": user.0.email }))))
+    let by = user.0.user_id;
+    let mail = Outgoing {
+        kind: "test",
+        to: user.0.email.clone(),
+        subject: "Tazko test email".into(),
+        lines: vec![
+            "This is a test email from Tazko. Your notification emails will look like this.".into(),
+        ],
+        link: format!("{}/", state.settings.public_url),
+        button: "Open Tazko",
+        unsubscribe: Some(unsubscribe_url(&state, by)),
+        by: Some(by),
+        ..Default::default()
+    };
+    mail::queue_test(&state, mail, TESTS_PER_HOUR).await
 }
 
 #[cfg(test)]

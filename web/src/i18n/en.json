@@ -580,7 +580,7 @@
   "notif.preview.mention": "Mention",
   "notif.preview.assigned": "Assignment",
   "notif.preview.card_added": "New card",
-  "notif.preview.reminder": "Reminder",
+  "notif.preview.due": "Reminder",
   "notif.preview.digest": "Digest",
   "notif.from": "From",
   "notif.to": "To",

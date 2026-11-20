@@ -6,6 +6,7 @@ import { useRun } from '@/projects/useRun'
 import { useSettings, type Settings } from '@/settings/store'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { Modal } from '@/ui/Modal'
+import { Switch } from '@/ui/SwitchRow'
 import { useToast } from '@/ui/toast'
 
 type Save = (change: Partial<Settings>) => Promise<void>
@@ -22,31 +23,26 @@ const eightLocalInUtc = () => {
   return d.getUTCHours()
 }
 
-function Toggle({ label, on, disabled, onChange }: { label: string; on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
-  return <button type="button" className="switchbtn" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} />
-}
-
 export function Notifications({ emailOn, save }: { emailOn: boolean; save: Save }) {
   const s = useSettings()
   const toast = useToast()
   const { error, run } = useRun()
-  const [previews, setPreviews] = useState<{ from: string | null; list: Preview[] } | null>(null)
+  const [previews, setPreviews] = useState<{ from: string | null; previews: Preview[] } | null>(null)
   const [shown, setShown] = useState(0)
   const app = (k: Kind) => k === 'due' || s[`notify_${k}_app` as keyof Settings] === true
   const email = (k: Kind) => s[`notify_${k}_email` as keyof Settings] === true
   const setFrequency = (f: Settings['email_frequency']) => void save(f === 'daily' ? { email_frequency: f, daily_hour_utc: eightLocalInUtc() } : { email_frequency: f })
   const openPreviews = () =>
     void run(async () => {
-      const r = await api<{ from: string | null; previews: Preview[] }>('GET', `${ME_API}/email/previews`)
       setShown(0)
-      setPreviews({ from: r.from, list: r.previews })
+      setPreviews(await api<{ from: string | null; previews: Preview[] }>('GET', `${ME_API}/email/previews`))
     })
   const test = () =>
     void run(async () => {
       const r = await api<{ to: string }>('POST', `${ME_API}/email/test`)
       toast(t('notif.testSent', { email: r.to }))
     })
-  const current = previews?.list[shown]
+  const current = previews?.previews[shown]
 
   return (
     <>
@@ -69,10 +65,10 @@ export function Notifications({ emailOn, save }: { emailOn: boolean; save: Save 
                   <tr key={k}>
                     <td>{label}</td>
                     <td>
-                      <Toggle label={`${label}: ${t('notif.inApp')}`} on={app(k)} disabled={k === 'due'} onChange={(on) => void save({ [`notify_${k}_app`]: on } as Partial<Settings>)} />
+                      <Switch label={`${label}: ${t('notif.inApp')}`} on={app(k)} disabled={k === 'due'} onChange={(on) => void save({ [`notify_${k}_app`]: on } as Partial<Settings>)} />
                     </td>
                     <td>
-                      <Toggle label={`${label}: ${t('notif.byEmail')}`} on={emailOn && email(k)} disabled={!emailOn} onChange={(on) => void save({ [`notify_${k}_email`]: on } as Partial<Settings>)} />
+                      <Switch label={`${label}: ${t('notif.byEmail')}`} on={emailOn && email(k)} disabled={!emailOn} onChange={(on) => void save({ [`notify_${k}_email`]: on } as Partial<Settings>)} />
                     </td>
                   </tr>
                 )
@@ -123,9 +119,9 @@ export function Notifications({ emailOn, save }: { emailOn: boolean; save: Save 
       {previews && current && (
         <Modal label={t('notif.previewTitle')} onClose={() => setPreviews(null)}>
           <h2>{t('notif.previewTitle')}</h2>
-          <div className="row" role="tablist" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
-            {previews.list.map((p, i) => (
-              <button key={p.kind} type="button" role="tab" aria-selected={i === shown} className={`btn sm${i === shown ? ' primary' : ''}`} onClick={() => setShown(i)}>
+          <div className="tabs2" role="tablist">
+            {previews.previews.map((p, i) => (
+              <button key={p.kind} type="button" role="tab" aria-selected={i === shown} className={i === shown ? 'on' : ''} onClick={() => setShown(i)}>
                 {t(`notif.preview.${p.kind}` as MessageKey)}
               </button>
             ))}

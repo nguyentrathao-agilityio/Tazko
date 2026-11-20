@@ -27,24 +27,26 @@ fn index(kind: &str) -> Option<usize> {
 }
 
 impl Prefs {
-    pub fn from_settings(s: &Map<String, Value>) -> Prefs {
-        let flag =
-            |key: String, default: bool| s.get(&key).and_then(Value::as_bool).unwrap_or(default);
-        let app = KINDS.map(|k| k == "due" || flag(format!("notify_{k}_app"), true));
-        let email = KINDS.map(|k| flag(format!("notify_{k}_email"), k != "card_added"));
-        let frequency = match s.get("email_frequency").and_then(Value::as_str) {
-            Some("hourly") => Frequency::Hourly,
-            Some("daily") => Frequency::Daily,
-            Some("never") => Frequency::Never,
+    pub fn from_settings(saved: &Map<String, Value>) -> Prefs {
+        let mut s = crate::settings::defaults();
+        s.extend(saved.clone());
+        let flag = |key: String| s.get(&key).and_then(Value::as_bool).unwrap_or(false);
+        let text = |key: &str| s.get(key).and_then(Value::as_str).unwrap_or("");
+        let app = KINDS.map(|k| k == "due" || flag(format!("notify_{k}_app")));
+        let email = KINDS.map(|k| flag(format!("notify_{k}_email")));
+        let frequency = match text("email_frequency") {
+            "hourly" => Frequency::Hourly,
+            "daily" => Frequency::Daily,
+            "never" => Frequency::Never,
             _ => Frequency::Instant,
         };
-        let reminder = match s.get("due_reminder").and_then(Value::as_str) {
-            Some("at") => 0,
-            Some("1h") => 3600,
-            Some("2d") => 2 * 86_400,
+        let reminder = match text("due_reminder") {
+            "at" => 0,
+            "1h" => 3600,
+            "2d" => 2 * 86_400,
             _ => 86_400,
         };
-        let daily_hour = s.get("daily_hour_utc").and_then(Value::as_i64).unwrap_or(1);
+        let daily_hour = s.get("daily_hour_utc").and_then(Value::as_i64).unwrap_or(0);
         Prefs {
             app,
             email,
@@ -72,11 +74,7 @@ impl Prefs {
 }
 
 pub fn hidden_clause(hidden: &[&'static str]) -> String {
-    let known: Vec<String> = hidden
-        .iter()
-        .filter(|k| KINDS.contains(k))
-        .map(|k| format!("'{k}'"))
-        .collect();
+    let known: Vec<String> = hidden.iter().map(|k| format!("'{k}'")).collect();
     if known.is_empty() {
         String::new()
     } else {

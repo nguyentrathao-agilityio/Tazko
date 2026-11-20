@@ -126,14 +126,6 @@ const DUE_CANDIDATES: &str = "SELECT m.user_id, k.board_id, k.id, k.due_at FROM 
 const LONGEST_REMINDER: i64 = 2 * 86_400;
 const AT_DUE_GRACE: i64 = 3600;
 
-pub fn reminder_due(due_at: i64, lead: i64, now: i64) -> bool {
-    if lead == 0 {
-        due_at <= now
-    } else {
-        due_at - lead <= now
-    }
-}
-
 pub async fn due_soon(state: &AppState, db: &Database, now: i64) -> Result<usize, ApiError> {
     let candidates: Vec<(i64, i64, i64, i64)> = db
         .read(move |c| {
@@ -160,9 +152,7 @@ pub async fn due_soon(state: &AppState, db: &Database, now: i64) -> Result<usize
         .await?;
     let ready: Vec<_> = candidates
         .into_iter()
-        .filter(|(user, _, _, due)| {
-            reminder_due(*due, leads.get(user).copied().unwrap_or(DUE_SOON), now)
-        })
+        .filter(|(user, _, _, due)| *due - leads[user] <= now)
         .collect();
     if ready.is_empty() {
         return Ok(0);

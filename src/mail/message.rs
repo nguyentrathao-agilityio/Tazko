@@ -45,6 +45,10 @@ pub fn clean(text: &str) -> String {
     clean_to(text, 200)
 }
 
+pub fn display(name_or_email: &str) -> String {
+    validate::email(name_or_email).unwrap_or_else(|| name(name_or_email))
+}
+
 pub fn name(text: &str) -> String {
     safe(text, 60)
 }

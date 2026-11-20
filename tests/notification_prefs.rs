@@ -347,7 +347,7 @@ async fn previews_and_a_personal_test_email() {
             "mention",
             "assigned",
             "card_added",
-            "reminder",
+            "due",
             "digest"
         ]
     );

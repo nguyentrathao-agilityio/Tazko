@@ -143,16 +143,19 @@ pub fn load(c: &Connection, user: i64) -> rusqlite::Result<Map<String, Value>> {
     Ok(out)
 }
 
-pub fn set(c: &Connection, user: i64, key: &str, value: Value) -> Result<(), ApiError> {
-    check(key, &value)?;
+pub fn store(
+    c: &Connection,
+    user: i64,
+    change: Map<String, Value>,
+) -> rusqlite::Result<Map<String, Value>> {
     let mut current = load(c, user)?;
-    current.insert(key.to_string(), value);
+    current.extend(change);
     c.execute(
         "INSERT INTO user_settings (user_id, settings, updated_at) VALUES (?1, ?2, ?3)
          ON CONFLICT (user_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at",
-        params![user, Value::Object(current).to_string(), now()],
+        params![user, Value::Object(current.clone()).to_string(), now()],
     )?;
-    Ok(())
+    Ok(current)
 }
 
 pub fn routes() -> Router<AppState> {
@@ -316,15 +319,7 @@ async fn update(
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let mut current = load(&tx, id)?;
-            for (k, v) in body {
-                current.insert(k, v);
-            }
-            tx.execute(
-                "INSERT INTO user_settings (user_id, settings, updated_at) VALUES (?1, ?2, ?3)
-                 ON CONFLICT (user_id) DO UPDATE SET settings = excluded.settings, updated_at = excluded.updated_at",
-                params![id, Value::Object(current.clone()).to_string(), now()],
-            )?;
+            let current = store(&tx, id, body)?;
             tx.commit()?;
             Ok(current)
         })

@@ -146,11 +146,11 @@ pub struct InviteMail {
 
 impl InviteMail {
     pub fn new(state: &AppState, user: &SessionUser, send_email: bool) -> Self {
-        let inviter = if user.name.trim().is_empty() || user.name == user.email {
-            message::clean(&user.email)
+        let inviter = message::display(if user.name.trim().is_empty() {
+            &user.email
         } else {
-            name(&user.name)
-        };
+            &user.name
+        });
         InviteMail {
             wanted: send_email && enabled(state),
             inviter,
@@ -180,7 +180,7 @@ impl InviteMail {
                 format!("Sign in with Google using this address ({to}). You join automatically."),
                 "If you did not expect this, you can ignore this email.".into(),
             ],
-            link: format!("{}/", self.public_url.trim_end_matches('/')),
+            link: format!("{}/", self.public_url),
             button: "Sign in with Google",
             org: Some(org),
             by: Some(by),
@@ -260,18 +260,16 @@ pub fn describe(smtp: &Smtp) -> Value {
     json!({ "host": smtp.host, "port": smtp.port, "from": smtp.from.header(), "signs_in": smtp.user.is_some() })
 }
 
-async fn send_test(
-    State(state): State<AppState>,
-    admin: SuperAdmin,
-    headers: HeaderMap,
+pub async fn queue_test(
+    state: &AppState,
+    mail: Outgoing,
+    limit: i64,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
-    let by = admin.writing(&headers)?;
-    if !enabled(&state) {
+    if !enabled(state) {
         return Err(bad("email is not set up on this server"));
     }
 
-    let to = admin.0.email.clone();
-    let link = format!("{}/admin", state.settings.public_url.trim_end_matches('/'));
+    let to = mail.to.clone();
     let queued = state
         .dbs
         .control()
@@ -279,33 +277,40 @@ async fn send_test(
             let recent = count(
                 c,
                 "SELECT count(*) FROM email_queue WHERE kind = 'test' AND created_by = ?1 AND created_at > ?2",
-                params![by, now() - 3600],
+                params![mail.by, now() - 3600],
             )?;
-            if recent >= TESTS_PER_HOUR {
-                return Ok(None);
+            if recent >= limit {
+                return Ok(false);
             }
 
-            enqueue(
-                c,
-                &Outgoing {
-                    kind: "test",
-                    to: to.clone(),
-                    subject: "Tazko test email".into(),
-                    lines: vec!["This is a test email from your Tazko server. Email is working.".into()],
-                    link,
-                    button: "Open the admin console",
-                    org: None,
-                    by: Some(by),
-                    ..Default::default()
-                },
-            )?;
-            Ok(Some(to))
+            enqueue(c, &mail)?;
+            Ok(true)
         })
         .await?;
-    match queued {
-        Some(to) => Ok((StatusCode::ACCEPTED, Json(json!({ "to": to })))),
-        None => Err(ApiError::TooMany(3600)),
+    if !queued {
+        return Err(ApiError::TooMany(3600));
     }
+
+    Ok((StatusCode::ACCEPTED, Json(json!({ "to": to }))))
+}
+
+async fn send_test(
+    State(state): State<AppState>,
+    admin: SuperAdmin,
+    headers: HeaderMap,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let by = admin.writing(&headers)?;
+    let mail = Outgoing {
+        kind: "test",
+        to: admin.0.email.clone(),
+        subject: "Tazko test email".into(),
+        lines: vec!["This is a test email from your Tazko server. Email is working.".into()],
+        link: format!("{}/admin", state.settings.public_url),
+        button: "Open the admin console",
+        by: Some(by),
+        ..Default::default()
+    };
+    queue_test(&state, mail, TESTS_PER_HOUR).await
 }
 
 struct Due {

@@ -18,7 +18,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/docs", get(docs))
 }
 
-fn with_headers(body: String, kind: &'static str) -> Response {
+pub(crate) fn with_headers(body: String, kind: &'static str) -> Response {
     let mut res = body.into_response();
     let h = res.headers_mut();
     h.insert(header::CONTENT_TYPE, HeaderValue::from_static(kind));
