@@ -984,6 +984,7 @@
   "webhooks.none": "No webhooks yet.",
   "webhooks.test": "Send test event",
   "webhooks.testQueued": "Test event on its way",
+  "webhooks.resumeFirst": "Turn the webhook on to send events",
   "webhooks.delete": "Delete",
   "webhooks.deleted": "Webhook deleted",
   "webhooks.when": "When",

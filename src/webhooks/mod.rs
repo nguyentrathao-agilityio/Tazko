@@ -120,12 +120,18 @@ fn hook_exists(c: &Connection, hook: i64) -> rusqlite::Result<bool> {
     )
 }
 
-fn found(changed: usize) -> Result<StatusCode, ApiError> {
-    if changed == 0 {
-        Err(ApiError::NotFound)
-    } else {
+fn queued(
+    c: &Connection,
+    changed: usize,
+    hook: i64,
+) -> rusqlite::Result<Result<StatusCode, ApiError>> {
+    Ok(if changed > 0 {
         Ok(StatusCode::ACCEPTED)
-    }
+    } else if hook_exists(c, hook)? {
+        Err(bad("resume the webhook first"))
+    } else {
+        Err(ApiError::NotFound)
+    })
 }
 
 async fn list(CompanyOwner(co): CompanyOwner) -> Result<Json<Value>, ApiError> {
@@ -148,6 +154,7 @@ async fn create(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = owner.writing(&headers)?;
     let co = owner.0;
+    let (name, email) = (co.user.0.name.clone(), co.user.0.email.clone());
     let allow_local = state.settings.webhooks_allow_local;
     let url = body.url.trim().to_string();
     let check = url.clone();
@@ -158,8 +165,12 @@ async fn create(
     let mut events = body.events;
     events.sort();
     events.dedup();
-    if events.is_empty() || events.iter().any(|e| !EVENTS.contains(&e.as_str())) {
+    if events.is_empty() {
         return Err(bad("choose at least one event"));
+    }
+
+    if let Some(e) = events.iter().find(|e| !EVENTS.contains(&e.as_str())) {
+        return Err(bad(&format!("{e} is not a webhook event")));
     }
 
     if body.projects.as_ref().is_some_and(Vec::is_empty) {
@@ -181,6 +192,7 @@ async fn create(
         .db
         .write(move |c| {
             let tx = c.transaction()?;
+            crate::projects::upsert_person(&tx, by, &name, &email)?;
             for p in projects.iter().flatten() {
                 if !member_project(&tx, by, *p)? {
                     return Ok(Err(bad("choose projects you belong to")));
@@ -258,7 +270,11 @@ async fn remove(
         .db
         .write(move |c| Ok(c.execute("DELETE FROM webhooks WHERE id = ?1", [hook])?))
         .await?;
-    found(n).map(|_| StatusCode::NO_CONTENT)
+    if n == 0 {
+        return Err(ApiError::NotFound);
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn test(
@@ -269,17 +285,17 @@ async fn test(
     owner.writing(&headers)?;
     let hook = path_id(&params, "hook")?;
     let payload = json!({ "event": "ping", "company": owner.0.slug, "created_at": now(), "message": "Test event from Tazko" }).to_string();
-    let n = owner
+    owner
         .0
         .db
         .write(move |c| {
-            Ok(c.execute(
-                "INSERT INTO webhook_deliveries (webhook_id, event, payload) SELECT id, 'ping', ?2 FROM webhooks WHERE id = ?1",
+            let n = c.execute(
+                "INSERT INTO webhook_deliveries (webhook_id, event, payload) SELECT id, 'ping', ?2 FROM webhooks WHERE id = ?1 AND active = 1",
                 params![hook, payload],
-            )?)
+            )?;
+            Ok(queued(c, n, hook)?)
         })
-        .await?;
-    found(n)
+        .await?
 }
 
 async fn deliveries(
@@ -329,16 +345,17 @@ async fn redeliver(
     owner.writing(&headers)?;
     let hook = path_id(&params, "hook")?;
     let delivery = path_id(&params, "delivery")?;
-    let n = owner
+    owner
         .0
         .db
         .write(move |c| {
-            Ok(c.execute(
+            let n = c.execute(
                 "INSERT INTO webhook_deliveries (webhook_id, event, payload)
-                 SELECT webhook_id, event, payload FROM webhook_deliveries WHERE id = ?2 AND webhook_id = ?1",
+                 SELECT d.webhook_id, d.event, d.payload FROM webhook_deliveries d JOIN webhooks w ON w.id = d.webhook_id
+                 WHERE d.id = ?2 AND d.webhook_id = ?1 AND w.active = 1",
                 params![hook, delivery],
-            )?)
+            )?;
+            Ok(queued(c, n, hook)?)
         })
-        .await?;
-    found(n)
+        .await?
 }

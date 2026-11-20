@@ -6,21 +6,21 @@ Company owners add webhooks under **Integrations → Webhooks**. Tazko then send
 
 - Only company owners can list, add, pause, test or delete webhooks. Members get `403`.
 - A webhook sees what the owner who added it can see, and no more. Events come only from projects that owner belongs to (all of them, or the projects chosen when adding it) and from boards that owner can open. Restricted boards the owner is not on never produce a delivery.
-- The check runs again for every event, so when the owner leaves a project or loses access to a board, that project or board stops sending.
-- If the owner who added it is no longer a company owner, the webhook stops sending. Another owner can delete it and add a new one.
+- The check runs when an event is queued and again right before each delivery, so when the owner leaves a project or loses access to a board, that project or board stops sending, including deliveries already waiting to be retried.
+- If the owner who added it is no longer a company owner (or their account is disabled), the webhook stops sending and its waiting deliveries are marked failed. Another owner can delete it and add a new one.
 - A new or resumed webhook starts from now: events from before it was added, or from while it was paused, are not sent.
 
 ## Events
 
 | Event | When |
 | --- | --- |
-| `card.created` | A card is added (one delivery per card when several are added at once) |
+| `card.created` | A card is added or copied (one delivery per card when several are added at once) |
 | `card.updated` | A card's title, description, dates, labels or other details change, or it is marked not done |
-| `card.moved` | A card moves to another list |
-| `card.completed` | A card is marked done (also when a repeating card rolls over) |
-| `card.archived` | A card is archived |
+| `card.moved` | A card moves to another list (one delivery per card when a whole list is moved) |
+| `card.completed` | A card is marked done, also together with other changes and when a repeating card rolls over |
+| `card.archived` | A card is archived (one delivery per card when a whole list is archived) |
 | `comment.created` | Someone comments on a card |
-| `member.added` | Someone joins a project |
+| `member.added` | Someone is added to a project, accepts a project invite or is made a project owner |
 | `board.created` | A board is made |
 | `ping` | **Send test event** was clicked |
 
@@ -101,11 +101,11 @@ def verify(secret: str, header: str, raw_body: bytes) -> bool:
 
 ## Retries and the log
 
-A delivery that gets no `2xx` answer is tried again after 1 minute, 5 minutes, 30 minutes, 2 hours, 6 hours and 12 hours (seven tries over about a day), then marked failed. **Deliveries** shows the latest 50 with the answer code, time taken and when the next try is. **Redeliver** sends a failed delivery again. A paused webhook keeps its queued deliveries until it is resumed.
+A delivery that gets no `2xx` answer is tried again after 1 minute, 5 minutes, 30 minutes, 2 hours, 6 hours and 12 hours (seven tries over about a day), then marked failed. **Deliveries** shows the latest 50 with the answer code, time taken and when the next try is. **Redeliver** sends a failed delivery again. A paused webhook keeps its queued deliveries until it is resumed; test events and redeliveries are refused while it is paused. Finished deliveries are removed after 30 days.
 
 ## Addresses
 
-Addresses must start with `https://` and must reach the public internet. Tazko refuses addresses that resolve to private, loopback, link-local or other internal ranges (for example `10.x`, `192.168.x`, `127.0.0.1`, `169.254.169.254`, `::1`, `fd00::/8`), addresses with a user name or password, and other schemes. The address is checked when it is saved and again at every delivery, and the connection only goes to the addresses that passed the check, so a name that later points somewhere internal is refused.
+Addresses must start with `https://` and must reach the public internet. Tazko refuses addresses that resolve to private, loopback, link-local or other internal ranges (for example `10.x`, `192.168.x`, `127.0.0.1`, `169.254.169.254`, `::1`, `fd00::/8`), addresses with a user name or password, and other schemes. The address is checked when it is saved and again at every delivery, and the connection only goes to the addresses that passed the check, so a name that later points somewhere internal is refused. Webhook connections never use a proxy from the server's environment (`HTTPS_PROXY` and similar), because a proxy would connect on its own and skip this check.
 
 For local development only, `TAZKO_WEBHOOKS_ALLOW_LOCAL=1` lets webhooks use `http://` and loopback addresses (`127.0.0.1`, `::1`, `localhost`). Private network ranges stay refused. Do not set it on a public server.
 

@@ -168,7 +168,7 @@ async fn hook(w: &World, url: &str, events: &[&str]) -> Value {
 async fn tick(w: &World, at: i64) -> (usize, usize) {
     let db = w.app.state.dbs.tenant(SLUG).unwrap();
     let queued = worker::enqueue(&w.app.state, SLUG, &db).await.unwrap();
-    let sent = worker::deliver_due(&w.app.state, SLUG, &db, at)
+    let sent = worker::deliver_due(&w.app.state, SLUG, &db, at.max(tazko::session::now()))
         .await
         .unwrap();
     (queued, sent)
@@ -233,13 +233,16 @@ async fn owners_get_signed_events_only_from_boards_they_can_see() {
         assert!(!body.contains("Hidden plan") && !body.contains("Secret"));
     }
     let bodies = rx.bodies();
-    assert_eq!(bodies[0]["event"], "card.created");
-    assert_eq!(bodies[0]["card"]["title"], "Ship the beta");
-    assert_eq!(bodies[0]["board"]["name"], "Open");
-    assert_eq!(bodies[0]["project"]["id"], w.project);
-    assert_eq!(bodies[1]["event"], "comment.created");
-    assert_eq!(bodies[1]["comment"]["body"], "on it");
-    assert_eq!(got[1].0["tazko-event"], "comment.created");
+    let by = |name: &str| bodies.iter().find(|b| b["event"] == name).unwrap().clone();
+    let created = by("card.created");
+    assert_eq!(created["card"]["title"], "Ship the beta");
+    assert_eq!(created["board"]["name"], "Open");
+    assert_eq!(created["project"]["id"], w.project);
+    assert_eq!(by("comment.created")["comment"]["body"], "on it");
+    assert!(
+        got.iter()
+            .any(|(h, _)| h["tazko-event"] == "comment.created")
+    );
 
     let id = made["id"].as_i64().unwrap();
     assert_eq!(
@@ -255,8 +258,11 @@ async fn owners_get_signed_events_only_from_boards_they_can_see() {
         StatusCode::ACCEPTED
     );
     assert_eq!(tick(&w, tazko::session::now()).await, (0, 1));
-    assert_eq!(rx.bodies()[2]["event"], "ping");
+    assert!(rx.bodies().iter().any(|b| b["event"] == "ping"));
 
+    card(&w.app, &w.boss, w.open, "Queued before stepping down").await;
+    let db = w.app.state.dbs.tenant(SLUG).unwrap();
+    assert_eq!(worker::enqueue(&w.app.state, SLUG, &db).await.unwrap(), 1);
     let a = w
         .app
         .sql(|c| {
@@ -280,6 +286,26 @@ async fn owners_get_signed_events_only_from_boards_they_can_see() {
         (0, 0),
         "a webhook stops when its maker is no longer a company owner"
     );
+    let status: String = w
+        .app
+        .state
+        .dbs
+        .tenant(SLUG)
+        .unwrap()
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT status FROM webhook_deliveries ORDER BY id DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        status, "failed",
+        "queued deliveries are re-checked before sending"
+    );
+    assert_eq!(rx.bodies().len(), 3);
 }
 
 #[tokio::test]
@@ -364,6 +390,19 @@ async fn failing_receivers_are_retried_logged_and_can_be_paused() {
         Some(json!({ "active": false })),
     )
     .await;
+    assert_eq!(
+        call(
+            &w.app,
+            &w.boss,
+            Method::POST,
+            &format!("{C}/webhooks/{id}/test"),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST,
+        "a paused webhook asks to be resumed first"
+    );
     card(&w.app, &w.boss, w.open, "While paused").await;
     assert_eq!(tick(&w, tazko::session::now()).await, (0, 0));
     req(

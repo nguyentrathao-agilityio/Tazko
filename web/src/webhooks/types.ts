@@ -23,4 +23,4 @@ export type Delivery = {
   next_attempt_at: number
 }
 
-export const health = (h: Webhook) => (!h.active ? 'paused' : h.last.code === null || (h.last.code >= 200 && h.last.code < 300) ? 'healthy' : 'failing')
+export const health = (h: Webhook) => (!h.active ? 'paused' : h.last.status === null || h.last.status === 'delivered' ? 'healthy' : 'failing')

@@ -18,7 +18,7 @@ export function Deliveries({ path, hook, onRemoved }: { path: string; hook: Webh
         <small className="muted" style={{ flex: 1 }}>
           {hook.events.join(' · ')}
         </small>
-        <button type="button" className="btn sm" onClick={() => void runAndToast(() => api('POST', `${base}/test`), t('webhooks.testQueued'))}>
+        <button type="button" className="btn sm" disabled={!hook.active} title={hook.active ? undefined : t('webhooks.resumeFirst')} onClick={() => void runAndToast(() => api('POST', `${base}/test`), t('webhooks.testQueued'))}>
           {t('webhooks.test')}
         </button>
         <button type="button" className="btn sm danger" onClick={() => void removing.runAndToast(() => api('DELETE', base), t('webhooks.deleted'))}>
@@ -47,7 +47,7 @@ export function Deliveries({ path, hook, onRemoved }: { path: string; hook: Webh
                 </td>
                 <td className="num muted">{d.ms === null ? '' : t('webhooks.ms', { n: d.ms })}</td>
                 <td className="num">
-                  {d.status === 'failed' && (
+                  {d.status === 'failed' && hook.active && (
                     <button type="button" className="btn sm" onClick={() => void runAndToast(() => api('POST', `${base}/deliveries/${d.id}/redeliver`), t('webhooks.redelivering'))}>
                       {t('webhooks.redeliver')}
                     </button>

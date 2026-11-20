@@ -1,4 +1,5 @@
-use std::sync::OnceLock;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -12,10 +13,13 @@ use crate::state::AppState;
 const TICK: Duration = Duration::from_secs(3);
 const BATCH: i64 = 200;
 const SEND_BATCH: i64 = 20;
+const DRAIN_ROUNDS: usize = 10;
 const TIMEOUT: Duration = Duration::from_secs(10);
 const BACKOFF: [i64; 6] = [60, 300, 1800, 7200, 21600, 43200];
 const ERROR_LIMIT: usize = 300;
 const KEEP_LOG: i64 = 30 * 24 * 3600;
+const NO_LONGER_VISIBLE: &str =
+    "the webhook's maker is no longer an owner or can no longer see this board";
 
 struct Hook {
     id: i64,
@@ -35,29 +39,40 @@ struct Event {
 }
 
 pub async fn job(state: AppState) {
+    let busy: Arc<Mutex<HashSet<String>>> = Arc::default();
     let mut tick = tokio::time::interval(TICK);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         tick.tick().await;
-        run_all(&state).await;
+        for (slug, db) in crate::tenant::active_tenants(&state).await {
+            if !busy.lock().unwrap().insert(slug.clone()) {
+                continue;
+            }
+
+            let (state, busy) = (state.clone(), busy.clone());
+            tokio::spawn(async move {
+                run_company(&state, &slug, &db).await;
+                busy.lock().unwrap().remove(&slug);
+            });
+        }
     }
 }
 
-pub async fn run_all(state: &AppState) {
-    let mut jobs = tokio::task::JoinSet::new();
-    for (slug, db) in crate::tenant::active_tenants(state).await {
-        let state = state.clone();
-        jobs.spawn(async move {
-            if let Err(e) = enqueue(&state, &slug, &db).await {
-                eprintln!("tazko: webhook queue failed for {slug}: {e:?}");
-            }
-
-            if let Err(e) = deliver_due(&state, &slug, &db, now()).await {
-                eprintln!("tazko: webhook delivery failed for {slug}: {e:?}");
-            }
-        });
+pub async fn run_company(state: &AppState, slug: &str, db: &Database) {
+    if let Err(e) = enqueue(state, slug, db).await {
+        eprintln!("tazko: webhook queue failed for {slug}: {e:?}");
     }
-    jobs.join_all().await;
+
+    for _ in 0..DRAIN_ROUNDS {
+        match deliver_due(state, slug, db, now()).await {
+            Ok(n) if n as i64 == SEND_BATCH => continue,
+            Ok(_) => break,
+            Err(e) => {
+                eprintln!("tazko: webhook delivery failed for {slug}: {e:?}");
+                break;
+            }
+        }
+    }
 }
 
 const SET_CURSOR: &str = "INSERT INTO webhook_cursor (id, last_event) VALUES (1, ?1)
@@ -78,14 +93,15 @@ pub fn restart_cursor(c: &Connection, except: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-async fn owners(state: &AppState, slug: &str) -> DbResult<Vec<i64>> {
+pub(crate) async fn owners(state: &AppState, slug: &str) -> DbResult<Vec<i64>> {
     let slug = slug.to_string();
     state
         .dbs
         .control()
         .read(move |c| {
             let mut stmt = c.prepare(
-                "SELECT m.user_id FROM org_members m JOIN orgs o ON o.id = m.org_id WHERE o.slug = ?1 AND m.role = 'owner'",
+                "SELECT m.user_id FROM org_members m JOIN orgs o ON o.id = m.org_id JOIN users u ON u.id = m.user_id
+                 WHERE o.slug = ?1 AND m.role = 'owner' AND u.disabled = 0",
             )?;
             let rows = stmt.query_map([slug], |r| r.get(0))?.collect::<Result<Vec<i64>, _>>()?;
             Ok(rows)
@@ -192,25 +208,29 @@ fn active_hooks(c: &Connection) -> rusqlite::Result<Vec<Hook>> {
 
 fn outgoing(e: &Event) -> Vec<(&'static str, Option<i64>)> {
     let one = |name| vec![(name, e.card)];
-    match e.kind.as_str() {
-        "card_created" => one("card.created"),
-        "cards_created" => e.payload["cards"]
+    let each = |name| {
+        e.payload["cards"]
             .as_array()
             .map(|ids| {
                 ids.iter()
                     .filter_map(Value::as_i64)
-                    .map(|id| ("card.created", Some(id)))
+                    .map(|id| (name, Some(id)))
                     .collect()
             })
-            .unwrap_or_default(),
-        "card_updated" | "card_renamed" => one("card.updated"),
-        "card_done" if e.payload["done"] == json!(true) => one("card.completed"),
-        "card_done" => one("card.updated"),
+            .unwrap_or_default()
+    };
+    match e.kind.as_str() {
+        "card_created" | "card_copied" => one("card.created"),
+        "cards_created" => each("card.created"),
+        "card_done" | "card_updated" if e.payload["done"] == json!(true) => one("card.completed"),
+        "card_updated" | "card_renamed" | "card_done" => one("card.updated"),
         "card_repeated" => one("card.completed"),
         "card_moved" => one("card.moved"),
+        "cards_moved" => each("card.moved"),
         "card_archived" => one("card.archived"),
+        "cards_archived" => each("card.archived"),
         "comment_added" => one("comment.created"),
-        "member_added" => one("member.added"),
+        "member_added" | "member_joined" | "owner_added" => one("member.added"),
         "board_created" => one("board.created"),
         _ => vec![],
     }
@@ -334,7 +354,11 @@ fn payload(
         }
         "member.added" => {
             body["member"] = person(c, e.payload["user"].as_i64())?;
-            body["role"] = e.payload["role"].clone();
+            body["role"] = if e.kind == "owner_added" {
+                json!("owner")
+            } else {
+                e.payload["role"].clone()
+            };
         }
         _ => {}
     }
@@ -369,31 +393,93 @@ impl Outcome {
     }
 }
 
+fn still_visible(
+    c: &Connection,
+    owners: &[i64],
+    hook: &Hook,
+    payload: &str,
+) -> rusqlite::Result<bool> {
+    if !owners.contains(&hook.owner) {
+        return Ok(false);
+    }
+
+    let body: Value = serde_json::from_str(payload).unwrap_or(Value::Null);
+    if body["event"] == "ping" {
+        return Ok(true);
+    }
+
+    let e = Event {
+        kind: String::new(),
+        actor: None,
+        project: body["project"]["id"].as_i64(),
+        board: body["board"]["id"].as_i64(),
+        card: None,
+        payload: Value::Null,
+        at: 0,
+    };
+    in_scope(c, hook, &e)
+}
+
 pub async fn deliver_due(state: &AppState, slug: &str, db: &Database, at: i64) -> DbResult<usize> {
-    let due = db
+    let owners = owners(state, slug).await?;
+    let (due, refused) = db
         .read(move |c| {
             let mut stmt = c.prepare(
-                "SELECT d.id, w.id, w.url, w.salt, d.event, d.payload, d.attempts
+                "SELECT d.id, w.id, w.url, w.salt, d.event, d.payload, d.attempts, w.created_by, w.projects
                  FROM webhook_deliveries d JOIN webhooks w ON w.id = d.webhook_id
                  WHERE d.status = 'pending' AND d.next_attempt_at <= ?1 AND w.active = 1
                  ORDER BY d.next_attempt_at, d.id LIMIT ?2",
             )?;
             let rows = stmt
                 .query_map(params![at, SEND_BATCH], |r| {
-                    Ok(Due {
-                        id: r.get(0)?,
-                        hook: r.get(1)?,
-                        url: r.get(2)?,
-                        salt: r.get(3)?,
-                        event: r.get(4)?,
-                        payload: r.get(5)?,
-                        attempts: r.get(6)?,
-                    })
+                    let hook = Hook {
+                        id: r.get(1)?,
+                        events: vec![],
+                        projects: super::parse_list(r.get(8)?),
+                        owner: r.get(7)?,
+                    };
+                    Ok((
+                        hook,
+                        Due {
+                            id: r.get(0)?,
+                            hook: r.get(1)?,
+                            url: r.get(2)?,
+                            salt: r.get(3)?,
+                            event: r.get(4)?,
+                            payload: r.get(5)?,
+                            attempts: r.get(6)?,
+                        },
+                    ))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
+            let mut due = vec![];
+            let mut refused = vec![];
+            for (hook, d) in rows {
+                if still_visible(c, &owners, &hook, &d.payload)? {
+                    due.push(d);
+                } else {
+                    refused.push(d.id);
+                }
+            }
+            Ok((due, refused))
         })
         .await?;
+    if !refused.is_empty() {
+        let finished = now();
+        db.write(move |c| {
+            let tx = c.transaction()?;
+            for id in refused {
+                tx.execute(
+                    "UPDATE webhook_deliveries SET status = 'failed', error = ?2, finished_at = ?3 WHERE id = ?1",
+                    params![id, NO_LONGER_VISIBLE, finished],
+                )?;
+            }
+            tx.commit()?;
+            Ok(())
+        })
+        .await?;
+    }
+
     if due.is_empty() {
         return Ok(0);
     }
@@ -407,7 +493,13 @@ pub async fn deliver_due(state: &AppState, slug: &str, db: &Database, at: i64) -
             (d.id, d.attempts, outcome)
         });
     }
-    let results: Vec<_> = sends.join_all().await;
+    let mut results = vec![];
+    while let Some(done) = sends.join_next().await {
+        match done {
+            Ok(r) => results.push(r),
+            Err(e) => eprintln!("tazko: webhook send stopped for {slug}: {e}"),
+        }
+    }
     let count = results.len();
     let finished = now();
     db.write(move |c| {
@@ -448,6 +540,7 @@ fn agent(allow_local: bool) -> ureq::Agent {
                 )
                 .timeout_global(Some(TIMEOUT))
                 .max_redirects(0)
+                .proxy(None)
                 .http_status_as_error(false)
                 .user_agent("Tazko-Webhooks/1")
                 .build();
@@ -497,10 +590,55 @@ fn send(
             "the address resolves to a private or unknown host".into(),
             ms(),
         ),
-        Err(e) => {
-            let mut text = e.to_string();
-            text.truncate(ERROR_LIMIT);
-            Outcome::failed(text, ms())
+        Err(e) => Outcome::failed(e.to_string().chars().take(ERROR_LIMIT).collect(), ms()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(kind: &str, payload: Value) -> Event {
+        Event {
+            kind: kind.into(),
+            actor: None,
+            project: Some(1),
+            board: Some(1),
+            card: Some(9),
+            payload,
+            at: 0,
         }
+    }
+
+    #[test]
+    fn bulk_and_combined_changes_map_to_public_events() {
+        assert_eq!(
+            outgoing(&event("cards_archived", json!({ "cards": [3, 4] }))),
+            [("card.archived", Some(3)), ("card.archived", Some(4))]
+        );
+        assert_eq!(
+            outgoing(&event("cards_moved", json!({ "cards": [5] }))),
+            [("card.moved", Some(5))]
+        );
+        assert_eq!(
+            outgoing(&event(
+                "card_updated",
+                json!({ "title": "x", "done": true })
+            )),
+            [("card.completed", Some(9))]
+        );
+        assert_eq!(
+            outgoing(&event("card_done", json!({ "done": false }))),
+            [("card.updated", Some(9))]
+        );
+        assert_eq!(
+            outgoing(&event("card_copied", json!({}))),
+            [("card.created", Some(9))]
+        );
+        assert_eq!(
+            outgoing(&event("member_joined", json!({}))),
+            [("member.added", Some(9))]
+        );
+        assert!(outgoing(&event("card_restored", json!({}))).is_empty());
     }
 }
