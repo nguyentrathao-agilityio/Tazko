@@ -1,0 +1,11 @@
+@layer components {
+  .codebig {
+    font: 600 1.8rem var(--mono);
+    letter-spacing: 0.14em;
+    text-align: center;
+    background: var(--sunken);
+    border-radius: 12px;
+    padding: 14px;
+    margin: 16px 0 6px;
+  }
+}

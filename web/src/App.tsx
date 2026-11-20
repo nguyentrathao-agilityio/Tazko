@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getMe, signOut, SignInNeeded, type Me } from '@/api'
 import { AdminConsole } from '@/admin/AdminConsole'
+import { CliAuthorize } from '@/cli/CliAuthorize'
+import { CLI_AUTHORIZE } from '@/paths'
 import { Refused } from '@/auth/Refused'
 import { SignIn } from '@/auth/SignIn'
 import { CompanyRoutes } from '@/company/CompanyRoutes'
@@ -65,6 +67,7 @@ export function App() {
   if (loc.path === REFUSED) return <Refused />
   if (session.kind === 'down') return <p className="p-8 text-center text-muted">{t('app.status.down')}</p>
   if (session.kind === 'loading') return <p role="status" className="p-8 text-center text-muted">{t('app.status.checking')}</p>
+  if (loc.path === CLI_AUTHORIZE) return <CliAuthorize search={loc.search} go={go} />
   if (loc.path === '/admin' || loc.path.startsWith('/admin/'))
     return <AdminConsole me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} />
   return <CompanyRoutes me={session.me} path={loc.path} go={go} onSignOut={() => void onSignOut()} onProfile={() => setSession({ kind: 'loading' })} />

@@ -14,6 +14,9 @@ use tazko::state::AppState;
 async fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
+        Command::Client(c) => tokio::task::spawn_blocking(move || tazko::client::run(c))
+            .await
+            .unwrap_or(ExitCode::FAILURE),
         Command::Serve { env_file } => serve(env_file.as_deref()).await,
         Command::Admin {
             email,

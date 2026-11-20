@@ -8,6 +8,15 @@ use std::process::Command;
 const PLACEHOLDER: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Tazko</title></head><body><p>The web app was not built into this binary.</p></body></html>";
 
 fn main() {
+    let os = match env::var("CARGO_CFG_TARGET_OS").unwrap_or_default().as_str() {
+        "macos" => "macos".to_string(),
+        other => other.to_string(),
+    };
+    println!("cargo:rustc-env=TAZKO_TARGET_OS={os}");
+    println!(
+        "cargo:rustc-env=TAZKO_TARGET_ARCH={}",
+        env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
+    );
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let web = root.join("web");
     for p in [
