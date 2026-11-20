@@ -1,0 +1,52 @@
+@layer components {
+  .hook {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: var(--surface);
+  }
+
+  .hookr {
+    flex-wrap: nowrap;
+  }
+
+  .hooku {
+    min-width: 0;
+  }
+
+  .hooku b {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hookd {
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+
+  .box .hookd .tw {
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  fieldset.field {
+    border: 0;
+    padding: 0;
+    margin-inline: 0;
+  }
+
+  fieldset.field legend {
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0;
+  }
+
+  fieldset.field .opt {
+    font-weight: 400;
+  }
+}

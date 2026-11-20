@@ -57,6 +57,7 @@ This copies `.env.example` to `.env.local` with owner-only permissions and never
 - `TAZKO_DATA_DIR=./data`
 - `TAZKO_GOOGLE_CLIENT_ID`, `TAZKO_GOOGLE_CLIENT_SECRET`: from the localhost OAuth client below
 - `TAZKO_SECRET`: leave empty to use a random `secret` file in the data folder
+- `TAZKO_WEBHOOKS_ALLOW_LOCAL`: set to `1` only on a dev machine to let webhooks reach `http://` and loopback addresses (see `docs/webhooks.md`)
 - Email settings: leave empty; mail is not sent locally
 
 Secrets go only into `.env.local`. Never paste them into the repository, a commit, a test fixture, a log or a chat.

@@ -26,3 +26,4 @@ pub mod state;
 pub mod templates;
 pub mod tenant;
 pub mod web;
+pub mod webhooks;

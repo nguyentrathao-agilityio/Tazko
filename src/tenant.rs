@@ -179,3 +179,22 @@ impl FromRequestParts<AppState> for Company {
         })
     }
 }
+
+pub async fn active_tenants(state: &AppState) -> Vec<(String, Database)> {
+    let slugs: Vec<String> = state
+        .dbs
+        .control()
+        .read(|c| {
+            let mut stmt = c.prepare("SELECT slug FROM orgs WHERE status = 'active'")?;
+            let rows = stmt
+                .query_map([], |r| r.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+        .await
+        .unwrap_or_default();
+    slugs
+        .into_iter()
+        .filter_map(|slug| state.dbs.tenant(&slug).ok().map(|db| (slug, db)))
+        .collect()
+}
