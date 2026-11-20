@@ -409,4 +409,90 @@ async fn links_only_reach_cards_the_person_can_see() {
             .all(|c| c["card"]["id"] != hidden),
         "already linked cards are not offered again"
     );
+
+    let pct = card(&w, one, "50% rollout_plan").await;
+    let found = req(
+        &w.app,
+        &w.boss,
+        Method::GET,
+        &format!(
+            "{C}/boards/{}/cards/{a}/link-targets?q=50%25%20ROLLOUT_",
+            one.0
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(
+        found["cards"].as_array().unwrap().len(),
+        1,
+        "percent and underscore match literally, case does not matter"
+    );
+    assert_eq!(found["cards"][0]["card"]["id"], pct);
+    let found = req(
+        &w.app,
+        &w.boss,
+        Method::GET,
+        &format!("{C}/boards/{}/cards/{a}/link-targets?q=_", one.0),
+        None,
+    )
+    .await;
+    assert_eq!(
+        found["cards"].as_array().unwrap().len(),
+        1,
+        "an underscore is not a wildcard"
+    );
+
+    req(
+        &w.app,
+        &w.boss,
+        Method::PUT,
+        &format!("{C}/boards/{}/cards/{b}/template", one.0),
+        Some(json!({ "on": true })),
+    )
+    .await;
+    assert_eq!(
+        call(
+            &w.app,
+            &w.boss,
+            Method::POST,
+            &format!("{C}/boards/{}/cards/{b}/links", one.0),
+            Some(json!({ "card": a, "kind": "blocks" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND,
+        "a template card cannot be linked"
+    );
+
+    let later = board(&w, w.project, "Later closed").await;
+    let soon = card(&w, later, "Soon closed").await;
+    req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &path,
+        Some(json!({ "card": soon, "kind": "relates" })),
+    )
+    .await;
+    req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/boards/{}/close", later.0),
+        None,
+    )
+    .await;
+    assert_eq!(
+        call(
+            &w.app,
+            &w.boss,
+            Method::DELETE,
+            &format!("{path}/{soon}"),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND,
+        "a closed board is read only"
+    );
 }

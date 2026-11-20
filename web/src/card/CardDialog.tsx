@@ -51,7 +51,7 @@ export function CardDialog({
   tick?: number
   onClose: () => void
   onChanged: () => void
-  onOpenCard?: (id: number) => void
+  onOpenCard?: (id: number, board?: number) => void
 }) {
   const path = `${base}/cards/${cardId}`
   const { data: card, error: loadError, reload } = useLoad(() => api<CardDetail>('GET', path), path)
@@ -304,7 +304,15 @@ export function CardDialog({
                 </button>
               </div>
             )}
-            <LinksSection card={card} base={base} edit={edit} run={run} onAdd={(el) => setPop({ kind: 'links', at: anchorOf(el) })} />
+            <LinksSection
+              card={card}
+              base={base}
+              here={board.id}
+              edit={edit}
+              run={run}
+              onAdd={(el) => setPop({ kind: 'links', at: anchorOf(el) })}
+              onOpen={(l) => onOpenCard?.(l.card.id, l.board.id)}
+            />
             <AttachmentsSection card={card} base={base} edit={edit} run={run} onAdd={(el) => setPop({ kind: 'attach', at: anchorOf(el) })} />
           </div>
           <aside className="cm-cm" aria-label={t('card.commentsAndActivity')}>

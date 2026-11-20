@@ -88,7 +88,7 @@ pub fn fts_query(words: &[String]) -> String {
         .join(" AND ")
 }
 
-fn like(s: &str) -> String {
+pub fn like(s: &str) -> String {
     format!(
         "%{}%",
         s.replace('\\', "\\\\")

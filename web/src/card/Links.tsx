@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api } from '@/http'
+import { api, errorMessage } from '@/http'
+import { ErrorNote } from '@/ui/ErrorNote'
 import { t, type MessageKey } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import type { CardDetail, CardLink, LinkKind } from '@/card/types'
@@ -10,28 +11,25 @@ const SHOWN = 3
 
 const kindText = (k: LinkKind) => t(`links.kind.${k}` as MessageKey)
 
-function openCard(base: string, link: CardLink) {
-  const slug = /\/c\/([a-z0-9-]+)\//.exec(base)?.[1]
-  window.history.pushState(null, '', `/c/${slug}/b/${link.board.id}/c/${link.card.id}`)
-  window.dispatchEvent(new PopStateEvent('popstate'))
-}
-
 export function LinksSection({
   card,
   base,
+  here,
   edit,
   run,
   onAdd,
+  onOpen,
 }: {
   card: CardDetail
   base: string
+  here: number
   edit: boolean
   run: (fn: () => Promise<unknown>) => Promise<boolean>
   onAdd: (el: Element) => void
+  onOpen: (link: CardLink) => void
 }) {
   const [all, setAll] = useState(false)
   const list = card.links ?? []
-  const here = Number(/\/boards\/(\d+)/.exec(base)?.[1])
   if (!list.length) return null
   const shown = all ? list : list.slice(-SHOWN)
 
@@ -49,8 +47,8 @@ export function LinksSection({
       </h3>
       {shown.map((l) => (
         <div className="lkr" key={l.card.id}>
-          <span className={`pill${l.kind === 'blocked_by' && !l.card.done ? ' bad' : ''}`}>{kindText(l.kind)}</span>
-          <button type="button" className="lnk" onClick={() => openCard(base, l)}>
+          <span className={`pill${l.kind === 'blocked_by' && !l.card.done && !l.card.archived ? ' bad' : ''}`}>{kindText(l.kind)}</span>
+          <button type="button" className="lnk" onClick={() => onOpen(l)}>
             {l.card.title}
           </button>
           <small className="muted">{l.card.archived ? t('links.archived') : l.board.id === here ? l.list : `${l.board.name} · ${l.list}`}</small>
@@ -77,13 +75,18 @@ export function LinkPop({ base, card, onLink }: { base: string; card: number; on
   const [kind, setKind] = useState<LinkKind>('relates')
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Target[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
     const timer = window.setTimeout(() => {
       api<{ cards: Target[] }>('GET', `${base}/cards/${card}/link-targets?q=${encodeURIComponent(q.trim())}`).then(
-        (r) => live && setFound(r.cards),
-        () => live && setFound([]),
+        (r) => {
+          if (!live) return
+          setFound(r.cards)
+          setError(null)
+        },
+        (e: unknown) => live && setError(errorMessage(e)),
       )
     }, 150)
 
@@ -106,6 +109,7 @@ export function LinkPop({ base, card, onLink }: { base: string; card: number; on
         </select>
       </div>
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('links.search')} aria-label={t('links.searchLabel')} data-focus />
+      <ErrorNote message={error} />
       <div className="lkres">
         {(found ?? []).map((x) => (
           <button key={x.card.id} type="button" className="mr" onClick={() => onLink(x.card.id, kind)}>

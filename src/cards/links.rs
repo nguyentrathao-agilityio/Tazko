@@ -50,11 +50,22 @@ fn seen_from(kind: &str, outgoing: bool) -> &'static str {
     }
 }
 
-fn reachable(c: &Connection, project: i64, card: i64, user: i64) -> rusqlite::Result<Option<i64>> {
+fn board_of(
+    c: &Connection,
+    project: i64,
+    card: i64,
+    user: i64,
+    linkable: bool,
+) -> rusqlite::Result<Option<i64>> {
+    let live = if linkable {
+        "AND k.archived_at IS NULL AND l.archived_at IS NULL"
+    } else {
+        ""
+    };
     c.query_row(
         &format!(
-            "SELECT b.id FROM cards k JOIN boards b ON b.id = k.board_id
-             WHERE k.id = ?1 AND b.project_id = ?3 AND k.archived_at IS NULL AND k.is_template = 0 AND b.closed_at IS NULL AND {VISIBLE}"
+            "SELECT b.id FROM cards k JOIN boards b ON b.id = k.board_id JOIN lists l ON l.id = k.list_id
+             WHERE k.id = ?1 AND b.project_id = ?3 AND k.is_template = 0 AND b.closed_at IS NULL {live} AND {VISIBLE}"
         ),
         params![card, user, project],
         |r| r.get(0),
@@ -69,7 +80,7 @@ pub fn for_card(c: &Connection, card: i64, user: i64) -> rusqlite::Result<Vec<Va
          JOIN cards o ON o.id = CASE WHEN x.from_card = ?1 THEN x.to_card ELSE x.from_card END
          JOIN boards b ON b.id = o.board_id
          JOIN lists l ON l.id = o.list_id
-         WHERE (x.from_card = ?1 OR x.to_card = ?1) AND {VISIBLE}
+         WHERE (x.from_card = ?1 OR x.to_card = ?1) AND o.is_template = 0 AND {VISIBLE}
          ORDER BY x.id"
     ))?;
     stmt.query_map(params![card, user], |r| {
@@ -90,18 +101,14 @@ pub fn board_flags(
     user: i64,
 ) -> rusqlite::Result<HashMap<i64, (i64, bool)>> {
     let mut stmt = c.prepare(&format!(
-        "SELECT k.id,
-                (SELECT count(*) FROM card_links x
-                 JOIN cards o ON o.id = CASE WHEN x.from_card = k.id THEN x.to_card ELSE x.from_card END
-                 JOIN boards b ON b.id = o.board_id
-                 WHERE (x.from_card = k.id OR x.to_card = k.id) AND {VISIBLE}),
-                EXISTS (SELECT 1 FROM card_links x
-                 JOIN cards o ON o.id = x.from_card
-                 JOIN boards b ON b.id = o.board_id
-                 WHERE x.to_card = k.id AND x.kind = 'blocks' AND o.done = 0 AND o.archived_at IS NULL AND {VISIBLE})
+        "SELECT k.id, count(*),
+                max(x.to_card = k.id AND x.kind = 'blocks' AND o.done = 0 AND o.archived_at IS NULL)
          FROM cards k
-         WHERE k.board_id = ?1 AND k.archived_at IS NULL
-           AND EXISTS (SELECT 1 FROM card_links x WHERE x.from_card = k.id OR x.to_card = k.id)"
+         JOIN card_links x ON k.id IN (x.from_card, x.to_card)
+         JOIN cards o ON o.id = CASE WHEN x.from_card = k.id THEN x.to_card ELSE x.from_card END
+         JOIN boards b ON b.id = o.board_id
+         WHERE k.board_id = ?1 AND k.archived_at IS NULL AND o.is_template = 0 AND {VISIBLE}
+         GROUP BY k.id"
     ))?;
     stmt.query_map(params![board, user], |r| {
         Ok((r.get(0)?, (r.get(1)?, r.get(2)?)))
@@ -136,11 +143,11 @@ async fn add(
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
-            if card_in_board(&tx, id, card, false)?.is_none() {
+            if card_in_board(&tx, id, card, false)?.is_none() || board_of(&tx, pid, card, by, true)?.is_none() {
                 return Ok(Err(ApiError::NotFound));
             }
 
-            let Some(other_board) = reachable(&tx, pid, other, by)? else {
+            let Some(other_board) = board_of(&tx, pid, other, by, true)? else {
                 return Ok(Err(ApiError::NotFound));
             };
             let (from, to) = if reverse { (other, card) } else { (card, other) };
@@ -153,8 +160,7 @@ async fn add(
                 params![from, to, kind, by],
             )?;
             events::record(&tx, by, "link_added", At::card(pid, id, card), json!({ "card": other, "kind": label }))?;
-            let back = stored(&label).map(|(k, r)| seen_from(k, r)).unwrap_or("relates");
-            events::record(&tx, by, "link_added", At::card(pid, other_board, other), json!({ "card": card, "kind": back }))?;
+            events::record(&tx, by, "link_added", At::card(pid, other_board, other), json!({ "kind": seen_from(kind, reverse) }))?;
             tx.commit()?;
             Ok(Ok(()))
         })
@@ -180,13 +186,7 @@ async fn remove(
                 return Ok(Err(ApiError::NotFound));
             }
 
-            let other_board: Option<i64> = tx
-                .query_row(
-                    &format!("SELECT b.id FROM cards k JOIN boards b ON b.id = k.board_id WHERE k.id = ?1 AND b.project_id = ?3 AND {VISIBLE}"),
-                    params![other, by, pid],
-                    |r| r.get(0),
-                )
-                .optional()?;
+            let other_board = board_of(&tx, pid, other, by, false)?;
             let Some(other_board) = other_board else {
                 return Ok(Err(ApiError::NotFound));
             };
@@ -199,7 +199,7 @@ async fn remove(
             }
 
             events::record(&tx, by, "link_removed", At::card(pid, id, card), json!({ "card": other }))?;
-            events::record(&tx, by, "link_removed", At::card(pid, other_board, other), json!({ "card": card }))?;
+            events::record(&tx, by, "link_removed", At::card(pid, other_board, other), json!({}))?;
             tx.commit()?;
             Ok(Ok(()))
         })
@@ -219,10 +219,7 @@ async fn targets(
 ) -> Result<Json<Value>, ApiError> {
     let card = path_id(&params, "card")?;
     let (id, pid, user) = (board.id, board.project.id, board.user_id());
-    let needle = format!(
-        "%{}%",
-        q.q.unwrap_or_default().trim().replace(['%', '_'], "")
-    );
+    let needle = crate::search::like(&q.q.unwrap_or_default().trim().to_lowercase());
     let found = board
         .project
         .db()
@@ -236,7 +233,7 @@ async fn targets(
                  FROM cards k JOIN boards b ON b.id = k.board_id JOIN lists l ON l.id = k.list_id
                  WHERE b.project_id = ?3 AND k.id != ?1 AND k.archived_at IS NULL AND k.is_template = 0
                    AND l.archived_at IS NULL AND b.closed_at IS NULL AND {VISIBLE}
-                   AND k.title LIKE ?4
+                   AND lower(k.title) LIKE ?4 ESCAPE '\\'
                    AND NOT EXISTS (SELECT 1 FROM card_links x WHERE (x.from_card = ?1 AND x.to_card = k.id) OR (x.to_card = ?1 AND x.from_card = k.id))
                  ORDER BY b.id = ?5 DESC, k.updated_at DESC LIMIT ?6"
             ))?;
