@@ -182,7 +182,7 @@ async fn use_template(
                 )?;
                 tx.execute("DELETE FROM card_members WHERE card_id = ?1", [new])?;
                 tx.execute(
-                    "UPDATE checklist_items SET done = 0 WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
+                    "UPDATE checklist_items SET done = 0, assignee_id = NULL, due_at = NULL WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
                     [new],
                 )?;
                 tx.execute(

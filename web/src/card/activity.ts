@@ -64,6 +64,12 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'reopened a checklist item'
     case 'item_changed':
       return 'changed a checklist item'
+    case 'item_assigned':
+      return `assigned a checklist item to ${who(p.user)}`
+    case 'item_unassigned':
+      return 'cleared a checklist item assignee'
+    case 'item_dated':
+      return p.due_at ? 'changed a checklist item due date' : 'removed a checklist item due date'
     case 'item_deleted':
       return 'deleted a checklist item'
     case 'item_moved':

@@ -9,6 +9,7 @@ export type Note = {
   created_at: number
   read: boolean
   due_at: number | null
+  item?: string | null
 }
 
 export function companyOf(path: string): string | null {
@@ -20,7 +21,7 @@ export function noteText(n: Note): { who: string; what: string } {
   const who = n.actor ? n.actor.name || n.actor.email || t('card.someone') : ''
   const what = {
     mention: t('notify.mention'),
-    assigned: t('notify.assigned'),
+    assigned: n.item ? t('notify.itemAssigned') : t('notify.assigned'),
     due: t('notify.due'),
     card_added: t('notify.cardAdded', { board: n.board.name }),
   }[n.kind]

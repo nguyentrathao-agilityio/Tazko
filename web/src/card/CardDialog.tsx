@@ -10,7 +10,7 @@ import { Popover } from '@/ui/Popover'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
 import { useRun } from '@/projects/useRun'
-import type { BoardData } from '@/board/types'
+import type { BoardData, BoardPerson } from '@/board/types'
 import { describe } from '@/card/activity'
 import { Editor, type DescriptionSave } from '@/card/Editor'
 import { ago, dateRange, dueState, labelStyle } from '@/card/look'
@@ -18,6 +18,7 @@ import { AttachPop, AttachmentsSection } from '@/card/Attachments'
 import { fileUrl } from '@/card/files'
 import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop } from '@/card/Pops'
 import { FieldsSection } from '@/card/Fields'
+import { ItemBadges, ItemMetaPop } from '@/card/ItemMeta'
 import { MentionBox } from '@/card/MentionBox'
 import { Reactions } from '@/card/Reactions'
 import { CommentText } from '@/card/Rich'
@@ -283,6 +284,7 @@ export function CardDialog({
                 all={card.checklists}
                 edit={edit}
                 base={base}
+                people={board.people}
                 run={run}
               />
             ))}
@@ -576,6 +578,7 @@ function ChecklistBlock({
   all,
   edit,
   base,
+  people,
   run,
 }: {
   checklist: Checklist
@@ -583,8 +586,12 @@ function ChecklistBlock({
   all: Checklist[]
   edit: boolean
   base: string
+  people: BoardPerson[]
   run: (fn: () => Promise<unknown>) => Promise<boolean>
 }) {
+  const [meta, setMeta] = useState<{ item: number; at: Anchor } | null>(null)
+  const metaItem = checklist.items.find((i) => i.id === meta?.item)
+  const openMeta = (item: number, el: Element) => setMeta({ item, at: anchorOf(el) })
   const [hide, setHide] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -699,49 +706,55 @@ function ChecklistBlock({
             >
               {it.done && <Icon name="check" />}
             </button>
-            {editingItem === it.id ? (
-              <input
-                className="inl-i"
-                defaultValue={it.text}
-                aria-label={t('card.itemText')}
-                autoFocus
-                onBlur={(e) => {
-                  setEditingItem(null)
-                  const v = e.currentTarget.value.trim()
-                  if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
-                  if (e.key === 'Escape') {
-                    e.stopPropagation()
+            <div className="itb">
+              {editingItem === it.id ? (
+                <input
+                  className="inl-i"
+                  defaultValue={it.text}
+                  aria-label={t('card.itemText')}
+                  autoFocus
+                  onBlur={(e) => {
                     setEditingItem(null)
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className="itx"
-                onClick={() => edit && setEditingItem(it.id)}
-                onKeyDown={(e) => {
-                  if (!edit || !e.altKey) return
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    moveItem(at, -1)
-                  }
+                    const v = e.currentTarget.value.trim()
+                    if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') {
+                      e.stopPropagation()
+                      setEditingItem(null)
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="itx"
+                  onClick={() => edit && setEditingItem(it.id)}
+                  onKeyDown={(e) => {
+                    if (!edit || !e.altKey) return
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      moveItem(at, -1)
+                    }
 
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    moveItem(at, 1)
-                  }
-                }}
-                title={edit ? t('card.itemMoveHint') : undefined}
-              >
-                {it.text}
-              </button>
-            )}
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      moveItem(at, 1)
+                    }
+                  }}
+                  title={edit ? t('card.itemMoveHint') : undefined}
+                >
+                  {it.text}
+                </button>
+              )}
+              {editingItem !== it.id && <ItemBadges item={it} people={people} edit={edit} onOpen={(el) => openMeta(it.id, el)} />}
+            </div>
             {edit && (
               <span className="acts">
+                <button type="button" className="ibtn sm" aria-label={t('item.meta', { text: it.text })} title={t('item.metaHint')} onClick={(e) => openMeta(it.id, e.currentTarget)}>
+                  <Icon name="user" />
+                </button>
                 <button type="button" className="ibtn sm" aria-label={t('card.deleteItem')} onClick={() => void run(() => api('DELETE', `${base}/items/${it.id}`))}>
                   <Icon name="trash" />
                 </button>
@@ -792,6 +805,11 @@ function ChecklistBlock({
             {t('card.addItem')}
           </button>
         ))}
+      {meta && metaItem && (
+        <Popover anchor={meta.at} title={t('item.title')} width={300} onClose={() => setMeta(null)}>
+          <ItemMetaPop item={metaItem} people={people} onChange={(change) => void run(() => api('PATCH', `${base}/items/${metaItem.id}`, change))} />
+        </Popover>
+      )}
     </section>
   )
 }

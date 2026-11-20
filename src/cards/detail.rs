@@ -138,11 +138,17 @@ fn checklists(c: &Connection, card: i64) -> rusqlite::Result<Vec<Value>> {
     let mut out = Vec::new();
     for (id, t) in lists {
         let mut stmt = c.prepare(
-            "SELECT id, text, done FROM checklist_items WHERE checklist_id = ?1 ORDER BY position, id",
+            "SELECT id, text, done, assignee_id, due_at FROM checklist_items WHERE checklist_id = ?1 ORDER BY position, id",
         )?;
         let items = stmt
             .query_map([id], |r| {
-                Ok(json!({ "id": r.get::<_, i64>(0)?, "text": r.get::<_, String>(1)?, "done": r.get::<_, bool>(2)? }))
+                Ok(json!({
+                    "id": r.get::<_, i64>(0)?,
+                    "text": r.get::<_, String>(1)?,
+                    "done": r.get::<_, bool>(2)?,
+                    "assignee": r.get::<_, Option<i64>>(3)?,
+                    "due_at": r.get::<_, Option<i64>>(4)?,
+                }))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         out.push(json!({ "id": id, "title": t, "items": items }));
@@ -418,16 +424,7 @@ async fn set_member(
             }
 
             let n = if body.on {
-                let allowed: bool = tx.query_row(
-                    &format!(
-                        "SELECT EXISTS (SELECT 1 FROM project_members m JOIN boards b ON b.project_id = m.project_id
-                         WHERE b.id = ?1 AND m.user_id = ?2 AND m.role != 'observer' AND {})",
-                        crate::boards::VISIBLE
-                    ),
-                    params![id, user],
-                    |r| r.get(0),
-                )?;
-                if !allowed {
+                if !can_be_assigned(&tx, id, user)? {
                     return Ok(Err(bad("choose a project owner or member who can see this board")));
                 }
 
@@ -848,29 +845,86 @@ async fn add_item(
     Ok((StatusCode::CREATED, Json(json!({ "id": item }))))
 }
 
-#[derive(Deserialize)]
-struct ItemChange {
-    text: Option<String>,
-    done: Option<bool>,
+fn can_be_assigned(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
+    c.query_row(
+        &format!(
+            "SELECT EXISTS (SELECT 1 FROM project_members m JOIN boards b ON b.project_id = m.project_id
+             WHERE b.id = ?1 AND m.user_id = ?2 AND m.role != 'observer' AND {})",
+            crate::boards::VISIBLE
+        ),
+        params![board, user],
+        |r| r.get(0),
+    )
 }
 
 async fn edit_item(
     board: Board,
     headers: HeaderMap,
     Path(params): Params,
-    Json(body): Json<ItemChange>,
+    Json(body): Json<Map<String, Value>>,
 ) -> Result<StatusCode, ApiError> {
+    use rusqlite::types::Value as Sql;
     let by = board.writing(&headers, Act::Edit)?;
     let item = path_id(&params, "item")?;
-    let text = body
-        .text
-        .as_deref()
-        .map(|t| short(t, "an item", 500))
-        .transpose()?;
-    if text.is_none() && body.done.is_none() {
+    let mut sets: Vec<(&'static str, Sql)> = Vec::new();
+    let mut kinds = Vec::new();
+    let mut payload = json!({ "item": item });
+    let mut assignee = None;
+    for (key, value) in &body {
+        if value.is_null() && matches!(key.as_str(), "text" | "done") {
+            continue;
+        }
+
+        match key.as_str() {
+            "text" => {
+                let t = short(
+                    value.as_str().ok_or_else(|| bad("enter the item text"))?,
+                    "an item",
+                    500,
+                )?;
+                sets.push(("text", Sql::Text(t)));
+                kinds.push("item_changed");
+            }
+            "done" => {
+                let d = value
+                    .as_bool()
+                    .ok_or_else(|| bad("done is true or false"))?;
+                sets.push(("done", Sql::Integer(d as i64)));
+                kinds.push(if d { "item_checked" } else { "item_unchecked" });
+            }
+            "assignee" => {
+                let a = match value {
+                    Value::Null => None,
+                    Value::Number(n) => Some(n.as_i64().ok_or_else(|| bad("choose a person"))?),
+                    _ => return Err(bad("choose a person")),
+                };
+                assignee = Some(a);
+                payload["user"] = json!(a);
+                sets.push(("assignee_id", a.map_or(Sql::Null, Sql::Integer)));
+                kinds.push(if a.is_some() {
+                    "item_assigned"
+                } else {
+                    "item_unassigned"
+                });
+            }
+            "due_at" => {
+                let d = date(value)?;
+                payload["due_at"] = json!(d);
+                sets.push(("due_at", d.map_or(Sql::Null, Sql::Integer)));
+                kinds.push("item_dated");
+            }
+            _ => return Err(bad(&format!("{key} cannot be changed here"))),
+        }
+    }
+    if sets.is_empty() {
         return Err(bad("nothing to change"));
     }
 
+    let kind = if kinds.len() == 1 {
+        kinds[0]
+    } else {
+        "item_changed"
+    };
     let (id, pid) = (board.id, board.project.id);
     board
         .project
@@ -880,16 +934,49 @@ async fn edit_item(
             let Some((card, _)) = item_card(&tx, id, item)? else {
                 return Ok(Err(ApiError::NotFound));
             };
-            tx.execute(
-                "UPDATE checklist_items SET text = coalesce(?2, text), done = coalesce(?3, done) WHERE id = ?1",
-                params![item, text, body.done],
+            let (before, text): (Option<i64>, String) = tx.query_row(
+                "SELECT assignee_id, text FROM checklist_items WHERE id = ?1",
+                [item],
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )?;
-            let kind = match (body.done, &text) {
-                (Some(true), None) => "item_checked",
-                (Some(false), None) => "item_unchecked",
-                _ => "item_changed",
-            };
-            events::record(&tx, by, kind, At::card(pid, id, card), json!({ "item": item }))?;
+            let newly = assignee.flatten().filter(|u| Some(*u) != before);
+            if let Some(user) = newly
+                && !can_be_assigned(&tx, id, user)?
+            {
+                return Ok(Err(bad(
+                    "choose a project owner or member who can see this board",
+                )));
+            }
+
+            let columns = sets
+                .iter()
+                .enumerate()
+                .map(|(i, (col, _))| format!("{col} = ?{}", i + 2))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let mut values: Vec<Sql> = vec![Sql::Integer(item)];
+            values.extend(sets.into_iter().map(|(_, v)| v));
+            tx.execute(
+                &format!("UPDATE checklist_items SET {columns} WHERE id = ?1"),
+                rusqlite::params_from_iter(values),
+            )?;
+            events::record(&tx, by, kind, At::card(pid, id, card), payload)?;
+            if let Some(user) = newly {
+                let text = body
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map_or(text, str::to_string);
+                crate::notifications::notify(
+                    &tx,
+                    user,
+                    by,
+                    id,
+                    card,
+                    crate::notifications::Kind::ItemAssigned(text),
+                )?;
+            }
             tx.commit()?;
             Ok(Ok(()))
         })
