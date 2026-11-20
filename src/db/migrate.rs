@@ -45,6 +45,11 @@ pub static CONTROL: Migrations = Migrations {
             name: "0004_admin_templates.sql",
             sql: include_str!("../../migrations/control/0004_admin_templates.sql"),
         },
+        Migration {
+            version: 5,
+            name: "0005_email_queue.sql",
+            sql: include_str!("../../migrations/control/0005_email_queue.sql"),
+        },
     ],
 };
 

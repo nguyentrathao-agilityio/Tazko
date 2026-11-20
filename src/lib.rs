@@ -13,6 +13,7 @@ pub mod error;
 pub mod events;
 pub mod files;
 pub mod http;
+pub mod mail;
 pub mod mycards;
 pub mod notifications;
 pub mod order;

@@ -253,6 +253,12 @@ fn smtp<'a>(get: &impl Fn(&str) -> Option<&'a str>, problems: &mut Vec<String>) 
     }
 
     let port = number(get("TAZKO_SMTP_PORT"), 587u16, "TAZKO_SMTP_PORT", problems);
+    if get("TAZKO_MAIL_FROM").is_some_and(|f| crate::mail::message::Mailbox::parse(f).is_none()) {
+        problems
+            .push("TAZKO_MAIL_FROM must be an address like Tazko <no-reply@example.com>".into());
+        missing = true;
+    }
+
     if missing {
         return None;
     }

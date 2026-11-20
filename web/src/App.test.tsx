@@ -115,7 +115,7 @@ describe('App', () => {
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')).toBeTruthy())
     const post = calls.find((c) => c.method === 'POST')!
     expect(post.url).toBe('/api/v1/c/acme/invites')
-    expect(post.body).toEqual({ email: 'new@example.com', role: 'member' })
+    expect(post.body).toEqual({ email: 'new@example.com', role: 'member', send_email: false })
     expect(post.csrf).toBe(base.csrf_token)
   })
 

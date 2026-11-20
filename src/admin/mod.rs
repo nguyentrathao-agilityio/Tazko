@@ -42,7 +42,7 @@ impl FromRequestParts<AppState> for SuperAdmin {
 }
 
 impl SuperAdmin {
-    fn writing(&self, headers: &HeaderMap) -> Result<i64, ApiError> {
+    pub(crate) fn writing(&self, headers: &HeaderMap) -> Result<i64, ApiError> {
         check_csrf(&CurrentUser(self.0.clone()), headers)?;
         Ok(self.0.user_id)
     }
@@ -674,6 +674,8 @@ async fn delete_company(
 struct NewInvite {
     email: String,
     role: String,
+    #[serde(default)]
+    send_email: bool,
 }
 
 pub(crate) fn company_role(raw: &str) -> Result<&'static str, ApiError> {
@@ -694,6 +696,10 @@ async fn invite(
     let by = admin.writing(&headers)?;
     let email = validate::email(&body.email).ok_or_else(|| bad(INVALID_EMAIL))?;
     let role = company_role(&body.role)?;
+    let wanted = body.send_email && crate::mail::enabled(&state);
+    let inviter = crate::mail::inviter_name(&admin.0);
+    let public_url = state.settings.public_url.clone();
+    let share = public_url.clone();
     let outcome = state
         .dbs
         .control()
@@ -703,19 +709,34 @@ async fn invite(
                 return refuse(ApiError::NotFound);
             };
             let invited = invite_or_add(&tx, &o, &email, role, by, true)?;
+            let sent = match invited {
+                Ok(Invited::Invited) => {
+                    let invitation = crate::mail::Invitation {
+                        to: &email,
+                        inviter: &inviter,
+                        company: &o.name,
+                        project: None,
+                        public_url: &public_url,
+                        org: o.id,
+                        by,
+                    };
+                    crate::mail::invite_email(&tx, wanted, &invitation)?
+                }
+                _ => crate::mail::Invited::default(),
+            };
             if invited.is_ok() {
                 tx.commit()?;
             }
 
-            Ok(Outcome::Done(invited))
+            Ok(Outcome::Done(invited.map(|i| (i, sent))))
         })
         .await?;
-    let result = match finish(outcome)? {
-        Ok(Invited::Added) => "added",
-        Ok(Invited::Invited) => "invited",
+    let (result, sent) = match finish(outcome)? {
+        Ok((Invited::Added, sent)) => ("added", sent),
+        Ok((Invited::Invited, sent)) => ("invited", sent),
         Err(msg) => return Ok(conflict(msg)),
     };
-    Ok((StatusCode::CREATED, Json(json!({ "result": result }))).into_response())
+    Ok((StatusCode::CREATED, Json(sent.json(result, &share))).into_response())
 }
 
 async fn revoke_invite(
@@ -1103,15 +1124,16 @@ async fn server(
     State(state): State<AppState>,
     _admin: SuperAdmin,
 ) -> Result<Json<Value>, ApiError> {
-    let companies: i64 = state
+    let (companies, mail) = state
         .dbs
         .control()
         .read(|c| {
-            Ok(c.query_row(
+            let companies: i64 = c.query_row(
                 "SELECT count(*) FROM orgs WHERE status != 'deleted'",
                 [],
                 |r| r.get(0),
-            )?)
+            )?;
+            Ok((companies, crate::mail::status(c)?))
         })
         .await?;
     Ok(Json(json!({
@@ -1121,6 +1143,8 @@ async fn server(
         "companies": companies,
         "public_url": state.settings.public_url,
         "email": if state.settings.smtp.is_some() { "on" } else { "off" },
+        "email_server": state.settings.smtp.as_ref().map(crate::mail::describe),
+        "email_queue": mail,
         "last_backup": crate::backup::read_status(&state.dbs.layout().root, "backup"),
         "last_restore_test": crate::backup::read_status(&state.dbs.layout().root, "restore-test"),
     })))

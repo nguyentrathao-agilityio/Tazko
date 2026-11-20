@@ -1,0 +1,302 @@
+mod common;
+
+use std::path::{Path, PathBuf};
+
+use axum::http::{Method, StatusCode};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+use common::{TestApp, Who, call, person};
+use serde_json::{Value, json};
+
+const C: &str = "/api/v1/c/company-a";
+
+fn stub() -> (u16, PathBuf, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("outbox");
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let serve_dir = out.clone();
+    std::thread::spawn(move || tazko::mail::stub::serve(listener, serve_dir));
+    (port, out, dir)
+}
+
+fn smtp_env(port: u16) -> String {
+    format!(
+        "TAZKO_SMTP_HOST=127.0.0.1\nTAZKO_SMTP_PORT={port}\nTAZKO_MAIL_FROM=Tazko <no-reply@example.com>\n"
+    )
+}
+
+fn outbox(dir: &Path) -> Vec<String> {
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .map(|d| d.flatten().map(|e| e.path()).collect())
+        .unwrap_or_default();
+    files.sort();
+    files
+        .iter()
+        .map(|f| std::fs::read_to_string(f).unwrap())
+        .collect()
+}
+
+fn text_part(mail: &str) -> String {
+    let part = mail
+        .split(
+            "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+        )
+        .nth(1)
+        .unwrap();
+    let b64: String = part.split("\r\n--").next().unwrap().split("\r\n").collect();
+    String::from_utf8(STANDARD.decode(b64).unwrap()).unwrap()
+}
+
+async fn req(
+    app: &TestApp,
+    who: &Who,
+    method: Method,
+    path: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let res = call(app, who, method, path, body).await;
+    let status = res.status();
+    (
+        status,
+        serde_json::from_str(&common::body_text(res).await).unwrap_or(Value::Null),
+    )
+}
+
+async fn deliver(app: &TestApp) -> usize {
+    tazko::mail::deliver_due(&app.state, tazko::session::now() + 1)
+        .await
+        .unwrap()
+}
+
+struct World {
+    app: TestApp,
+    boss: Who,
+    dev: Who,
+    org: i64,
+}
+
+async fn world(env: &str) -> World {
+    let app = TestApp::with_env(env);
+    let org = app.company("company-a", "active").await;
+    let boss = person(&app, "boss@a.example").await;
+    let dev = person(&app, "dev@a.example").await;
+    app.member(org, boss.id, "owner").await;
+    app.member(org, dev.id, "member").await;
+    World {
+        app,
+        boss,
+        dev,
+        org,
+    }
+}
+
+#[tokio::test]
+async fn invitations_are_emailed_when_asked_and_email_is_on() {
+    let (port, out, _keep) = stub();
+    let w = world(&smtp_env(port)).await;
+    let (status, body) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/invites"),
+        Some(json!({ "email": "new@b.example", "role": "member", "send_email": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["emailed"], true);
+    assert_eq!(body["share_url"], "http://localhost:8791");
+    let (_, quiet) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/invites"),
+        Some(json!({ "email": "quiet@b.example", "role": "member" })),
+    )
+    .await;
+    assert_eq!(quiet["emailed"], false, "no email unless asked");
+
+    let project = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/projects"),
+        Some(json!({ "name": "Web", "owner_id": w.boss.id })),
+    )
+    .await
+    .1["id"]
+        .as_i64()
+        .unwrap();
+    let (_, p) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/projects/{project}/invites"),
+        Some(json!({ "email": "guest@c.example", "role": "member", "send_email": true })),
+    )
+    .await;
+    assert_eq!(p["emailed"], true);
+
+    assert_eq!(deliver(&w.app).await, 2);
+    let mails = outbox(&out);
+    assert_eq!(mails.len(), 2);
+    let invite = mails
+        .iter()
+        .find(|m| m.contains("To: new@b.example"))
+        .unwrap();
+    assert!(invite.contains("From: Tazko <no-reply@example.com>"));
+    assert!(invite.contains("Subject: boss@a.example invited you to COMPANY-A on Tazko"));
+    assert!(!invite.to_lowercase().contains("img"), "no tracking images");
+    let text = text_part(invite);
+    assert!(text.contains("Sign in: http://localhost:8791/"));
+    let guest = text_part(
+        mails
+            .iter()
+            .find(|m| m.contains("To: guest@c.example"))
+            .unwrap(),
+    );
+    assert!(guest.contains("the Web project in COMPANY-A"));
+
+    w.app
+        .sql(|c| {
+            for _ in 0..3 {
+                c.execute("INSERT INTO email_queue (kind, to_addr, subject, body_text, body_html, status) VALUES ('invite', 'again@b.example', 's', 't', 'h', 'sent')", [])?;
+            }
+            Ok(())
+        })
+        .await;
+    let (_, limited) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/invites"),
+        Some(json!({ "email": "again@b.example", "role": "member", "send_email": true })),
+    )
+    .await;
+    assert_eq!(
+        (limited["emailed"].clone(), limited["email_limited"].clone()),
+        (json!(false), json!(true)),
+        "three invitation emails a day per address"
+    );
+}
+
+#[tokio::test]
+async fn the_admin_sees_email_status_and_can_send_a_test() {
+    let (port, out, _keep) = stub();
+    let w = world(&smtp_env(port)).await;
+    let admin = w.boss.id;
+    w.app
+        .sql(move |c| c.execute("UPDATE users SET is_super_admin = 1 WHERE id = ?1", [admin]))
+        .await;
+    assert_eq!(
+        req(
+            &w.app,
+            &w.dev,
+            Method::POST,
+            "/api/v1/admin/email/test",
+            None
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, body) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        "/api/v1/admin/email/test",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(body["to"], "boss@a.example");
+    assert_eq!(deliver(&w.app).await, 1);
+    assert!(outbox(&out)[0].contains("Subject: Tazko test email"));
+    let (_, server) = req(&w.app, &w.boss, Method::GET, "/api/v1/admin/server", None).await;
+    assert_eq!(server["email"], "on");
+    assert_eq!(server["email_server"]["host"], "127.0.0.1");
+    assert!(server["email_server"].get("password").is_none());
+    assert_eq!(server["email_queue"]["sent_24h"], 1);
+    for _ in 0..4 {
+        req(
+            &w.app,
+            &w.boss,
+            Method::POST,
+            "/api/v1/admin/email/test",
+            None,
+        )
+        .await;
+    }
+    assert_eq!(
+        req(
+            &w.app,
+            &w.boss,
+            Method::POST,
+            "/api/v1/admin/email/test",
+            None
+        )
+        .await
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    let _ = w.org;
+}
+
+#[tokio::test]
+async fn with_email_off_invites_still_work_and_show_the_address() {
+    let w = world("").await;
+    let (status, body) = req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/invites"),
+        Some(json!({ "email": "new@b.example", "role": "member", "send_email": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        (body["emailed"].clone(), body["share_url"].clone()),
+        (json!(false), json!("http://localhost:8791"))
+    );
+    let queued: i64 = w
+        .app
+        .sql(|c| c.query_row("SELECT count(*) FROM email_queue", [], |r| r.get(0)))
+        .await;
+    assert_eq!(queued, 0);
+    let (me_status, me) = req(&w.app, &w.boss, Method::GET, "/api/v1/me", None).await;
+    assert_eq!(
+        (me_status, me["email_enabled"].clone()),
+        (StatusCode::OK, json!(false))
+    );
+}
+
+#[tokio::test]
+async fn an_unreachable_mail_server_is_retried_later() {
+    let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = closed.local_addr().unwrap().port();
+    drop(closed);
+    let w = world(&smtp_env(port)).await;
+    req(
+        &w.app,
+        &w.boss,
+        Method::POST,
+        &format!("{C}/invites"),
+        Some(json!({ "email": "new@b.example", "role": "member", "send_email": true })),
+    )
+    .await;
+    assert_eq!(deliver(&w.app).await, 1);
+    let (status, attempts, error, next): (String, i64, String, i64) = w
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT status, attempts, error, next_attempt_at FROM email_queue",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+        })
+        .await;
+    assert_eq!((status.as_str(), attempts), ("pending", 1));
+    assert!(error.contains("connection"), "{error}");
+    assert!(next > tazko::session::now() + 30);
+    assert_eq!(deliver(&w.app).await, 0, "waits before trying again");
+}

@@ -1,3 +1,4 @@
+import { EmailInviteOption, invitedMessage, useInviteHint, wantsEmail, type InviteResult } from '@/invite/emailInvite'
 import type { FormEvent } from 'react'
 import { api } from '@/http'
 import { t } from '@/i18n'
@@ -60,15 +61,17 @@ export function MembersPanel({
     toast(t('toast.revoked', { email: v.email }), () => reinvite(v.email, v.role))
   }
 
+  const inviteHint = useInviteHint(t('members.inviteHint'), t('members.inviteHintEmail'))
+
   const onInvite = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = e.currentTarget
     const f = new FormData(form)
     const email = String(f.get('email') ?? '').trim()
     void run(async () => {
-      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? MEMBER) })
+      const res = await api<InviteResult>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? MEMBER), send_email: wantsEmail(f) })
       form.reset()
-      toast(t(res?.result === 'added' ? 'toast.added' : 'toast.invited', { email: email.toLowerCase() }))
+      toast(invitedMessage(res, email, 'toast.added'))
     })
   }
 
@@ -84,13 +87,14 @@ export function MembersPanel({
           <select name="role" aria-label={t('members.role')} defaultValue={MEMBER}>
             <RoleOptions />
           </select>
+          <EmailInviteOption />
           <button className="btn primary" type="submit">
             <Icon name="plus" />
             {t('members.inviteButton')}
           </button>
         </form>
         <p className="hint" style={{ marginTop: 10 }}>
-          {t('members.inviteHint')}
+          {inviteHint}
         </p>
       </section>
       <section className="box">

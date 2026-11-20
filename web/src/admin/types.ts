@@ -82,6 +82,8 @@ export type ServerInfo = {
   companies: number
   public_url: string
   email: 'on' | 'off'
+  email_server: { host: string; port: number; from: string; signs_in: boolean } | null
+  email_queue: { pending: number; sent_24h: number; failed_24h: number; last_error: { error: string; at: number } | null }
   last_backup: RunStatus | null
   last_restore_test: RunStatus | null
 }
