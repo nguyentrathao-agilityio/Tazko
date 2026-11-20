@@ -14,7 +14,7 @@ import { Tools } from '@/ui/Tools'
 import type { MyProject } from '@/projects/types'
 import { isOwner } from '@/roles'
 import { ErrorNote } from '@/ui/ErrorNote'
-import { boardApiOf, companyApi, companyRoute } from '@/paths'
+import { boardApiOf, boardRoute, companyApi, companyRoute, projectRoute } from '@/paths'
 
 export function YourProjects({ company, go }: { company: Company; go: Go }) {
   const companyPath = companyApi(company.slug)
@@ -56,7 +56,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
               </div>
               <div className="pgrid">
                 {starred.data.boards.map((b) => (
-                  <BoardTile key={b.id} board={b} onOpen={() => go(`${home}/b/${b.id}`)} onStar={() => unstar(b.id)} />
+                  <BoardTile key={b.id} board={b} onOpen={() => go(boardRoute(company.slug, b.id))} onStar={() => unstar(b.id)} />
                 ))}
               </div>
             </>
@@ -67,7 +67,7 @@ export function YourProjects({ company, go }: { company: Company; go: Go }) {
           </div>
           <div className="pgrid">
             {data.projects.map((p) => (
-              <button key={p.id} type="button" className="ptile" onClick={() => go(`${home}/p/${p.id}`)}>
+              <button key={p.id} type="button" className="ptile" onClick={() => go(projectRoute(company.slug, p.id))}>
                 <div className="row" style={{ flexWrap: 'nowrap' }}>
                   <span className={`av sq ${p.color}`} style={{ width: 36, height: 36 }} aria-hidden="true">
                     {initials(p.name)}

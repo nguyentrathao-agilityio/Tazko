@@ -11,7 +11,7 @@ import { ProjectMembers } from '@/projects/ProjectMembers'
 import { ProjectSettings } from '@/projects/ProjectSettings'
 import type { ProjectView } from '@/projects/types'
 import { isOwner } from '@/roles'
-import { companyRoute, projectApi } from '@/paths'
+import { companyRoute, projectApi, projectRoute } from '@/paths'
 
 export type ProjectTab = 'boards' | 'members' | 'settings'
 
@@ -23,7 +23,7 @@ export function ProjectPage({ company, id, tab, go }: { company: Company; id: nu
   const path = projectApi(company.slug, id)
   const home = companyRoute(company.slug)
   const { data, error, reload } = useLoad(() => api<ProjectView>('GET', path), path)
-  const base = `${home}/p/${id}`
+  const base = projectRoute(company.slug, id)
 
   if (error)
     return (

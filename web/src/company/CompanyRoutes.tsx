@@ -15,6 +15,7 @@ import { YourProjects } from '@/projects/YourProjects'
 import { SearchHost } from '@/search/Search'
 import { SettingsPage } from '@/settings/SettingsPage'
 import { MeContext } from '@/ui/meContext'
+import { companyRoute } from '@/paths'
 
 function Centered({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   return (
@@ -39,7 +40,7 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
 
   useEffect(() => {
     if (!match && fallback) {
-      go(`/c/${fallback.slug}`, true)
+      go(companyRoute(fallback.slug), true)
     }
   }, [match, fallback, go])
 
