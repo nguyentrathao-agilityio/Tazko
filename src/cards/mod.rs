@@ -1,6 +1,7 @@
 pub mod detail;
 pub mod fields;
 pub mod reactions;
+pub mod repeat;
 
 use std::collections::HashMap;
 
@@ -151,7 +152,7 @@ pub fn summaries(c: &Connection, board: i64) -> rusqlite::Result<HashMap<i64, Ve
                 (SELECT count(*) FROM comments m WHERE m.card_id = k.id),
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id),
                 (SELECT count(*) FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = k.id AND i.done = 1),
-                (SELECT count(*) FROM attachments a WHERE a.card_id = k.id), k.cover_attachment, k.is_template, k.updated_at
+                (SELECT count(*) FROM attachments a WHERE a.card_id = k.id), k.cover_attachment, k.is_template, k.updated_at, k.recurrence
          FROM cards k WHERE k.board_id = ?1 AND k.archived_at IS NULL ORDER BY k.list_id, k.position",
     )?;
     let mut out: HashMap<i64, Vec<Value>> = HashMap::new();
@@ -176,6 +177,7 @@ pub fn summaries(c: &Connection, board: i64) -> rusqlite::Result<HashMap<i64, Ve
                 "cover_image": r.get::<_, Option<i64>>(13)?,
                 "is_template": r.get::<_, bool>(14)?,
                 "updated_at": r.get::<_, i64>(15)?,
+                "recurrence": r.get::<_, Option<String>>(16)?,
             }),
         ))
     })?;
@@ -204,8 +206,8 @@ pub fn copy_card(
     labels: Option<&HashMap<i64, i64>>,
 ) -> rusqlite::Result<i64> {
     c.execute(
-        "INSERT INTO cards (board_id, list_id, title, position, created_by, description, description_text, start_at, due_at, done, cover)
-         SELECT ?2, ?3, ?4, ?5, ?6, description, description_text, start_at, due_at, done, cover FROM cards WHERE id = ?1",
+        "INSERT INTO cards (board_id, list_id, title, position, created_by, description, description_text, start_at, due_at, done, cover, recurrence)
+         SELECT ?2, ?3, ?4, ?5, ?6, description, description_text, start_at, due_at, done, cover, recurrence FROM cards WHERE id = ?1",
         params![card, board, list, title, position, by],
     )?;
     let new = c.last_insert_rowid();

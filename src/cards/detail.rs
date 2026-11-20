@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::Router;
 use axum::extract::Path;
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::Json;
+use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, patch, post, put};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
@@ -12,7 +12,7 @@ use serde_json::{Map, Value, json};
 use super::{card_in_board, title};
 use crate::api::COMPANY_PREFIX;
 use crate::boards::Board;
-use crate::error::{ApiError, bad};
+use crate::error::{ApiError, bad, conflict};
 use crate::events::{self, At};
 use crate::order;
 use crate::projects::{Act, path_id};
@@ -29,6 +29,7 @@ pub fn routes() -> Router<AppState> {
     let p = |s: &str| format!("{COMPANY_PREFIX}/boards/{{board}}{s}");
     Router::new()
         .route(&p("/cards/{card}"), get(view).patch(update))
+        .route(&p("/cards/{card}/repeat/undo"), post(undo_repeat))
         .route(&p("/cards/{card}/labels/{label}"), put(set_label))
         .route(&p("/cards/{card}/members/{user}"), put(set_member))
         .route(&p("/cards/{card}/checklists"), post(add_checklist))
@@ -166,7 +167,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             let row = c
                 .query_row(
                     "SELECT k.title, k.description, k.start_at, k.due_at, k.done, k.cover, k.list_id, l.title,
-                            k.archived_at IS NOT NULL, k.created_at, k.created_by, k.cover_attachment, k.is_template
+                            k.archived_at IS NOT NULL, k.created_at, k.created_by, k.cover_attachment, k.is_template, k.recurrence
                      FROM cards k JOIN lists l ON l.id = k.list_id WHERE k.id = ?1 AND k.board_id = ?2",
                     params![card, id],
                     |r| {
@@ -184,6 +185,7 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
                                 "created_at": r.get::<_, i64>(9)?,
                                 "cover_image": r.get::<_, Option<i64>>(11)?,
                                 "is_template": r.get::<_, bool>(12)?,
+                                "recurrence": r.get::<_, Option<String>>(13)?,
                             }),
                             r.get::<_, Option<i64>>(10)?,
                         ))
@@ -247,11 +249,12 @@ async fn update(
     headers: HeaderMap,
     Path(params): Params,
     Json(body): Json<Map<String, Value>>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Response, ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
     let card = path_id(&params, "card")?;
     let mut sets: Vec<(&'static str, rusqlite::types::Value)> = Vec::new();
     let mut changed = Map::new();
+    let mut offset = 0;
     use rusqlite::types::Value as Sql;
     for (key, value) in &body {
         match key.as_str() {
@@ -299,6 +302,21 @@ async fn update(
                 changed.insert("done".into(), json!(d));
                 sets.push(("done", Sql::Integer(d as i64)));
             }
+            "recurrence" => {
+                let r = match value {
+                    Value::Null => None,
+                    Value::String(r) if super::repeat::valid(r) => Some(r.clone()),
+                    _ => return Err(bad("choose how often the card repeats")),
+                };
+                changed.insert("recurrence".into(), json!(r));
+                sets.push(("recurrence", r.map_or(Sql::Null, Sql::Text)));
+            }
+            "tz_offset" => {
+                offset = value
+                    .as_i64()
+                    .filter(|m| (-840..=840).contains(m))
+                    .ok_or_else(|| bad("the time zone offset is not valid"))?;
+            }
             "cover" => {
                 let cv = match value {
                     Value::Null => None,
@@ -317,7 +335,7 @@ async fn update(
     }
 
     let (id, pid) = (board.id, board.project.id);
-    board
+    let repeated = board
         .project
         .db()
         .write(move |c| {
@@ -339,13 +357,107 @@ async fn update(
             } else {
                 "card_updated"
             };
-            events::record(
-                &tx,
-                by,
-                kind,
-                At::card(pid, id, card),
-                Value::Object(changed),
+            let completing = changed.get("done") == Some(&json!(true));
+            let repeated = if completing {
+                reschedule(&tx, card, offset)?
+            } else {
+                None
+            };
+            match &repeated {
+                Some(r) => {
+                    events::record(&tx, by, "card_repeated", At::card(pid, id, card), r.clone())?
+                }
+                None => events::record(
+                    &tx,
+                    by,
+                    kind,
+                    At::card(pid, id, card),
+                    Value::Object(changed),
+                )?,
+            };
+            tx.commit()?;
+            Ok(Ok(repeated))
+        })
+        .await??;
+    Ok(match repeated {
+        Some(r) => Json(json!({ "repeated": r })).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    })
+}
+
+fn reschedule(c: &Connection, card: i64, offset: i64) -> rusqlite::Result<Option<Value>> {
+    let (rule, due, start): (Option<String>, Option<i64>, Option<i64>) = c.query_row(
+        "SELECT recurrence, due_at, start_at FROM cards WHERE id = ?1",
+        [card],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    let (Some(rule), Some(due)) = (rule, due) else {
+        return Ok(None);
+    };
+    let next = super::repeat::next_due(due, &rule, now(), offset);
+    let ticked: Vec<i64> = c
+        .prepare("SELECT i.id FROM checklist_items i JOIN checklists x ON x.id = i.checklist_id WHERE x.card_id = ?1 AND i.done = 1")?
+        .query_map([card], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    c.execute(
+        "UPDATE cards SET done = 0, due_at = ?2, start_at = start_at + (?2 - ?3), updated_at = ?4 WHERE id = ?1",
+        params![card, next, due, now()],
+    )?;
+    c.execute(
+        "UPDATE checklist_items SET done = 0 WHERE checklist_id IN (SELECT id FROM checklists WHERE card_id = ?1)",
+        [card],
+    )?;
+    Ok(Some(
+        json!({ "rule": rule, "from": due, "to": next, "start_from": start, "items": ticked }),
+    ))
+}
+
+async fn undo_repeat(
+    board: Board,
+    headers: HeaderMap,
+    Path(params): Params,
+) -> Result<StatusCode, ApiError> {
+    let by = board.writing(&headers, Act::Edit)?;
+    let card = path_id(&params, "card")?;
+    let (id, pid) = (board.id, board.project.id);
+    board
+        .project
+        .db()
+        .write(move |c| {
+            let tx = c.transaction()?;
+            if card_in_board(&tx, id, card, false)?.is_none() {
+                return Ok(Err(ApiError::NotFound));
+            }
+
+            let last: Option<(String, String)> = tx
+                .query_row(
+                    "SELECT type, payload FROM events WHERE card_id = ?1 ORDER BY id DESC LIMIT 1",
+                    [card],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            let Some(p) = last
+                .filter(|(t, _)| t == "card_repeated")
+                .and_then(|(_, p)| serde_json::from_str::<Value>(&p).ok())
+            else {
+                return Ok(Err(conflict("the card has changed since it was completed")));
+            };
+            let due: Option<i64> = tx.query_row("SELECT due_at FROM cards WHERE id = ?1", [card], |r| r.get(0))?;
+            if due != p["to"].as_i64() {
+                return Ok(Err(conflict("the card has changed since it was completed")));
+            }
+
+            tx.execute(
+                "UPDATE cards SET due_at = ?2, start_at = ?3, updated_at = ?4 WHERE id = ?1",
+                params![card, p["from"].as_i64(), p["start_from"].as_i64(), now()],
             )?;
+            for item in p["items"].as_array().into_iter().flatten().filter_map(Value::as_i64) {
+                tx.execute(
+                    "UPDATE checklist_items SET done = 1 WHERE id = ?1 AND checklist_id IN (SELECT id FROM checklists WHERE card_id = ?2)",
+                    params![item, card],
+                )?;
+            }
+            events::record(&tx, by, "card_repeat_undone", At::card(pid, id, card), json!({ "due_at": p["from"] }))?;
             tx.commit()?;
             Ok(Ok(()))
         })
