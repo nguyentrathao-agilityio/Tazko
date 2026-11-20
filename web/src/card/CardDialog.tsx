@@ -20,6 +20,7 @@ import { CopyPop, CoverPop, DatesPop, LabelsPop, MembersPop, MovePop, TitlePop }
 import { FieldsSection } from '@/card/Fields'
 import { LinkPop, LinksSection } from '@/card/Links'
 import { ruleText, useToggleDone } from '@/card/repeat'
+import { ageLevel, agingOf, quietDays } from '@/card/aging'
 import { useVote } from '@/card/vote'
 import { ItemBadges, ItemMetaPop } from '@/card/ItemMeta'
 import { MentionBox } from '@/card/MentionBox'
@@ -62,6 +63,7 @@ export function CardDialog({
   }, [reload, onChanged])
   const { error, run } = useRun(changed)
   const toggleDone = useToggleDone(run)
+  const summary = board.lists.flatMap((l) => l.cards).find((c) => c.id === cardId)
   const vote = useVote(run)
   const toast = useToast()
   const [pop, setPop] = useState<Pop>(null)
@@ -186,6 +188,15 @@ export function CardDialog({
                 <>
                   {' '}
                   · <b style={{ color: 'var(--warn)' }}>{t('card.archivedNote')}</b>
+                </>
+              )}
+              {summary && ageLevel(summary, agingOf(board)) > 0 && (
+                <>
+                  {' '}
+                  ·{' '}
+                  <span className="pill warn" title={t('aging.pillHint')}>
+                    {t('aging.pill', { n: quietDays(summary.updated_at) })}
+                  </span>
                 </>
               )}
             </p>

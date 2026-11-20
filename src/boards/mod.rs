@@ -396,6 +396,8 @@ async fn view(board: Board) -> Result<Json<Value>, ApiError> {
         "watching": starred.1,
         "project": { "id": board.project.id, "name": board.project.info.name },
         "voting": board.project.info.voting,
+        "aging": board.project.info.aging,
+        "aging_days": board.project.info.aging_days,
         "role": board.project.role.as_str(),
         "can": can,
         "people": people,

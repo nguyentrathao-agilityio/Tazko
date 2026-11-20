@@ -24,6 +24,8 @@ export type ProjectView = {
   members_create_boards: boolean
   members_invite: boolean
   voting: boolean
+  aging: boolean
+  aging_days: number
   role: ProjectRole
   member_count: number
   can: Can

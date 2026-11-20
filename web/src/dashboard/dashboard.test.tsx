@@ -29,7 +29,7 @@ const board = () => ({ id: 7, name: 'Sprint 15', description: '', background: 's
 describe('dashboard numbers', () => {
   it('adds up to the board in every chart', () => {
     const ls = lists() as unknown as ListData[]
-    const s = boardStats(ls, people as BoardPerson[], labels as Label[], (b) => b, 'Unassigned', NOW)
+    const s = boardStats(ls, people as BoardPerson[], labels as Label[], (b) => b, 'Unassigned', undefined, NOW)
     const total = ls.reduce((n, l) => n + l.cards.length, 0)
     expect(s.cards).toBe(total)
     expect(s.lists.map((b) => b.value)).toEqual([3, 1, 2])

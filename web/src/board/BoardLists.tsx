@@ -17,6 +17,7 @@ import { t } from '@/i18n'
 import { CardTile } from '@/board/CardTile'
 import { Composer } from '@/board/Composer'
 import { ListColumn, type ListActions } from '@/board/ListColumn'
+import { ageLevel, type Aging } from '@/card/aging'
 import type { BoardPerson, CardData, Label, ListData } from '@/board/types'
 
 export type CardMove = { card: number; list: number; after: number | null }
@@ -55,6 +56,7 @@ export function BoardLists({
   onQuickEdit,
   onToggleDone,
   onVote,
+  aging,
   selected,
   after,
 }: {
@@ -78,6 +80,7 @@ export function BoardLists({
   onQuickEdit: (card: CardData, el: HTMLElement) => void
   onToggleDone: (card: CardData) => void
   onVote?: (card: CardData) => void
+  aging?: Aging
   selected?: number | null
   after?: ReactNode
 }) {
@@ -199,7 +202,7 @@ export function BoardLists({
                 >
                   <SortableContext items={l.cards.map((c) => `c:${c.id}`)} strategy={verticalListSortingStrategy}>
                     {l.cards.map((c) => (
-                      <CardTile key={c.id} card={c} base={base} fields={fields} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} onVote={onVote} />
+                      <CardTile key={c.id} card={c} base={base} fields={fields} selected={selected === c.id} edit={edit} labels={labels} people={people} onOpen={onOpenCard} onQuickEdit={onQuickEdit} onToggleDone={onToggleDone} onVote={onVote} age={ageLevel(c, aging)} />
                     ))}
                   </SortableContext>
                 </ListColumn>

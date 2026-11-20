@@ -22,6 +22,7 @@ export function CardTile({
   onQuickEdit,
   onToggleDone,
   onVote,
+  age = 0,
 }: {
   card: CardData
   base?: string
@@ -34,6 +35,7 @@ export function CardTile({
   onQuickEdit: (card: CardData, el: HTMLElement) => void
   onToggleDone: (card: CardData) => void
   onVote?: (card: CardData) => void
+  age?: number
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `c:${card.id}`, disabled: !edit })
   const style = { transform: CSS.Translate.toString(transform), transition }
@@ -49,7 +51,7 @@ export function CardTile({
     <article
       ref={setNodeRef}
       style={style}
-      className={`cd${isDragging ? ' dragging' : ''}${card.done ? ' done' : ''}${selected ? ' kf' : ''}`}
+      className={`cd${isDragging ? ' dragging' : ''}${card.done ? ' done' : ''}${selected ? ' kf' : ''}${age ? ` age${age}` : ''}`}
       data-card={card.id}
       aria-label={card.title}
       {...attributes}

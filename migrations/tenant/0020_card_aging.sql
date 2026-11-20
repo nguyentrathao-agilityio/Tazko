@@ -1,0 +1,2 @@
+ALTER TABLE projects ADD COLUMN aging INTEGER NOT NULL DEFAULT 1 CHECK (aging IN (0, 1));
+ALTER TABLE projects ADD COLUMN aging_days INTEGER NOT NULL DEFAULT 7 CHECK (aging_days IN (3, 7, 14, 30));
