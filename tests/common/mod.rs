@@ -23,10 +23,18 @@ impl TestApp {
     }
 
     pub fn with_google(endpoints: tazko::auth::google::Endpoints) -> Self {
+        Self::build(endpoints, "")
+    }
+
+    pub fn with_env(extra: &str) -> Self {
+        Self::build(tazko::auth::google::Endpoints::default(), extra)
+    }
+
+    fn build(endpoints: tazko::auth::google::Endpoints, extra: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("data");
         let map = config::parse_env(&format!(
-            "TAZKO_PUBLIC_URL=http://localhost:8791\nTAZKO_DATA_DIR={}\nTAZKO_GOOGLE_CLIENT_ID=client.example\nTAZKO_GOOGLE_CLIENT_SECRET=test-client-secret\n",
+            "TAZKO_PUBLIC_URL=http://localhost:8791\nTAZKO_DATA_DIR={}\nTAZKO_GOOGLE_CLIENT_ID=client.example\nTAZKO_GOOGLE_CLIENT_SECRET=test-client-secret\n{extra}",
             data.display()
         ));
         let settings = config::from_map(&map).unwrap();

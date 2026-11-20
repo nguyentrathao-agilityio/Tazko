@@ -27,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::notifications::routes())
         .merge(crate::templates::routes())
         .merge(crate::mycards::routes())
+        .merge(crate::webhooks::routes())
         .fallback(static_file)
         .with_state(state)
 }

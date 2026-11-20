@@ -137,6 +137,7 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
     println!("{banner}");
     tokio::spawn(purge_trash_daily(state.clone()));
     tokio::spawn(tazko::notifications::due_soon_job(state.clone()));
+    tokio::spawn(tazko::webhooks::worker::job(state.clone()));
     if let Err(e) = axum::serve(listener, tazko::http::router(state.clone()))
         .with_graceful_shutdown(shutdown())
         .await
@@ -189,22 +190,7 @@ async fn purge_trash_daily(state: AppState) {
 }
 
 async fn purge_projects(state: &AppState, now: i64) {
-    let slugs = state
-        .dbs
-        .control()
-        .read(|c| {
-            let mut stmt = c.prepare("SELECT slug FROM orgs WHERE status = 'active'")?;
-            let rows = stmt
-                .query_map([], |r| r.get::<_, String>(0))?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .await
-        .unwrap_or_default();
-    for slug in slugs {
-        let Ok(db) = state.dbs.tenant(&slug) else {
-            continue;
-        };
+    for (slug, db) in tazko::tenant::active_tenants(state).await {
         if let Err(e) = tazko::projects::purge(&db, now).await {
             eprintln!("tazko: project clean-up failed for {slug}: {e:?}");
         }

@@ -54,7 +54,7 @@ impl FromRequestParts<AppState> for CompanyOwner {
 }
 
 impl CompanyOwner {
-    fn writing(&self, headers: &HeaderMap) -> Result<i64, ApiError> {
+    pub(crate) fn writing(&self, headers: &HeaderMap) -> Result<i64, ApiError> {
         check_csrf(&self.0.user, headers)?;
         Ok(self.0.user.0.user_id)
     }

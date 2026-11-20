@@ -58,6 +58,7 @@ pub struct Settings {
     pub secret: Option<Secret>,
     pub max_upload_mb: u32,
     pub smtp: Option<Smtp>,
+    pub webhooks_allow_local: bool,
     pub source: Option<PathBuf>,
 }
 
@@ -208,6 +209,10 @@ pub fn from_map(map: &BTreeMap<String, String>) -> Result<Settings, ConfigError>
         secret,
         max_upload_mb,
         smtp,
+        webhooks_allow_local: matches!(
+            get("TAZKO_WEBHOOKS_ALLOW_LOCAL"),
+            Some("1" | "true" | "yes")
+        ),
         source: None,
     })
 }

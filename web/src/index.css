@@ -16,6 +16,7 @@
 @import './mycards/mycards.css';
 @import './palette/palette.css';
 @import './tokens/tokens.css';
+@import './webhooks/webhooks.css';
 
 body {
   margin: 0;

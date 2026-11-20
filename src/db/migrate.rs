@@ -156,6 +156,11 @@ pub static TENANT: Migrations = Migrations {
             name: "0021_touch_links_votes.sql",
             sql: include_str!("../../migrations/tenant/0021_touch_links_votes.sql"),
         },
+        Migration {
+            version: 22,
+            name: "0022_webhooks.sql",
+            sql: include_str!("../../migrations/tenant/0022_webhooks.sql"),
+        },
     ],
 };
 

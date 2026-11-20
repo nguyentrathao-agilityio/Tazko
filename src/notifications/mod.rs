@@ -151,23 +151,8 @@ pub async fn due_soon(db: &Database, now: i64) -> Result<usize, ApiError> {
 pub const DUE_CHECK_EVERY: Duration = Duration::from_secs(5 * 60);
 
 pub async fn due_soon_all(state: &AppState, now: i64) -> usize {
-    let slugs: Vec<String> = state
-        .dbs
-        .control()
-        .read(|c| {
-            let mut stmt = c.prepare("SELECT slug FROM orgs WHERE status = 'active'")?;
-            let rows = stmt
-                .query_map([], |r| r.get::<_, String>(0))?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .await
-        .unwrap_or_default();
     let mut sent = 0;
-    for slug in slugs {
-        let Ok(db) = state.dbs.tenant(&slug) else {
-            continue;
-        };
+    for (slug, db) in crate::tenant::active_tenants(state).await {
         match due_soon(&db, now).await {
             Ok(n) => sent += n,
             Err(e) => eprintln!("tazko: due-date alerts failed for {slug}: {e:?}"),

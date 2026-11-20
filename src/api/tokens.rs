@@ -401,7 +401,7 @@ async fn list_personal(
     Ok(Json(json!({ "tokens": tokens })))
 }
 
-fn member_project(c: &Connection, user: i64, project: i64) -> rusqlite::Result<bool> {
+pub(crate) fn member_project(c: &Connection, user: i64, project: i64) -> rusqlite::Result<bool> {
     c.query_row(
         "SELECT EXISTS (SELECT 1 FROM project_members m JOIN projects p ON p.id = m.project_id
          WHERE m.project_id = ?1 AND m.user_id = ?2 AND p.deleted_at IS NULL)",
