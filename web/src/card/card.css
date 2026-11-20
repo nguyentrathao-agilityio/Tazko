@@ -681,6 +681,23 @@
     opacity: 0;
   }
 
+  .itb {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    align-items: center;
+  }
+
+  .itb .itx {
+    flex: 0 1 auto;
+  }
+
+  .itb .inl-i {
+    flex: 1;
+  }
+
   .itm {
     display: inline-flex;
     gap: 6px;

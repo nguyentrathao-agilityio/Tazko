@@ -122,7 +122,7 @@ describe('card dialog', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Assign or date "Step 4"' }))
     const pop = await screen.findByRole('dialog', { name: 'Checklist item' })
-    expect((within(pop).getByRole('button', { name: /Ana Reyes/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(pop).queryByRole('button', { name: /Ana Reyes/ })).toBeNull()
     fireEvent.click(within(pop).getByRole('button', { name: /Jo Lee/ }))
     await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/items/53', method: 'PATCH', body: { assignee: 2 } }))
     fireEvent.change(within(pop).getByLabelText('Due date'), { target: { value: '2026-12-24' } })

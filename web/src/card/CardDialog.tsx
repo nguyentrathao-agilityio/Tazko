@@ -706,48 +706,50 @@ function ChecklistBlock({
             >
               {it.done && <Icon name="check" />}
             </button>
-            {editingItem === it.id ? (
-              <input
-                className="inl-i"
-                defaultValue={it.text}
-                aria-label={t('card.itemText')}
-                autoFocus
-                onBlur={(e) => {
-                  setEditingItem(null)
-                  const v = e.currentTarget.value.trim()
-                  if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
-                  if (e.key === 'Escape') {
-                    e.stopPropagation()
+            <div className="itb">
+              {editingItem === it.id ? (
+                <input
+                  className="inl-i"
+                  defaultValue={it.text}
+                  aria-label={t('card.itemText')}
+                  autoFocus
+                  onBlur={(e) => {
                     setEditingItem(null)
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className="itx"
-                onClick={() => edit && setEditingItem(it.id)}
-                onKeyDown={(e) => {
-                  if (!edit || !e.altKey) return
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    moveItem(at, -1)
-                  }
+                    const v = e.currentTarget.value.trim()
+                    if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') {
+                      e.stopPropagation()
+                      setEditingItem(null)
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="itx"
+                  onClick={() => edit && setEditingItem(it.id)}
+                  onKeyDown={(e) => {
+                    if (!edit || !e.altKey) return
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      moveItem(at, -1)
+                    }
 
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    moveItem(at, 1)
-                  }
-                }}
-                title={edit ? t('card.itemMoveHint') : undefined}
-              >
-                {it.text}
-              </button>
-            )}
-            {editingItem !== it.id && <ItemBadges item={it} people={people} edit={edit} onOpen={(el) => openMeta(it.id, el)} />}
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      moveItem(at, 1)
+                    }
+                  }}
+                  title={edit ? t('card.itemMoveHint') : undefined}
+                >
+                  {it.text}
+                </button>
+              )}
+              {editingItem !== it.id && <ItemBadges item={it} people={people} edit={edit} onOpen={(el) => openMeta(it.id, el)} />}
+            </div>
             {edit && (
               <span className="acts">
                 <button type="button" className="ibtn sm" aria-label={t('item.meta', { text: it.text })} title={t('item.metaHint')} onClick={(e) => openMeta(it.id, e.currentTarget)}>

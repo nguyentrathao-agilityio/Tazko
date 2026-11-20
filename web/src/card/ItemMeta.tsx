@@ -1,5 +1,4 @@
 import type { BoardPerson } from '@/board/types'
-import { MembersPop } from '@/card/Pops'
 import { dueState, shortDate } from '@/card/look'
 import { fromInputs, toDateInput } from '@/card/dates'
 import type { ChecklistItem } from '@/card/types'
@@ -7,6 +6,7 @@ import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { displayName } from '@/ui/names'
 import { Avatar } from '@/ui/people'
+import { isObserver } from '@/roles'
 
 export type ItemChange = { assignee?: number | null; due_at?: number | null }
 
@@ -35,7 +35,23 @@ export function ItemMetaPop({ item, people, onChange }: { item: ChecklistItem; p
   return (
     <>
       <div className="sub">{t('item.assignTo')}</div>
-      <MembersPop people={people} chosen={item.assignee ? [item.assignee] : []} onToggle={(id, on) => onChange({ assignee: on ? id : null })} />
+      {people
+        .filter((p) => p.access && !isObserver(p.role))
+        .map((p) => {
+          const name = displayName(p.name, p.email)
+          const on = item.assignee === p.id
+          return (
+            <button key={p.id} type="button" className="mr" aria-pressed={on} onClick={() => onChange({ assignee: on ? null : p.id })}>
+              <Avatar name={name} />
+              <span>{name}</span>
+              {on && (
+                <span className="tick">
+                  <Icon name="check" />
+                </span>
+              )}
+            </button>
+          )
+        })}
       {item.assignee && (
         <button type="button" className="mr" onClick={() => onChange({ assignee: null })}>
           <span className="muted">{t('item.removeAssignee')}</span>
