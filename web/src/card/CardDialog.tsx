@@ -22,6 +22,7 @@ import { MentionBox } from '@/card/MentionBox'
 import { Reactions } from '@/card/Reactions'
 import { CommentText } from '@/card/Rich'
 import type { CardDetail, Checklist, Comment } from '@/card/types'
+import { ARROW_DOWN, ARROW_UP, ENTER, ESCAPE } from '@/keys/keyNames'
 
 type PopKind = 'menu' | 'members' | 'labels' | 'dates' | 'cover' | 'move' | 'copy' | 'checklist' | 'attach'
 type Pop = { kind: PopKind; at: Anchor } | null
@@ -74,7 +75,7 @@ export function CardDialog({
   }, [])
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !pop && !editingDesc && !editingTitle) {
+    if (e.key === ESCAPE && !pop && !editingDesc && !editingTitle) {
       e.stopPropagation()
       onClose()
     }
@@ -499,12 +500,12 @@ function TitleEditor({ initial, onDone }: { initial: string; onDone: (v: string)
       onChange={(e) => setV(e.target.value)}
       onBlur={() => onDone(v.trim())}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') {
+        if (e.key === ENTER) {
           e.preventDefault()
           onDone(v.trim())
         }
 
-        if (e.key === 'Escape') {
+        if (e.key === ESCAPE) {
           e.stopPropagation()
           onDone(initial)
         }
@@ -632,8 +633,8 @@ function ChecklistBlock({
                 if (v && v !== checklist.title) void run(() => api('PATCH', k, { title: v }))
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur()
-                if (e.key === 'Escape') {
+                if (e.key === ENTER) e.currentTarget.blur()
+                if (e.key === ESCAPE) {
                   e.stopPropagation()
                   setRenaming(false)
                 }
@@ -711,8 +712,8 @@ function ChecklistBlock({
                   if (v && v !== it.text) void run(() => api('PATCH', `${base}/items/${it.id}`, { text: v }))
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
-                  if (e.key === 'Escape') {
+                  if (e.key === ENTER) e.currentTarget.blur()
+                  if (e.key === ESCAPE) {
                     e.stopPropagation()
                     setEditingItem(null)
                   }
@@ -725,12 +726,12 @@ function ChecklistBlock({
                 onClick={() => edit && setEditingItem(it.id)}
                 onKeyDown={(e) => {
                   if (!edit || !e.altKey) return
-                  if (e.key === 'ArrowUp') {
+                  if (e.key === ARROW_UP) {
                     e.preventDefault()
                     moveItem(at, -1)
                   }
 
-                  if (e.key === 'ArrowDown') {
+                  if (e.key === ARROW_DOWN) {
                     e.preventDefault()
                     moveItem(at, 1)
                   }
@@ -767,12 +768,12 @@ function ChecklistBlock({
               autoFocus
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === ENTER) {
                   e.preventDefault()
                   add()
                 }
 
-                if (e.key === 'Escape') {
+                if (e.key === ESCAPE) {
                   e.stopPropagation()
                   setAdding(false)
                 }

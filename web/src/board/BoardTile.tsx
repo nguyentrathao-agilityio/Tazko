@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { background, boardApi } from '@/projects/look'
 import type { BoardTileData } from '@/board/types'
+import { ENTER } from '@/keys/keyNames'
 
 export function BoardTile({ board, onOpen, onStar }: { board: BoardTileData; onOpen: () => void; onStar: (on: boolean) => void }) {
   const star = (e: MouseEvent) => {
@@ -10,7 +11,7 @@ export function BoardTile({ board, onOpen, onStar }: { board: BoardTileData; onO
     onStar(!board.starred)
   }
   const key = (e: KeyboardEvent) => {
-    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+    if (e.target === e.currentTarget && (e.key === ENTER || e.key === ' ')) {
       e.preventDefault()
       onOpen()
     }

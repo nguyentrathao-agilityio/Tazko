@@ -12,12 +12,14 @@ import { background } from '@/projects/look'
 import type { ProjectView } from '@/projects/types'
 import { useRun } from '@/projects/useRun'
 import type { BoardTemplate, TemplateList } from '@/templates/types'
+import { boardRoute, companyApi, companyRoute, projectApi, projectRoute } from '@/paths'
 
 type Tab = 'all' | 'co' | 'admin'
 
 export function TemplatesPage({ company, project, go }: { company: Company; project: number; go: Go }) {
-  const base = `/api/v1/c/${company.slug}`
-  const { data: proj } = useLoad(() => api<ProjectView>('GET', `${base}/projects/${project}`), `${base}/projects/${project}`)
+  const base = companyApi(company.slug)
+  const projectBase = projectApi(company.slug, project)
+  const { data: proj } = useLoad(() => api<ProjectView>('GET', projectBase), projectBase)
   const { data, error: loadError, reload } = useLoad(() => api<TemplateList>('GET', `${base}/templates`), `${base}/templates`)
   const { error, run } = useRun(reload)
   const toast = useToast()
@@ -25,12 +27,12 @@ export function TemplatesPage({ company, project, go }: { company: Company; proj
   const [preview, setPreview] = useState<BoardTemplate | null>(null)
   const [using, setUsing] = useState<BoardTemplate | null>(null)
   const list = (data?.templates ?? []).filter((x) => tab === 'all' || (tab === 'admin' ? x.admin : !x.admin))
-  const projectPath = `/c/${company.slug}/p/${project}`
+  const projectPath = projectRoute(company.slug, project)
 
   return (
     <>
       <div className="crumb">
-        <Link to={`/c/${company.slug}`} go={go}>
+        <Link to={companyRoute(company.slug)} go={go}>
           {t('nav.projects')}
         </Link>{' '}
         /{' '}
@@ -151,9 +153,9 @@ export function TemplatesPage({ company, project, go }: { company: Company; proj
           template={using}
           onClose={() => setUsing(null)}
           onCreate={async (name) => {
-            const res = await api<{ id: number }>('POST', `${base}/projects/${project}/boards`, { name, template: using.id })
+            const res = await api<{ id: number }>('POST', `${projectBase}/boards`, { name, template: using.id })
             setUsing(null)
-            go(`/c/${company.slug}/b/${res.id}`)
+            go(boardRoute(company.slug, res.id))
           }}
         />
       )}

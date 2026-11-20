@@ -12,9 +12,10 @@ import { background, backgroundNames } from '@/projects/look'
 import type { ProjectView } from '@/projects/types'
 import type { TemplateList } from '@/templates/types'
 import { useRun } from '@/projects/useRun'
+import { boardApiOf, boardRoute, companyApi, projectApi, projectRoute } from '@/paths'
 
 export function ProjectBoards({ company, project, go }: { company: Company; project: ProjectView; go: Go }) {
-  const path = `/api/v1/c/${company.slug}/projects/${project.id}/boards`
+  const path = `${projectApi(company.slug, project.id)}/boards`
   const { data, error: loadError, reload } = useLoad(() => api<{ boards: BoardTileData[] }>('GET', path), path)
   const [creating, setCreating] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
@@ -23,8 +24,8 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
   const open = boards.filter((b) => !b.closed)
   const starred = open.filter((b) => b.starred)
   const closed = boards.filter((b) => b.closed)
-  const openBoard = (id: number) => go(`/c/${company.slug}/b/${id}`)
-  const star = (b: BoardTileData, on: boolean) => void run(() => api('PUT', `/api/v1/c/${company.slug}/boards/${b.id}/star`, { starred: on }))
+  const openBoard = (id: number) => go(boardRoute(company.slug, id))
+  const star = (b: BoardTileData, on: boolean) => void run(() => api('PUT', `${boardApiOf(company.slug, b.id)}/star`, { starred: on }))
 
   return (
     <>
@@ -34,7 +35,7 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
         </p>
       )}
       <div className="row" style={{ marginBottom: 14 }}>
-        <button type="button" className="btn" onClick={() => go(`/c/${company.slug}/p/${project.id}/templates`)}>
+        <button type="button" className="btn" onClick={() => go(`${projectRoute(company.slug, project.id)}/templates`)}>
           <Icon name="tmpl" />
           {t('tpl.button')}
         </button>
@@ -92,7 +93,7 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
                     </td>
                     <td className="num">
                       {project.can.manage && (
-                        <button type="button" className="btn sm" onClick={() => void run(() => api('POST', `/api/v1/c/${company.slug}/boards/${b.id}/reopen`))}>
+                        <button type="button" className="btn sm" onClick={() => void run(() => api('POST', `${boardApiOf(company.slug, b.id)}/reopen`))}>
                           {t('project.reopen')}
                         </button>
                       )}
@@ -107,7 +108,7 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
       {creating && (
         <CreateBoard
           initial={project.background}
-          templates={`/api/v1/c/${company.slug}/templates`}
+          templates={`${companyApi(company.slug)}/templates`}
           onClose={() => setCreating(false)}
           onCreate={async (body) => {
             const res = await api<{ id: number }>('POST', path, body)

@@ -2,6 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { splitTitles } from '@/board/titles'
+import { ENTER, ESCAPE } from '@/keys/keyNames'
 
 export function Composer({
   open,
@@ -28,12 +29,12 @@ export function Composer({
   }
 
   const key = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === ENTER && !e.shiftKey) {
       e.preventDefault()
       submit()
     }
 
-    if (e.key === 'Escape') {
+    if (e.key === ESCAPE) {
       e.stopPropagation()
       onClose()
     }

@@ -33,6 +33,8 @@ import { TableView } from '@/table/TableView'
 import { useLive } from '@/live/useLive'
 import { LiveList, LivePill } from '@/live/LivePill'
 import { DatesPop, LabelsPop, MembersPop, MovePop } from '@/card/Pops'
+import { boardApiOf, boardRoute, cardRouteUnder, companyRoute, projectApi, projectRoute } from '@/paths'
+import { ENTER, ESCAPE } from '@/keys/keyNames'
 
 function useCollapsed(boardId: number) {
   const key = `tazko.collapsed.${boardId}`
@@ -66,7 +68,7 @@ type Pop = { kind: 'access' | 'share' | 'members' | 'filter' | 'live'; at: Ancho
 export type BoardView = 'board' | 'table' | 'dashboard'
 
 export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { company: Company; id: number; cardId: number | null; me: number; go: Go; view?: BoardView }) {
-  const base = `/api/v1/c/${company.slug}/boards/${id}`
+  const base = boardApiOf(company.slug, id)
   const { data: board, error: loadError, reload } = useLoad(() => api<BoardData>('GET', base), base)
   const { error, run } = useRun(reload)
   const toast = useToast()
@@ -114,16 +116,17 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
     return el ? anchorOf(el) : { left: 200, top: 120, bottom: 120, width: 0 }
   }
 
-  const boardRoot = `/c/${company.slug}/b/${id}`
+  const boardRoot = boardRoute(company.slug, id)
   const boardBase = view === 'board' ? boardRoot : `${boardRoot}/${view}`
+  const cardPath = (card: number) => cardRouteUnder(boardBase, card)
   const keys = useBoardKeys({
     lists: view === 'board' ? shownLists : [],
     edit: Boolean(board?.can.edit),
     cardOpen: cardId,
     zen,
     actions: {
-      open: (c) => go(`${boardBase}/c/${c.id}`),
-      goToCard: (c) => go(`${boardBase}/c/${c.id}`, true),
+      open: (c) => go(cardPath(c.id)),
+      goToCard: (c) => go(cardPath(c.id), true),
       quick: (c) => setPop({ kind: 'quick', at: anchorFor(c), card: c }),
       done: (c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done })),
       pop: (kind, c) => setPop({ kind: `k-${kind}`, at: anchorFor(c), card: c }),
@@ -161,7 +164,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         <div className="empty">
           <h2>{t('board.missingTitle')}</h2>
           <p className="muted">{t('board.missingBody')}</p>
-          <Link to={`/c/${company.slug}`} go={go} className="btn">
+          <Link to={companyRoute(company.slug)} go={go} className="btn">
             {t('project.back')}
           </Link>
         </div>
@@ -174,8 +177,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
       </p>
     )
 
-  const projectPath = `/c/${company.slug}/p/${board.project.id}`
-  const boardPath = boardBase
+  const projectPath = projectRoute(company.slug, board.project.id)
   const edit = board.can.edit
   const visible = board.restricted ? board.people.filter((p) => p.access) : board.people
   const lists = board.lists
@@ -240,7 +242,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           <span className="sr-only">{t('board.backToProject')}</span>
         </Link>
         <div className="crumb2">
-          <Link to={`/c/${company.slug}`} go={go}>
+          <Link to={companyRoute(company.slug)} go={go}>
             {company.name}
           </Link>
           <span>/</span>
@@ -262,7 +264,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
               autoFocus
               onBlur={(e) => e.currentTarget.form?.requestSubmit()}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setRenaming(false)
+                if (e.key === ESCAPE) setRenaming(false)
               }}
             />
           </form>
@@ -352,7 +354,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         </div>
       )}
       {view === 'table' && (
-        <TableView board={board} lists={shownLists} total={lists.reduce((n, l) => n + l.cards.length, 0)} base={base} me={me} run={run} onOpen={(c) => go(`${boardPath}/c/${c.id}`)} />
+        <TableView board={board} lists={shownLists} total={lists.reduce((n, l) => n + l.cards.length, 0)} base={base} me={me} run={run} onOpen={(c) => go(cardPath(c.id))} />
       )}
       {view === 'dashboard' && <Dashboard board={board} lists={shownLists} />}
       {view === 'board' && (
@@ -373,7 +375,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
         onMoveList={(m) => void run(() => api('POST', `${base}/lists/${m.list}/move`, { after: m.after }))}
         labels={board.labels}
         people={board.people}
-        onOpenCard={(c) => go(`${boardPath}/c/${c.id}`)}
+        onOpenCard={(c) => go(cardPath(c.id))}
         onToggleDone={(c) => void run(() => api('PATCH', `${base}/cards/${c.id}`, { done: !c.done }))}
         onQuickEdit={(card, el) => setPop({ kind: 'quick', at: anchorOf(el), card })}
         selected={keys.selected}
@@ -389,7 +391,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
                 aria-label={t('list.title')}
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') setAdding(false)
+                  if (e.key === ESCAPE) setAdding(false)
                 }}
               />
               <div className="row">
@@ -473,7 +475,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
             onMade={(id) => {
               setPop(null)
               reload()
-              go(`${boardPath}/c/${id}`)
+              go(cardPath(id))
             }}
           />
         </Popover>
@@ -520,11 +522,11 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           board={board}
           base={base}
           cardId={cardId}
-          link={`${boardPath}/c/${cardId}`}
-          onClose={() => go(boardPath)}
+          link={cardPath(cardId)}
+          onClose={() => go(boardBase)}
           onChanged={reload}
           tick={tick}
-          onOpenCard={(c) => go(`${boardPath}/c/${c}`)}
+          onOpenCard={(c) => go(cardPath(c))}
         />
       )}
       {menu && (
@@ -536,7 +538,7 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
           onCopied={(copy) => {
             setMenu(false)
             toast(t('board.copied'))
-            go(`/c/${company.slug}/b/${copy}`)
+            go(boardRoute(company.slug, copy))
           }}
           onClosed={() => {
             setMenu(false)
@@ -556,7 +558,7 @@ function Share({ company, board, onDone }: { company: Company; board: BoardData;
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const email = String(f.get('email') ?? '').trim()
-    void run(() => api('POST', `/api/v1/c/${company.slug}/projects/${board.project.id}/invites`, { email, role: String(f.get('role')) })).then((ok) => {
+    void run(() => api('POST', `${projectApi(company.slug, board.project.id)}/invites`, { email, role: String(f.get('role')) })).then((ok) => {
       if (ok) {
         toast(t('toast.invited', { email: email.toLowerCase() }))
         onDone()
@@ -610,7 +612,7 @@ function QuickEdit({ card, onSave, onArchive }: { card: CardData; lists: ListDat
         data-focus
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (e.key === ENTER && !e.shiftKey) {
             e.preventDefault()
             if (title.trim()) onSave(title.trim())
           }
