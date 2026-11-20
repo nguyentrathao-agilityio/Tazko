@@ -8,6 +8,7 @@ import { Popover } from '@/ui/Popover'
 import { ago } from '@/card/look'
 import { keepAlive, socketUrl } from '@/live/useLive'
 import { noteText, type Note } from '@/notify/notes'
+import { cardRoute, companyApi } from '@/paths'
 
 const delays = [1000, 2000, 5000, 10000]
 
@@ -24,7 +25,7 @@ function useUnread(slug: string): number {
 
     const connect = () => {
       if (stopped) return
-      const ws = new WebSocket(socketUrl(`/api/v1/c/${slug}/notifications/live`))
+      const ws = new WebSocket(socketUrl(`${companyApi(slug)}/notifications/live`))
       socket = ws
       ws.onmessage = (e) => {
         try {
@@ -71,7 +72,7 @@ export function Bell({ slug }: { slug: string }) {
   const [pop, setPop] = useState<Anchor | null>(null)
   const [tab, setTab] = useState<'all' | 'unread'>('all')
   const [notes, setNotes] = useState<Note[] | null>(null)
-  const base = `/api/v1/c/${slug}/notifications`
+  const base = `${companyApi(slug)}/notifications`
 
   const load = useCallback(() => {
     api<{ notifications: Note[]; unread: number }>('GET', base).then(
@@ -89,7 +90,7 @@ export function Bell({ slug }: { slug: string }) {
   const open = (n: Note) => {
     if (!n.read) void api('POST', `${base}/${n.id}/read`).catch(() => undefined)
     setPop(null)
-    window.history.pushState(null, '', `/c/${slug}/b/${n.board.id}/c/${n.card.id}`)
+    window.history.pushState(null, '', cardRoute(slug, n.board.id, n.card.id))
     window.dispatchEvent(new PopStateEvent('popstate'))
   }
 

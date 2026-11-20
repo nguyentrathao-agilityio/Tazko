@@ -12,6 +12,7 @@ Usage: checks.py <check> [args]
   commit-msg <file>   one commit message carries no attribution lines
   comments            no comments in src/, web/src/ or migrations/
   prototype-only      the prototype-only controls are not built
+  web-paths           web/src builds API and route paths only through web/src/paths.ts
   design [--update]   design/ matches scripts/design.sha256 (--update: owner only)
   migrations [--update]
                       committed migrations match scripts/migrations.sha256
@@ -126,6 +127,11 @@ COMMENT_HINT = "comment in source; name things so the code reads without it, and
 
 PROTOTYPE_ONLY_LABELS = ("View as", "Live sim")
 WEB_SOURCE_EXTS = (".ts", ".tsx", ".js", ".json", ".css", ".html")
+JS_SOURCE_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs")
+WEB_PATHS_FILE = WEB_SRC_DIR + "paths.ts"
+RAW_WEB_PATH = re.compile(r"['\"`]/api/v1\b|['\"`]/c/\$\{|\}/c/\$\{")
+WEB_PATHS_HINT = f"builds a path by hand; add or use a helper in {WEB_PATHS_FILE}"
+TEST_FILE_MARK = ".test."
 PROTOTYPE_HINT = "is a prototype-only control; build the role differences on the server and leave the prototype bar out"
 
 DESIGN_HINT = "design/ is read-only for the build; ask the owner, who runs checks.py design --update after the change"
@@ -415,6 +421,16 @@ def check_prototype_only() -> int:
     )
 
 
+def check_web_paths() -> int:
+    return fail(
+        f"{p}:{n}: {WEB_PATHS_HINT}"
+        for p in files_under(WEB_SRC_DIR)
+        if p.endswith(JS_SOURCE_EXTS) and p != WEB_PATHS_FILE and TEST_FILE_MARK not in p
+        for n, line in numbered_lines(p)
+        if RAW_WEB_PATH.search(line)
+    )
+
+
 def file_hashes(prefix: str) -> dict[str, str]:
     return {p: hashlib.sha256(read_bytes(p)).hexdigest() for p in sorted(files_under(prefix))}
 
@@ -521,6 +537,7 @@ CHECKS: dict[str, Callable[..., int]] = {
     "commit-msg": check_commit_msg,
     "comments": check_comments,
     "prototype-only": check_prototype_only,
+    "web-paths": check_web_paths,
     "design": check_design,
     "migrations": check_migrations,
     "settings": check_settings,
