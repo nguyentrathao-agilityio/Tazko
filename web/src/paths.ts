@@ -1,6 +1,8 @@
 const API = '/api/v1'
 
 export const ME_API = `${API}/me`
+export const CLI_API = `${API}/cli`
+export const CLI_AUTHORIZE = '/cli/authorize'
 export const ADMIN_API = `${API}/admin`
 
 export const companyApi = (slug: string): string => `${API}/c/${slug}`

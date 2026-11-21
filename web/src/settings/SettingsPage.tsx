@@ -18,8 +18,9 @@ import { ErrorNote } from '@/ui/ErrorNote'
 import { SwitchRow } from '@/ui/SwitchRow'
 import { companyRoute, ME_API } from '@/paths'
 import { Notifications } from '@/settings/Notifications'
+import { CommandLine } from '@/cli/CommandLine'
 
-export type SettingsTab = 'profile' | 'appearance' | 'notifications' | 'tokens' | 'sessions'
+export type SettingsTab = 'profile' | 'appearance' | 'notifications' | 'tokens' | 'cli' | 'sessions'
 
 const zones = [
   'UTC',
@@ -77,6 +78,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
     ['appearance', t('settings.tab.appearance')],
     ['notifications', t('settings.tab.notifications')],
     ['tokens', t('settings.tab.tokens')],
+    ['cli', t('settings.tab.cli')],
     ['sessions', t('settings.tab.sessions')],
   ]
 
@@ -110,6 +112,7 @@ export function SettingsPage({ me, company, tab, go, onProfile }: { me: Me; comp
           footer={<p className="hint" style={{ marginTop: 10 }}>{t('tokens.personalHint')}</p>}
         />
       )}
+      {tab === 'cli' && <CommandLine />}
       {tab === 'sessions' && <Sessions />}
     </>
   )

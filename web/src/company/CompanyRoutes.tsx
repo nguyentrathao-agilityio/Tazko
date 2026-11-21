@@ -29,7 +29,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/integrations|\/me(?<me>\/appearance|\/notifications|\/tokens|\/sessions)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/integrations|\/me(?<me>\/appearance|\/notifications|\/tokens|\/cli|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const g = match?.groups ?? {}
   const company = me.companies.find((c) => c.slug === slug)
