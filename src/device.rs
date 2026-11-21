@@ -18,7 +18,7 @@ const LIFETIME: i64 = 600;
 const INTERVAL: i64 = 5;
 const TOKEN_DAYS: i64 = 90;
 const ALPHABET: &[u8] = b"BCDFGHJKLMNPQRSTVWXZ";
-const MAX_WAITING: i64 = 5000;
+const MAX_WAITING: i64 = 1000;
 const STARTS_PER_MINUTE: u32 = 10;
 
 pub fn routes() -> Router<AppState> {
@@ -92,6 +92,7 @@ async fn start(
     state
         .rate
         .hit_up_to(&format!("device-sign-in:{from}"), at, STARTS_PER_MINUTE)
+        .and_then(|()| state.rate.hit("device-sign-in", at))
         .map_err(ApiError::TooMany)?;
     let device = random_token();
     let hash = hash_token(&device);
