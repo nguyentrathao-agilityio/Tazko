@@ -1,5 +1,7 @@
 import { t } from '@/i18n'
+import { CLI_AUTHORIZE } from '@/paths'
 import { Terminal } from '@/tokens/Terminal'
+import { Icon } from '@/ui/Icon'
 
 const COMMANDS: [string, string, string][] = [
   ['tazko auth', 'login · logout · status · token', 'cli.cmd.auth'],
@@ -32,18 +34,24 @@ export function CommandLine() {
           {t('cli.signInLead')}
         </p>
         <Terminal text={`tazko auth login --host ${host}`} label={t('cli.signIn')} />
-        <p className="hint">{t('cli.signInHint')}</p>
+        <div className="cli-preview">
+          <a className="btn" href={CLI_AUTHORIZE} target="_blank" rel="noopener noreferrer">
+            <Icon name="globe" />
+            {t('cli.previewApprove')}
+          </a>
+          <p className="hint">{t('cli.signInHint')}</p>
+        </div>
       </section>
       <section className="box">
         <h2>{t('cli.try')}</h2>
         <Terminal
           text={[
-            'tazko my cards',
-            'tazko board list',
-            'tazko card create --board "Sprint 14" --list Backlog --title "Fix footer links"',
+            'tazko my cards --due overdue',
+            'tazko board list --project "Website relaunch"',
+            'tazko card create --board "Sprint 14" --list Backlog --title "Fix footer links" --label Bug',
             'tazko card move 3/142 --to "In review"',
             'tazko card comment 3/142 --body "Ready for review"',
-            'tazko search "is:overdue" --json id,title',
+            'tazko search "is:overdue @me" --json id,title,due_at',
             "tazko api GET /me --jq .email",
           ].join('\n')}
           label={t('cli.try')}

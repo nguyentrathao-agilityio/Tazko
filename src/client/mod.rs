@@ -6,6 +6,7 @@ use std::io::IsTerminal;
 use std::process::ExitCode;
 use std::time::Duration;
 
+use clap::ValueEnum;
 use serde_json::{Value, json};
 
 use args::{
@@ -76,6 +77,10 @@ struct Api {
     agent: ureq::Agent,
 }
 
+fn env_token() -> Option<String> {
+    std::env::var("TAZKO_TOKEN").ok().filter(|t| !t.is_empty())
+}
+
 fn agent() -> ureq::Agent {
     let _ = rustls::crypto::ring::default_provider().install_default();
     ureq::Agent::config_builder()
@@ -95,7 +100,7 @@ fn agent() -> ureq::Agent {
 impl Api {
     fn new(host_flag: Option<&str>, need_token: bool) -> Res<Api> {
         let cfg = store::load();
-        let stored_for = cfg.host.as_deref().and_then(|h| normalise_host(h).ok());
+        let stored_for = cfg.token_host.clone();
         let host = host_flag
             .map(str::to_string)
             .or_else(|| std::env::var("TAZKO_HOST").ok())
@@ -105,12 +110,9 @@ impl Api {
             })?;
         let host = normalise_host(&host)?;
         let token = if need_token {
-            std::env::var("TAZKO_TOKEN")
-                .ok()
-                .filter(|t| !t.is_empty())
-                .or_else(|| {
-                    store::read_token().filter(|_| stored_for.as_deref() == Some(host.as_str()))
-                })
+            env_token().or_else(|| {
+                store::read_token().filter(|_| stored_for.as_deref() == Some(host.as_str()))
+            })
         } else {
             None
         };
@@ -147,7 +149,10 @@ impl Api {
         };
         let mut res = result.map_err(|e| format!("cannot reach {}: {e}", self.host))?;
         let status = res.status().as_u16();
-        let text = res.body_mut().read_to_string().unwrap_or_default();
+        let text = res
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| format!("could not read the answer from {}: {e}", self.host))?;
         let value = serde_json::from_str(&text).unwrap_or(if text.is_empty() {
             Value::Null
         } else {
@@ -195,6 +200,19 @@ impl Api {
             [] => Err("you are not in any company on this server".into()),
             many => Err(format!("you are in several companies ({}); add --company or run tazko config set company <slug>", many.join(", ")).into()),
         }
+    }
+}
+
+fn connect(out: &Out) -> Res<(Api, String)> {
+    let api = Api::new(out.host.as_deref(), true)?;
+    let base = base(&api, out)?;
+    Ok((api, base))
+}
+
+fn open_or_print(api: &Api, base: &str, page: &str) {
+    let url = format!("{}{}{page}", api.host, base.trim_start_matches("/api/v1"));
+    if !open_in_browser(&url) {
+        println!("{url}");
     }
 }
 
@@ -327,14 +345,26 @@ fn card_ref(raw: &str) -> Res<(i64, i64)> {
     Ok((n(b)?, n(c)?))
 }
 
-fn boards(api: &Api, base: &str, project: Option<i64>) -> Res<Vec<Value>> {
+fn named(v: &Value, key: &str, raw: &str) -> bool {
+    v["id"].as_i64().is_some_and(|id| id.to_string() == raw)
+        || v[key].as_str().is_some_and(|n| n.eq_ignore_ascii_case(raw))
+}
+
+fn boards(api: &Api, base: &str, project: Option<&str>) -> Res<Vec<Value>> {
     let projects = api.get(&format!("{base}/my-projects"))?;
+    let projects: Vec<&Value> = projects["projects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|p| project.is_none_or(|want| named(p, "name", want)))
+        .collect();
+    if let (Some(want), []) = (project, projects.as_slice()) {
+        return Err(format!("no project {want:?}").into());
+    }
+
     let mut out = vec![];
-    for p in projects["projects"].as_array().into_iter().flatten() {
+    for p in projects {
         let id = p["id"].as_i64().unwrap_or(0);
-        if project.is_some_and(|want| want != id) {
-            continue;
-        }
 
         for b in api.get(&format!("{base}/projects/{id}/boards"))?["boards"]
             .as_array()
@@ -350,17 +380,13 @@ fn boards(api: &Api, base: &str, project: Option<i64>) -> Res<Vec<Value>> {
 }
 
 fn board_id(api: &Api, base: &str, raw: &str) -> Res<i64> {
-    if let Ok(id) = raw.trim_start_matches('b').parse::<i64>() {
+    if let Ok(id) = raw.strip_prefix('b').unwrap_or(raw).parse::<i64>() {
         return Ok(id);
     }
 
     let found: Vec<i64> = boards(api, base, None)?
         .iter()
-        .filter(|b| {
-            b["name"]
-                .as_str()
-                .is_some_and(|n| n.eq_ignore_ascii_case(raw))
-        })
+        .filter(|b| named(b, "name", raw))
         .filter_map(|b| b["id"].as_i64())
         .collect();
     match found.as_slice() {
@@ -374,12 +400,7 @@ fn list_id(board: &Value, raw: Option<&str>) -> Res<i64> {
     let lists = board["lists"].as_array().cloned().unwrap_or_default();
     let found = match raw {
         None => lists.first(),
-        Some(r) => lists.iter().find(|l| {
-            l["id"].as_i64().is_some_and(|id| id.to_string() == r)
-                || l["title"]
-                    .as_str()
-                    .is_some_and(|t| t.eq_ignore_ascii_case(r))
-        }),
+        Some(r) => lists.iter().find(|l| named(l, "title", r)),
     };
     found.and_then(|l| l["id"].as_i64()).ok_or_else(|| {
         Fail::Message(format!(
@@ -429,16 +450,17 @@ fn login(host: Option<String>, no_browser: bool) -> Res<()> {
     )?;
     let code = start["user_code"]
         .as_str()
+        .filter(|c| c.len() <= 16 && c.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '-'))
         .ok_or("the server did not send a code")?;
     let device = start["device_code"]
         .as_str()
         .ok_or("the server did not send a code")?
         .to_string();
-    let url = start["verification_uri"].as_str().unwrap_or_default();
+    let url = format!("{}/cli/authorize", api.host);
     let interval = start["interval"].as_u64().unwrap_or(5).max(1);
     let expires = start["expires_in"].as_u64().unwrap_or(600);
     eprintln!("! First copy your one-time code: {code}");
-    if no_browser || !open_in_browser(url) {
+    if no_browser || !open_in_browser(&url) {
         eprintln!("Open {url} in your browser, enter the code and approve the sign-in.");
     } else {
         eprintln!("Opening {url} in your browser; enter the code there...");
@@ -461,7 +483,11 @@ fn login(host: Option<String>, no_browser: bool) -> Res<()> {
                     .ok_or("the server did not send a token")?;
                 let path = store::write_token(token)?;
                 let mut cfg = store::load();
+                if cfg.host.as_deref() != Some(api.host.as_str()) {
+                    cfg.company = None;
+                }
                 cfg.host = Some(api.host.clone());
+                cfg.token_host = Some(api.host.clone());
                 store::save(&cfg)?;
                 eprintln!("✓ Authentication complete.");
                 eprintln!(
@@ -493,6 +519,11 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
         ClientCommand::Auth { action } => match action {
             AuthAction::Login { host, no_browser } => login(host, no_browser),
             AuthAction::Logout => {
+                let mut cfg = store::load();
+                if cfg.token_host.take().is_some() {
+                    store::save(&cfg)?;
+                }
+
                 if store::forget_token() {
                     eprintln!(
                         "Signed out on this computer. Revoke the token under Settings, Access tokens if you no longer need it."
@@ -505,7 +536,7 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
             AuthAction::Status { out } => {
                 let api = Api::new(out.host.as_deref(), true)?;
                 let me = api.get("/api/v1/me")?;
-                let source = if std::env::var("TAZKO_TOKEN").is_ok_and(|t| !t.is_empty()) {
+                let source = if env_token().is_some() {
                     "TAZKO_TOKEN"
                 } else {
                     "the token file"
@@ -531,9 +562,7 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
                 )
             }
             AuthAction::Token => {
-                let token = std::env::var("TAZKO_TOKEN")
-                    .ok()
-                    .filter(|t| !t.is_empty())
+                let token = env_token()
                     .or_else(store::read_token)
                     .ok_or_else(|| Fail::SignIn("not signed in; run tazko auth login".into()))?;
                 println!("{token}");
@@ -542,8 +571,8 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
         },
         ClientCommand::Project { action } => match action {
             ProjectAction::List { out } => {
-                let api = Api::new(out.host.as_deref(), true)?;
-                let v = api.get(&format!("{}/my-projects", base(&api, &out)?))?;
+                let (api, base) = connect(&out)?;
+                let v = api.get(&format!("{}/my-projects", base))?;
                 print(
                     &out,
                     &v,
@@ -561,8 +590,8 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
                 )
             }
             ProjectAction::Members { project, out } => {
-                let api = Api::new(out.host.as_deref(), true)?;
-                let v = api.get(&format!("{}/projects/{project}/members", base(&api, &out)?))?;
+                let (api, base) = connect(&out)?;
+                let v = api.get(&format!("{}/projects/{project}/members", base))?;
                 print(
                     &out,
                     &v,
@@ -577,8 +606,8 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
         },
         ClientCommand::Board { action } => match action {
             BoardAction::List { project, out } => {
-                let api = Api::new(out.host.as_deref(), true)?;
-                let list = Value::Array(boards(&api, &base(&api, &out)?, project)?);
+                let (api, base) = connect(&out)?;
+                let list = Value::Array(boards(&api, &base, project.as_deref())?);
                 print(
                     &out,
                     &list,
@@ -595,18 +624,10 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
                 )
             }
             BoardAction::View { board, web, out } => {
-                let api = Api::new(out.host.as_deref(), true)?;
-                let base = base(&api, &out)?;
+                let (api, base) = connect(&out)?;
                 let id = board_id(&api, &base, &board)?;
                 if web {
-                    let url = format!(
-                        "{}/c/{}/b/{id}",
-                        api.host,
-                        api.company(out.company.as_deref())?
-                    );
-                    if !open_in_browser(&url) {
-                        println!("{url}");
-                    }
+                    open_or_print(&api, &base, &format!("/b/{id}"));
                     return Ok(());
                 }
 
@@ -637,11 +658,15 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
         },
         ClientCommand::Card { action } => card(action),
         ClientCommand::My {
-            action: MyAction::Cards { out },
+            action: MyAction::Cards { due, out },
         } => {
             let api = Api::new(out.host.as_deref(), true)?;
             let company = api.company(out.company.as_deref())?;
-            let v = api.get(&format!("/api/v1/me/cards?company={company}"))?;
+            let due = due
+                .and_then(|d| d.to_possible_value())
+                .map(|d| format!("&due={}", d.get_name()))
+                .unwrap_or_default();
+            let v = api.get(&format!("/api/v1/me/cards?company={company}{due}"))?;
             print(
                 &out,
                 &v,
@@ -664,9 +689,9 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
             )
         }
         ClientCommand::Search { query, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
+            let (api, base) = connect(&out)?;
             let q: String = form_urlencoded::byte_serialize(query.as_bytes()).collect();
-            let v = api.get(&format!("{}/search?q={q}", base(&api, &out)?))?;
+            let v = api.get(&format!("{}/search?q={q}", base))?;
             print(
                 &out,
                 &v,
@@ -749,8 +774,7 @@ fn dispatch(cmd: ClientCommand) -> Res<()> {
 fn card(action: CardAction) -> Res<()> {
     match action {
         CardAction::List { board, list, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
-            let base = base(&api, &out)?;
+            let (api, base) = connect(&out)?;
             let id = board_id(&api, &base, &board)?;
             let v = api.get(&format!("{base}/boards/{id}"))?;
             let only = list.as_deref().map(|l| list_id(&v, Some(l))).transpose()?;
@@ -789,26 +813,15 @@ fn card(action: CardAction) -> Res<()> {
             )
         }
         CardAction::View { card, web, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
+            let (api, base) = connect(&out)?;
             let (b, c) = card_ref(&card)?;
             if web {
-                let url = format!(
-                    "{}/c/{}/b/{b}/c/{c}",
-                    api.host,
-                    api.company(out.company.as_deref())?
-                );
-                if !open_in_browser(&url) {
-                    println!("{url}");
-                }
+                open_or_print(&api, &base, &format!("/b/{b}/c/{c}"));
                 return Ok(());
             }
 
-            let v = api.get(&format!("{}/boards/{b}/cards/{c}", base(&api, &out)?))?;
-            let card = if v["card"].is_object() {
-                v["card"].clone()
-            } else {
-                v.clone()
-            };
+            let v = api.get(&format!("{base}/boards/{b}/cards/{c}"))?;
+            let card = &v;
             print(
                 &out,
                 &v,
@@ -836,18 +849,40 @@ fn card(action: CardAction) -> Res<()> {
             board,
             list,
             title,
+            labels,
             out,
         } => {
-            let api = Api::new(out.host.as_deref(), true)?;
-            let base = base(&api, &out)?;
+            let (api, base) = connect(&out)?;
             let id = board_id(&api, &base, &board)?;
             let b = api.get(&format!("{base}/boards/{id}"))?;
             let list = list_id(&b, list.as_deref())?;
+            let label_ids = labels
+                .iter()
+                .map(|raw| {
+                    b["labels"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|l| named(l, "name", raw))
+                        .and_then(|l| l["id"].as_i64())
+                        .ok_or_else(|| Fail::Message(format!("no label {raw:?} on this board")))
+                })
+                .collect::<Res<Vec<i64>>>()?;
             let v = api.send(
                 "POST",
                 &format!("{base}/boards/{id}/cards"),
                 Some(&json!({ "list_id": list, "title": title })),
             )?;
+            if let Some(card) = v["cards"][0]["id"].as_i64() {
+                for label in label_ids {
+                    api.send(
+                        "PUT",
+                        &format!("{base}/boards/{id}/cards/{card}/labels/{label}"),
+                        Some(&json!({ "on": true })),
+                    )?;
+                }
+            }
+
             print(
                 &out,
                 &v,
@@ -860,8 +895,7 @@ fn card(action: CardAction) -> Res<()> {
             )
         }
         CardAction::Move { card, to, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
-            let base = base(&api, &out)?;
+            let (api, base) = connect(&out)?;
             let (b, c) = card_ref(&card)?;
             let board = api.get(&format!("{base}/boards/{b}"))?;
             let list = list_id(&board, Some(&to))?;
@@ -873,12 +907,12 @@ fn card(action: CardAction) -> Res<()> {
             done_line(&out, &v, &format!("Moved {b}/{c} to {to}"))
         }
         CardAction::Done { card, undo, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
+            let (api, base) = connect(&out)?;
             let (b, c) = card_ref(&card)?;
             let body = json!({ "done": !undo });
             let v = api.send(
                 "PATCH",
-                &format!("{}/boards/{b}/cards/{c}", base(&api, &out)?),
+                &format!("{}/boards/{b}/cards/{c}", base),
                 Some(&body),
             )?;
             done_line(
@@ -888,21 +922,21 @@ fn card(action: CardAction) -> Res<()> {
             )
         }
         CardAction::Comment { card, body, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
+            let (api, base) = connect(&out)?;
             let (b, c) = card_ref(&card)?;
             let v = api.send(
                 "POST",
-                &format!("{}/boards/{b}/cards/{c}/comments", base(&api, &out)?),
+                &format!("{}/boards/{b}/cards/{c}/comments", base),
                 Some(&json!({ "body": body })),
             )?;
             done_line(&out, &v, &format!("Commented on {b}/{c}"))
         }
         CardAction::Archive { card, out } => {
-            let api = Api::new(out.host.as_deref(), true)?;
+            let (api, base) = connect(&out)?;
             let (b, c) = card_ref(&card)?;
             let v = api.send(
                 "POST",
-                &format!("{}/boards/{b}/cards/{c}/archive", base(&api, &out)?),
+                &format!("{}/boards/{b}/cards/{c}/archive", base),
                 Some(&json!({})),
             )?;
             done_line(&out, &v, &format!("Archived {b}/{c}"))

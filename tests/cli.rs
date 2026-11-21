@@ -244,10 +244,25 @@ async fn denied_expired_and_unknown_codes_give_no_token() {
 }
 
 fn tazko(dir: &std::path::Path, host: &str, args: &[&str]) -> (bool, String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_tazko"))
+    run_tazko(
+        Command::new(env!("CARGO_BIN_EXE_tazko")).env("TAZKO_HOST", host),
+        dir,
+        args,
+    )
+}
+
+fn tazko_default_host(dir: &std::path::Path, args: &[&str]) -> (bool, String, String) {
+    run_tazko(
+        Command::new(env!("CARGO_BIN_EXE_tazko")).env_remove("TAZKO_HOST"),
+        dir,
+        args,
+    )
+}
+
+fn run_tazko(cmd: &mut Command, dir: &std::path::Path, args: &[&str]) -> (bool, String, String) {
+    let out = cmd
         .args(args)
         .env("TAZKO_CONFIG_DIR", dir)
-        .env("TAZKO_HOST", host)
         .env_remove("TAZKO_TOKEN")
         .output()
         .unwrap();
@@ -256,6 +271,34 @@ fn tazko(dir: &std::path::Path, host: &str, args: &[&str]) -> (bool, String, Str
         String::from_utf8_lossy(&out.stdout).into_owned(),
         String::from_utf8_lossy(&out.stderr).into_owned(),
     )
+}
+
+#[tokio::test]
+async fn starting_sign_ins_is_limited_per_address_not_for_everyone() {
+    let (app, _) = world().await;
+    let start = |from: &'static str| {
+        Request::builder()
+            .method(Method::POST)
+            .uri("/api/v1/cli/device")
+            .header("content-type", "application/json")
+            .header("cf-connecting-ip", from)
+            .body(Body::from("{}"))
+            .unwrap()
+    };
+    for _ in 0..10 {
+        assert_eq!(
+            app.send(start("203.0.113.7")).await.status(),
+            StatusCode::OK
+        );
+    }
+    assert_eq!(
+        app.send(start("203.0.113.7")).await.status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        app.send(start("198.51.100.2")).await.status(),
+        StatusCode::OK
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -366,6 +409,40 @@ async fn the_command_line_signs_in_through_the_browser_and_makes_a_card() {
         serde_json::from_str::<Value>(&out).unwrap(),
         json!([{ "title": "Fix footer links" }])
     );
+    let (ok, out, err) = tazko(
+        dir.path(),
+        &host,
+        &[
+            "card",
+            "list",
+            "--board",
+            &board.to_string(),
+            "--jq",
+            ".[0].id",
+        ],
+    );
+    assert!(ok, "{err}");
+    let card = out.trim().to_string();
+    let assign = format!(
+        "{}/boards/{board}/cards/{card}/members/{}",
+        C.trim_start_matches("/api/v1"),
+        mai.id
+    );
+    let (ok, _, err) = tazko(
+        dir.path(),
+        &host,
+        &["api", "PUT", &assign, "--data", r#"{"on":true}"#],
+    );
+    assert!(ok, "{err}");
+    let view = format!("{board}/{card}");
+    let (ok, out, err) = tazko(dir.path(), &host, &["card", "view", &view]);
+    assert!(ok && out.contains("Fix footer links"), "{out}{err}");
+    let (ok, out, err) = tazko(
+        dir.path(),
+        &host,
+        &["my", "cards", "--jq", ".cards[].title"],
+    );
+    assert_eq!((ok, out.trim()), (true, "Fix footer links"), "{err}");
     let (ok, out, _) = tazko(dir.path(), &host, &["api", "GET", "/me", "--jq", ".email"]);
     assert_eq!((ok, out.trim()), (true, "mai@a.example"));
     let (ok, _, err) = tazko(
@@ -380,6 +457,19 @@ async fn the_command_line_signs_in_through_the_browser_and_makes_a_card() {
         !ok && err.contains("not signed in to http://127.0.0.1:9"),
         "the stored token only goes to its own server: {err}"
     );
+    let (ok, _, _) = tazko(
+        dir.path(),
+        &host,
+        &["config", "set", "host", "http://127.0.0.1:9"],
+    );
+    assert!(ok);
+    let (ok, _, err) = tazko_default_host(dir.path(), &["board", "list"]);
+    assert!(
+        !ok && err.contains("not signed in to http://127.0.0.1:9"),
+        "changing the default server does not move the token: {err}"
+    );
+    let (ok, _, _) = tazko(dir.path(), &host, &["config", "set", "host", &host]);
+    assert!(ok);
     let (ok, _, _) = tazko(dir.path(), &host, &["auth", "logout"]);
     assert!(ok && !token_file.exists());
 }

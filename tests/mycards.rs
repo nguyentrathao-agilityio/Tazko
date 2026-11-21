@@ -304,9 +304,41 @@ async fn my_cards_lists_only_projects_the_person_belongs_to() {
         StatusCode::UNAUTHORIZED
     );
 
-    for projects in [
-        None,
-        Some(json!([{ "company": "company-a", "project": p1 }])),
+    let p3 = req(
+        &app,
+        &boss,
+        Method::POST,
+        &format!("{base_a}/projects"),
+        Some(json!({ "name": "Docs", "owner_id": boss.id })),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    req(
+        &app,
+        &boss,
+        Method::POST,
+        &format!("{base_a}/projects/{p3}/invites"),
+        Some(json!({ "email": "dev@a.example", "role": "member" })),
+    )
+    .await;
+    let (docs_board, docs_card) =
+        board_with_card(&app, &boss, base_a, p3, "Docs board", "Docs card", dev.id).await;
+    req(
+        &app,
+        &boss,
+        Method::PATCH,
+        &format!("{base_a}/boards/{docs_board}/cards/{docs_card}"),
+        Some(json!({ "due_at": tazko::session::now() - 3600 })),
+    )
+    .await;
+
+    for (projects, expected) in [
+        (None, vec!["Docs card", "Visible card"]),
+        (
+            Some(json!([{ "company": "company-a", "project": p1 }])),
+            vec!["Visible card"],
+        ),
     ] {
         let mut body = json!({ "name": "script", "scope": "read" });
         if let Some(p) = projects {
@@ -317,14 +349,37 @@ async fn my_cards_lists_only_projects_the_person_belongs_to() {
             .unwrap()
             .to_string();
         let r = Request::builder()
-            .uri("/api/v1/me/cards?company=company-a")
+            .uri("/api/v1/me/cards")
             .header(header::AUTHORIZATION, format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
         assert_eq!(
-            app.send(r).await.status(),
-            StatusCode::FORBIDDEN,
-            "tokens stay inside their own company and project paths"
+            titles(&body_json(app.send(r).await).await),
+            expected,
+            "a token sees only the projects it was given"
         );
     }
+
+    for (window, expected) in [
+        ("overdue", vec!["Docs card"]),
+        ("today", vec![]),
+        ("week", vec![]),
+        ("none", vec!["Visible card"]),
+    ] {
+        let found = body_json(
+            app.get(
+                &format!("/api/v1/me/cards?company=company-a&due={window}"),
+                Some(&dev.cookie),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(titles(&found), expected, "due={window}");
+    }
+    assert_eq!(
+        app.get("/api/v1/me/cards?due=soon", Some(&dev.cookie))
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
 }

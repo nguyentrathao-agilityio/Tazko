@@ -578,6 +578,7 @@
   "cli.download": "tazko",
   "cli.signIn": "2. Sign in",
   "cli.signInLead": "Your browser opens to approve the sign-in. No password is typed into the terminal.",
+  "cli.previewApprove": "Preview the approve screen",
   "cli.signInHint": "The token is saved in a file only you can read. Scripts can use a personal token in TAZKO_TOKEN and TAZKO_HOST instead.",
   "cli.try": "3. Try it",
   "cli.tryHint": "Cards are written as BOARD/CARD. Add --json or --jq to any command for scripts, and --web to open a board or card in the browser.",

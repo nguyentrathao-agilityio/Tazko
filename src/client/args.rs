@@ -110,8 +110,8 @@ pub enum ProjectAction {
 pub enum BoardAction {
     #[command(about = "Boards you can see")]
     List {
-        #[arg(long, help = "Only this project (id)")]
-        project: Option<i64>,
+        #[arg(long, help = "Only this project (id or name)")]
+        project: Option<String>,
         #[command(flatten)]
         out: Out,
     },
@@ -152,6 +152,12 @@ pub enum CardAction {
         list: Option<String>,
         #[arg(long)]
         title: String,
+        #[arg(
+            long = "label",
+            value_name = "LABEL",
+            help = "Label name or id, repeat for more"
+        )]
+        labels: Vec<String>,
         #[command(flatten)]
         out: Out,
     },
@@ -191,9 +197,19 @@ pub enum CardAction {
 pub enum MyAction {
     #[command(about = "Cards assigned to you")]
     Cards {
+        #[arg(long, value_enum, help = "Only cards due in this window")]
+        due: Option<DueWindow>,
         #[command(flatten)]
         out: Out,
     },
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DueWindow {
+    Overdue,
+    Today,
+    Week,
+    None,
 }
 
 #[derive(Subcommand, Debug)]

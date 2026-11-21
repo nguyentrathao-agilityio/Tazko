@@ -10,6 +10,8 @@ pub struct Config {
     pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub company: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_host: Option<String>,
 }
 
 pub fn dir() -> Option<PathBuf> {
@@ -113,7 +115,7 @@ mod tests {
         assert_eq!(read_token().as_deref(), Some("tzk_p_other"));
         save(&Config {
             host: Some("https://t.example".into()),
-            company: None,
+            ..Config::default()
         })
         .unwrap();
         assert_eq!(load().host.as_deref(), Some("https://t.example"));

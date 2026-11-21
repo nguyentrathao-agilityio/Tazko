@@ -7,6 +7,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::api::tokens::{Scope, insert_personal};
 use crate::auth::check_csrf;
 use crate::error::{ApiError, bad};
 use crate::session::{hash_token, now, random_token};
@@ -17,7 +18,8 @@ const LIFETIME: i64 = 600;
 const INTERVAL: i64 = 5;
 const TOKEN_DAYS: i64 = 90;
 const ALPHABET: &[u8] = b"BCDFGHJKLMNPQRSTVWXZ";
-const MAX_WAITING: i64 = 500;
+const MAX_WAITING: i64 = 5000;
+const STARTS_PER_MINUTE: u32 = 10;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -31,12 +33,20 @@ pub fn routes() -> Router<AppState> {
 }
 
 fn user_code() -> String {
-    let mut bytes = [0u8; 8];
-    getrandom::fill(&mut bytes).expect("system random source");
-    let letters: String = bytes
-        .iter()
-        .map(|b| ALPHABET[*b as usize % ALPHABET.len()] as char)
-        .collect();
+    let fair = 256 - 256 % ALPHABET.len();
+    let mut letters = String::with_capacity(8);
+    while letters.len() < 8 {
+        let mut bytes = [0u8; 16];
+        getrandom::fill(&mut bytes).expect("system random source");
+        letters.extend(
+            bytes
+                .iter()
+                .map(|b| *b as usize)
+                .filter(|b| *b < fair)
+                .map(|b| ALPHABET[b % ALPHABET.len()] as char)
+                .take(8 - letters.len()),
+        );
+    }
     format!("{}-{}", &letters[..4], &letters[4..])
 }
 
@@ -71,12 +81,17 @@ struct Start {
 
 async fn start(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<Start>,
 ) -> Result<Json<Value>, ApiError> {
     let at = now();
+    let from = headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("direct");
     state
         .rate
-        .hit("device-sign-in", at)
+        .hit_up_to(&format!("device-sign-in:{from}"), at, STARTS_PER_MINUTE)
         .map_err(ApiError::TooMany)?;
     let device = random_token();
     let hash = hash_token(&device);
@@ -275,12 +290,11 @@ async fn token(
             let Some(email) = email else {
                 return Ok(Outcome::Denied);
             };
-            let secret = format!("tzk_p_{}", random_token());
-            let name = if client.is_empty() { "Command line".to_string() } else { format!("Command line on {client}") };
-            tx.execute(
-                "INSERT INTO personal_tokens (user_id, name, id_hash, scope, expires_at) VALUES (?1, ?2, ?3, 'write', ?4)",
-                params![user, name, hash_token(&secret), at + TOKEN_DAYS * 86_400],
-            )?;
+            let name: String = if client.is_empty() { "Command line".to_string() } else { format!("Command line on {client}") }
+                .chars()
+                .take(60)
+                .collect();
+            let (_, secret) = insert_personal(&tx, user, &name, Scope::Write, None, Some(at + TOKEN_DAYS * 86_400))?;
             tx.execute("UPDATE device_codes SET used_at = ?2 WHERE code_hash = ?1", params![hash, at])?;
             tx.commit()?;
             Ok(Outcome::Token(secret, email))
@@ -304,7 +318,7 @@ const INSTALL: &str = include_str!("install.sh");
 async fn install_script(State(state): State<AppState>) -> Response {
     let script = INSTALL
         .replace("__TAZKO_HOST__", &state.settings.public_url)
-        .replace("__TAZKO_TARGET__", target());
+        .replace("__TAZKO_TARGET__", &target());
     (
         [
             (header::CONTENT_TYPE, "text/x-shellscript; charset=utf-8"),
@@ -315,26 +329,44 @@ async fn install_script(State(state): State<AppState>) -> Response {
         .into_response()
 }
 
-pub fn target() -> &'static str {
-    concat!(env!("TAZKO_TARGET_OS"), "-", env!("TAZKO_TARGET_ARCH"))
+pub fn target() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
+const CHUNK: usize = 64 * 1024;
+
 async fn download() -> Result<Response, ApiError> {
+    use tokio::io::AsyncReadExt;
+
     let path = std::env::current_exe().map_err(|_| ApiError::NotFound)?;
-    let bytes = tokio::task::spawn_blocking(move || std::fs::read(path))
+    let file = tokio::fs::File::open(path)
         .await
-        .map_err(|_| ApiError::NotFound)?
         .map_err(|_| ApiError::NotFound)?;
+    let size = file.metadata().await.map_err(|_| ApiError::NotFound)?.len();
+    let chunks =
+        futures_util::stream::unfold(Some(file), |file: Option<tokio::fs::File>| async move {
+            let mut file = file?;
+            let mut buf = vec![0u8; CHUNK];
+            match file.read(&mut buf).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    buf.truncate(n);
+                    Some((Ok(axum::body::Bytes::from(buf)), Some(file)))
+                }
+                Err(e) => Some((Err(e), None)),
+            }
+        });
     Ok((
         [
             (header::CONTENT_TYPE, "application/octet-stream".to_string()),
+            (header::CONTENT_LENGTH, size.to_string()),
             (
                 header::CONTENT_DISPOSITION,
                 format!("attachment; filename=\"tazko-{}\"", target()),
             ),
             (header::CACHE_CONTROL, "no-cache".to_string()),
         ],
-        bytes,
+        axum::body::Body::from_stream(chunks),
     )
         .into_response())
 }

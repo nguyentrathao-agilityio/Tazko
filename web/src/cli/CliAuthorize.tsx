@@ -9,6 +9,11 @@ import type { Go } from '@/ui/Link'
 
 type Device = { client: string; status: 'waiting' | 'approved' | 'denied' | 'expired'; email: string }
 
+const FINISHED = {
+  approved: ['cli.doneTitle', 'cli.doneLead'],
+  denied: ['cli.deniedTitle', 'cli.deniedLead'],
+} as const
+
 const tidy = (raw: string) => {
   const letters = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
   return letters.length > 4 ? `${letters.slice(0, 4)}-${letters.slice(4)}` : letters
@@ -17,7 +22,6 @@ const tidy = (raw: string) => {
 export function CliAuthorize({ go }: { go: Go }) {
   const [code, setCode] = useState('')
   const [device, setDevice] = useState<Device | null>(null)
-  const [done, setDone] = useState<'approved' | 'denied' | null>(null)
   const { error, setError, run } = useRun()
   const path = `${CLI_API}/device/${encodeURIComponent(code)}`
   const look = (e: FormEvent) => {
@@ -29,7 +33,8 @@ export function CliAuthorize({ go }: { go: Go }) {
 
     void run(async () => {
       try {
-        setDevice(await api<Device>('GET', path))
+        const found = await api<Device>('GET', path)
+        setDevice(found.status === 'waiting' ? found : { ...found, status: 'expired' })
       } catch {
         throw new Error(t('cli.unknownCode'))
       }
@@ -38,21 +43,16 @@ export function CliAuthorize({ go }: { go: Go }) {
   const decide = (approve: boolean) =>
     void run(async () => {
       await api('POST', `${path}/${approve ? 'approve' : 'deny'}`)
-      setDone(approve ? 'approved' : 'denied')
+      setDevice((d) => d && { ...d, status: approve ? 'approved' : 'denied' })
     })
-  const status = done ?? device?.status
+  const status = device?.status
 
   return (
     <AuthCard>
-      {status === 'approved' ? (
+      {status === 'approved' || status === 'denied' ? (
         <>
-          <h1 className="text-2xl font-bold">{t('cli.doneTitle')}</h1>
-          <p className="mt-2 text-muted">{t('cli.doneLead')}</p>
-        </>
-      ) : status === 'denied' ? (
-        <>
-          <h1 className="text-2xl font-bold">{t('cli.deniedTitle')}</h1>
-          <p className="mt-2 text-muted">{t('cli.deniedLead')}</p>
+          <h1 className="text-2xl font-bold">{t(FINISHED[status][0])}</h1>
+          <p className="mt-2 text-muted">{t(FINISHED[status][1])}</p>
         </>
       ) : device && status === 'waiting' ? (
         <>
@@ -69,7 +69,7 @@ export function CliAuthorize({ go }: { go: Go }) {
             <br />
             {t('cli.cannot')}
           </Note>
-          <div className="row" style={{ marginTop: 16, justifyContent: 'center' }}>
+          <div className="row mt-4 justify-center">
             <button type="button" className="btn primary" onClick={() => decide(true)}>
               {t('cli.authorize')}
             </button>
@@ -77,7 +77,7 @@ export function CliAuthorize({ go }: { go: Go }) {
               {t('common.cancel')}
             </button>
           </div>
-          <p className="hint" style={{ marginTop: 12 }}>
+          <p className="hint mt-3">
             {t('cli.signedInAs', { email: device.email })}
           </p>
         </>
@@ -87,8 +87,7 @@ export function CliAuthorize({ go }: { go: Go }) {
           <p className="mt-2 text-muted">{status === 'expired' ? t('cli.expired') : t('cli.enterLead')}</p>
           <form onSubmit={look} noValidate>
             <input
-              className="codebig"
-              style={{ width: '100%', border: 0 }}
+              className="codebig w-full border-0"
               aria-label={t('cli.codeLabel')}
               placeholder="XXXX-XXXX"
               value={code}
@@ -99,14 +98,14 @@ export function CliAuthorize({ go }: { go: Go }) {
                 setCode(tidy(e.target.value))
               }}
             />
-            <button type="submit" className="btn primary" style={{ marginTop: 8 }}>
+            <button type="submit" className="btn primary mt-2">
               {t('cli.continue')}
             </button>
           </form>
         </>
       )}
       <ErrorNote message={error} />
-      <button type="button" className="btn sm" style={{ marginTop: 16 }} onClick={() => go('/')}>
+      <button type="button" className="btn sm mt-4" onClick={() => go('/')}>
         {t('cli.backToTazko')}
       </button>
     </AuthCard>

@@ -72,10 +72,19 @@ describe('command line sign-in', () => {
     expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull()
   })
 
+  it('treats a code someone already decided as used, not as this person\'s sign-in', async () => {
+    device = { client: 'trung-laptop (linux)', status: 'approved', email: 'mai@example.com' }
+    open('/cli/authorize')
+    await enter('WDJB-MJHT')
+    await waitFor(() => expect(screen.getByText(/expired or was already used/)).toBeTruthy())
+    expect(screen.queryByRole('heading', { name: 'You are signed in' })).toBeNull()
+  })
+
   it('explains how to install and sign in under Settings', async () => {
     open('/c/acme/me/cli')
     expect((await screen.findByRole('tab', { name: 'Command line' })).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByText(`curl -fsSL ${window.location.origin}/cli/install.sh | sh`)).toBeTruthy()
     expect(screen.getByText(`tazko auth login --host ${window.location.origin}`)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Preview the approve screen' }).getAttribute('href')).toBe('/cli/authorize')
   })
 })
