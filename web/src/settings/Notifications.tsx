@@ -119,7 +119,7 @@ export function Notifications({ emailOn, save }: { emailOn: boolean; save: Save 
       {previews && current && (
         <Modal label={t('notif.previewTitle')} onClose={() => setPreviews(null)}>
           <h2>{t('notif.previewTitle')}</h2>
-          <div className="tabs2" role="tablist">
+          <div className="tabs2 mailtabs" role="tablist">
             {previews.previews.map((p, i) => (
               <button key={p.kind} type="button" role="tab" aria-selected={i === shown} className={i === shown ? 'on' : ''} onClick={() => setShown(i)}>
                 {t(`notif.preview.${p.kind}` as MessageKey)}
