@@ -60,6 +60,11 @@ pub static CONTROL: Migrations = Migrations {
             name: "0007_notification_emails.sql",
             sql: include_str!("../../migrations/control/0007_notification_emails.sql"),
         },
+        Migration {
+            version: 8,
+            name: "0008_device_sign_in.sql",
+            sql: include_str!("../../migrations/control/0008_device_sign_in.sql"),
+        },
     ],
 };
 

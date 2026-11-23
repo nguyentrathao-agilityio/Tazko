@@ -10,10 +10,22 @@ use tazko::config::{self, DataLayout};
 use tazko::db::Databases;
 use tazko::state::AppState;
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    let cli = Cli::parse();
-    match cli.command {
+fn main() -> ExitCode {
+    match Cli::parse().command {
+        Command::Client(c) => tazko::client::run(c),
+        server => match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt.block_on(run_server(server)),
+            Err(e) => {
+                eprintln!("tazko: cannot start: {e}");
+                ExitCode::FAILURE
+            }
+        },
+    }
+}
+
+async fn run_server(command: Command) -> ExitCode {
+    match command {
+        Command::Client(_) => unreachable!("client commands run without the server runtime"),
         Command::Serve { env_file } => serve(env_file.as_deref()).await,
         Command::Admin {
             email,

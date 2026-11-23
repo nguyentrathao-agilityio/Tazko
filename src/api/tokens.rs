@@ -112,6 +112,10 @@ impl TokenLimits {
             return method == Method::GET;
         }
 
+        if route == "/api/v1/me/cards" {
+            return method == Method::GET && self.company.is_none();
+        }
+
         let Some(rest) = route.strip_prefix(COMPANY_PREFIX) else {
             return false;
         };
@@ -132,6 +136,10 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     pub fn hit(&self, key: &str, now: i64) -> Result<(), i64> {
+        self.hit_up_to(key, now, RATE_PER_MINUTE)
+    }
+
+    pub fn hit_up_to(&self, key: &str, now: i64, per_minute: u32) -> Result<(), i64> {
         let window = now / 60;
         let mut map = self.windows.lock().unwrap_or_else(|e| e.into_inner());
         if map.len() > 10_000 {
@@ -143,7 +151,7 @@ impl RateLimiter {
             *entry = (window, 0);
         }
 
-        if entry.1 >= RATE_PER_MINUTE {
+        if entry.1 >= per_minute {
             return Err(60 - now % 60);
         }
 
@@ -349,6 +357,22 @@ fn parse_scope(raw: &str) -> Result<Scope, ApiError> {
     Scope::parse(raw).ok_or_else(|| bad("choose read, write or manage"))
 }
 
+pub fn insert_personal(
+    c: &rusqlite::Connection,
+    user: i64,
+    name: &str,
+    scope: Scope,
+    projects: Option<String>,
+    expires: Option<i64>,
+) -> rusqlite::Result<(i64, String)> {
+    let token = format!("{PERSONAL}{}", random_token());
+    c.execute(
+        "INSERT INTO personal_tokens (user_id, name, id_hash, scope, projects, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![user, name, hash_token(&token), scope.as_str(), projects, expires],
+    )?;
+    Ok((c.last_insert_rowid(), token))
+}
+
 fn token_name(raw: &str) -> Result<String, ApiError> {
     let n = raw.trim();
     if n.is_empty() || n.chars().count() > 60 || n.chars().any(char::is_control) {
@@ -455,22 +479,17 @@ async fn create_personal(
             )
         }
     };
-    let token = format!("{PERSONAL}{}", random_token());
-    let hash = hash_token(&token);
-    let row = state
+    let (token, row) = state
         .dbs
         .control()
         .write(move |c| {
-            c.execute(
-                "INSERT INTO personal_tokens (user_id, name, id_hash, scope, projects, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![id, name, hash, scope.as_str(), projects, expires],
-            )?;
-            let new = c.last_insert_rowid();
-            Ok(c.query_row(
+            let (new, token) = insert_personal(c, id, &name, scope, projects, expires)?;
+            let row = c.query_row(
                 "SELECT id, name, scope, projects, created_at, expires_at, last_used_at FROM personal_tokens WHERE id = ?1",
                 [new],
                 token_row,
-            )?)
+            )?;
+            Ok((token, row))
         })
         .await?;
     let mut v = row;
@@ -703,6 +722,12 @@ mod tests {
             !limits(Scope::Manage, None)
                 .allows_route(&Method::GET, "/api/v1/c/{company}/boards/{board}/live")
         );
+        assert!(t.allows_route(&Method::GET, "/api/v1/me/cards"));
+        let company = TokenLimits {
+            company: Some("a".into()),
+            ..t
+        };
+        assert!(!company.allows_route(&Method::GET, "/api/v1/me/cards"));
     }
 
     #[test]

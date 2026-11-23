@@ -19,6 +19,8 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    #[command(flatten)]
+    Client(crate::client::args::ClientCommand),
     #[command(about = "Run the web server")]
     Serve {
         #[arg(
