@@ -94,7 +94,7 @@ describe('aging on the board', () => {
     await screen.findByText('Fresh')
     expect(['Fresh', 'Two weeks quiet', 'A month quiet', 'Done long ago'].map(level)).toEqual(['0', '2', '3', '0'])
     const dialog = await screen.findByRole('dialog', { name: 'Card' })
-    expect(within(dialog).getByText('Stale · 8 days quiet')).toBeTruthy()
+    expect(await within(dialog).findByText('Stale · 8 days quiet')).toBeTruthy()
     expect(level('A week quiet')).toBe('1')
     fireEvent.change(await within(dialog).findByLabelText('Comment'), { target: { value: 'Back on it' } })
     fireEvent.click(within(dialog).getAllByRole('button', { name: 'Save' })[0])
