@@ -8,7 +8,7 @@ import { when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
 import { Modal } from '@/ui/Modal'
 import { useLoad } from '@/ui/useLoad'
-import { Terminal } from '@/tokens/Terminal'
+import { SecretModal } from '@/tokens/SecretModal'
 import { EXPIRY, SCOPES, type Scope, type TokenRow } from '@/tokens/types'
 
 const scopeText = (s: Scope) => t(`tokens.scope.${s}` as MessageKey)
@@ -178,18 +178,7 @@ export function TokenTable({
           </form>
         </Modal>
       )}
-      {made && (
-        <Modal label={t('tokens.made')} onClose={() => setMade(null)}>
-          <h2>{t('tokens.made')}</h2>
-          <p className="muted">{t('tokens.madeLead', { name: made.name })}</p>
-          <Terminal text={made.token} label={t('tokens.secret')} />
-          <div className="acts">
-            <button type="button" className="btn primary" onClick={() => setMade(null)}>
-              {t('tokens.done')}
-            </button>
-          </div>
-        </Modal>
-      )}
+      {made && <SecretModal title={t('tokens.made')} lead={t('tokens.madeLead', { name: made.name })} label={t('tokens.secret')} text={made.token} onClose={() => setMade(null)} />}
     </section>
   )
 }

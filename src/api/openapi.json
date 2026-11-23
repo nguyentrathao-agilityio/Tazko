@@ -316,6 +316,52 @@
     "required": [
      "list_id"
     ]
+   },
+   "NewWebhook": {
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string",
+      "description": "https address on the public internet"
+     },
+     "events": {
+      "type": "array",
+      "items": {
+       "enum": [
+        "card.created",
+        "card.updated",
+        "card.moved",
+        "card.completed",
+        "card.archived",
+        "comment.created",
+        "member.added",
+        "board.created"
+       ]
+      }
+     },
+     "projects": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "description": "Leave out for all of your projects"
+     }
+    },
+    "required": [
+     "url",
+     "events"
+    ]
+   },
+   "WebhookChange": {
+    "type": "object",
+    "properties": {
+     "active": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "active"
+    ]
    }
   }
  },
@@ -1465,6 +1511,207 @@
      },
      "409": {
       "description": "The card changed since it was completed"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/webhooks": {
+   "get": {
+    "summary": "Company webhooks with their last delivery (company owners)",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   },
+   "post": {
+    "summary": "Add a webhook; the signing secret is shown once",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "400": {
+      "description": "Address, events or projects not accepted"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewWebhook"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/webhooks/{hook}": {
+   "patch": {
+    "summary": "Pause or resume a webhook",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/WebhookChange"
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "summary": "Delete a webhook and its delivery log",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "204": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/webhooks/{hook}/test": {
+   "post": {
+    "summary": "Queue a ping event to the webhook",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "202": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/webhooks/{hook}/deliveries": {
+   "get": {
+    "summary": "The latest 50 deliveries with result and timing",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/webhooks/{hook}/deliveries/{delivery}/redeliver": {
+   "post": {
+    "summary": "Send a delivery again as a new delivery",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "202": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
      }
     }
    }
