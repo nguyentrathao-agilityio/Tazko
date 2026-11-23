@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/App'
 import { Toaster } from '@/ui/Toaster'
 import { DatesPop } from '@/card/Pops'
+import { tzOffset } from '@/card/repeat'
 import { describe as describeEvent } from '@/card/activity'
 
 type Call = { url: string; method: string; body?: unknown }
@@ -95,7 +96,7 @@ describe('completing a repeating card', () => {
     const box = within(tile).getByRole('checkbox', { name: 'Mark complete' })
     fireEvent.click(box)
     fireEvent.click(box)
-    await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21', method: 'PATCH', body: { done: true, tz_offset: -new Date().getTimezoneOffset() } }))
+    await waitFor(() => expect(calls).toContainEqual({ url: '/api/v1/c/acme/boards/7/cards/21', method: 'PATCH', body: { done: true, tz_offset: tzOffset() } }))
     expect(calls.filter((c) => c.method === 'PATCH').length).toBe(1)
     expect(await screen.findByText(/^Done\. Repeats every week\. Next due /)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))

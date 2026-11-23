@@ -89,7 +89,7 @@ export function CompanyShell({
 }: {
   me: Me
   company: Company
-  active: 'home' | 'mycards' | 'projects' | 'settings' | 'me'
+  active: 'home' | 'mycards' | 'projects' | 'settings' | 'integrations' | 'me'
   go: Go
   onSignOut: () => void
   children: ReactNode
@@ -121,6 +121,10 @@ export function CompanyShell({
             <Link to={`${base}/settings`} go={go} className={`nav${active === 'settings' ? ' on' : ''}`}>
               <Icon name="gear" />
               {t('nav.companySettings')}
+            </Link>
+            <Link to={`${base}/integrations`} go={go} className={`nav${active === 'integrations' ? ' on' : ''}`}>
+              <Icon name="bolt" />
+              {t('nav.integrations')}
             </Link>
           </>
         )}

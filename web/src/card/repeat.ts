@@ -5,6 +5,8 @@ import { t, type MessageKey } from '@/i18n'
 import { shortDate } from '@/card/look'
 import { useToast } from '@/ui/toast'
 
+export const tzOffset = () => 0 - new Date().getTimezoneOffset()
+
 export const RULES = ['daily', 'weekdays', 'weekly', 'biweekly', 'monthly'] as const
 
 export type Rule = (typeof RULES)[number]
@@ -14,7 +16,7 @@ export type Repeated = { rule: Rule; from: number; to: number }
 export const ruleText = (rule: string): string => t(`repeat.${rule}` as MessageKey)
 
 function doneBody(done: boolean) {
-  return done ? { done: true, tz_offset: -new Date().getTimezoneOffset() } : { done: false }
+  return done ? { done: true, tz_offset: tzOffset() } : { done: false }
 }
 
 export function useToggleDone(run: (fn: () => Promise<unknown>) => Promise<boolean>) {
