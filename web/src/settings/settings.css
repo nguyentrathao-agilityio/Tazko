@@ -109,4 +109,25 @@
     padding: 4px 0 0;
     border: 0;
   }
+
+  .mailp {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .mailh {
+    padding: 10px 14px;
+    background: var(--sunken);
+    font-size: 0.85rem;
+    line-height: 1.7;
+  }
+
+  .mailp iframe {
+    display: block;
+    width: 100%;
+    height: 440px;
+    border: 0;
+    background: #f6f6fb;
+  }
 }
