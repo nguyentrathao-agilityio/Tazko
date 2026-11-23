@@ -31,7 +31,29 @@ async fn main() -> ExitCode {
         Command::Dev {
             action: DevAction::Seed { owner, env_file },
         } => dev_seed(owner.as_deref(), env_file.as_deref()).await,
+        Command::Dev {
+            action: DevAction::Mail { port, dir },
+        } => dev_mail(port, dir),
     }
+}
+
+fn dev_mail(port: u16, dir: PathBuf) -> ExitCode {
+    let listener = match std::net::TcpListener::bind(("127.0.0.1", port)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("tazko dev mail: cannot listen on 127.0.0.1:{port}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    println!(
+        "tazko dev mail: listening on 127.0.0.1:{port}, saving emails to {}",
+        dir.display()
+    );
+    println!(
+        "Set TAZKO_SMTP_HOST=127.0.0.1, TAZKO_SMTP_PORT={port} and TAZKO_MAIL_FROM in the settings file."
+    );
+    tazko::mail::stub::serve(listener, dir);
+    ExitCode::SUCCESS
 }
 
 async fn dev_seed(owner: Option<&str>, env_file: Option<&Path>) -> ExitCode {
@@ -138,6 +160,7 @@ async fn serve(env_file: Option<&Path>) -> ExitCode {
     tokio::spawn(purge_trash_daily(state.clone()));
     tokio::spawn(tazko::notifications::due_soon_job(state.clone()));
     tokio::spawn(tazko::webhooks::worker::job(state.clone()));
+    tokio::spawn(tazko::mail::job(state.clone()));
     if let Err(e) = axum::serve(listener, tazko::http::router(state.clone()))
         .with_graceful_shutdown(shutdown())
         .await

@@ -12,6 +12,7 @@ export type Me = {
   is_super_admin: boolean
   csrf_token: string
   companies: Company[]
+  email_enabled?: boolean
   settings?: Record<string, unknown>
 }
 

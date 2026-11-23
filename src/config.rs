@@ -44,7 +44,7 @@ pub struct Smtp {
     pub port: u16,
     pub user: Option<String>,
     pub password: Option<Secret>,
-    pub from: String,
+    pub from: crate::mail::message::Mailbox,
 }
 
 #[derive(Debug, Clone)]
@@ -253,16 +253,27 @@ fn smtp<'a>(get: &impl Fn(&str) -> Option<&'a str>, problems: &mut Vec<String>) 
     }
 
     let port = number(get("TAZKO_SMTP_PORT"), 587u16, "TAZKO_SMTP_PORT", problems);
-    if missing {
-        return None;
+    if get("TAZKO_SMTP_USER").is_some() != get("TAZKO_SMTP_PASSWORD").is_some() {
+        problems.push("TAZKO_SMTP_USER and TAZKO_SMTP_PASSWORD must be set together".into());
+        missing = true;
     }
+
+    let from = get("TAZKO_MAIL_FROM").and_then(crate::mail::message::Mailbox::parse);
+    if get("TAZKO_MAIL_FROM").is_some() && from.is_none() {
+        problems
+            .push("TAZKO_MAIL_FROM must be an address like Tazko <no-reply@example.com>".into());
+    }
+
+    let (false, Some(from)) = (missing, from) else {
+        return None;
+    };
 
     Some(Smtp {
         host: get("TAZKO_SMTP_HOST").unwrap().to_string(),
         port,
         user: get("TAZKO_SMTP_USER").map(str::to_string),
         password: get("TAZKO_SMTP_PASSWORD").map(Secret::new),
-        from: get("TAZKO_MAIL_FROM").unwrap().to_string(),
+        from,
     })
 }
 
@@ -476,11 +487,25 @@ mod tests {
     }
 
     #[test]
+    fn a_mail_user_needs_a_password() {
+        let mut map = base();
+        map.insert("TAZKO_SMTP_HOST".into(), "smtp.example.com".into());
+        map.insert("TAZKO_MAIL_FROM".into(), "tazko@example.com".into());
+        map.insert("TAZKO_SMTP_USER".into(), "mailer".into());
+        assert!(
+            problems(&map)
+                .iter()
+                .any(|m| m.contains("TAZKO_SMTP_PASSWORD"))
+        );
+    }
+
+    #[test]
     fn debug_output_hides_secrets() {
         let mut map = base();
         map.insert("TAZKO_SECRET".into(), "s".repeat(40));
         map.insert("TAZKO_SMTP_HOST".into(), "smtp.example.com".into());
         map.insert("TAZKO_MAIL_FROM".into(), "tazko@example.com".into());
+        map.insert("TAZKO_SMTP_USER".into(), "mailer".into());
         map.insert("TAZKO_SMTP_PASSWORD".into(), "mail-password-value".into());
         let s = from_map(&map).unwrap();
         let out = format!("{s:?}");

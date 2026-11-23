@@ -385,7 +385,7 @@ async fn an_owner_cannot_tell_whether_an_address_already_has_an_account() {
         assert_eq!(res.status(), StatusCode::CREATED, "{email}");
         assert_eq!(
             body_json(res).await,
-            json!({ "result": "invited" }),
+            json!({ "result": "invited", "emailed": false, "email_limited": false, "share_url": "http://localhost:8791" }),
             "{email}"
         );
     }

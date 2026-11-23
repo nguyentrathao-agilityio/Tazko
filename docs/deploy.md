@@ -46,7 +46,7 @@ sudo bash deploy/setup.sh
 
 It refuses to run if something already listens on port 8791. Then:
 
-1. Fill `TAZKO_GOOGLE_CLIENT_ID`, `TAZKO_GOOGLE_CLIENT_SECRET` and `TAZKO_PUBLIC_URL` in `/etc/tazko/tazko.env` as root. With an SSH port forward, keep `TAZKO_PUBLIC_URL=http://localhost:8791` and use the "Tazko local" Google client.
+1. Fill `TAZKO_GOOGLE_CLIENT_ID`, `TAZKO_GOOGLE_CLIENT_SECRET` and `TAZKO_PUBLIC_URL` in `/etc/tazko/tazko.env` as root. With an SSH port forward, keep `TAZKO_PUBLIC_URL=http://localhost:8791` and use the "Tazko local" Google client. Optional: the `TAZKO_SMTP_*` and `TAZKO_MAIL_FROM` settings for email (`docs/email.md`).
 2. Release the first bundle (below).
 3. Create the first super admin: `sudo -u tazko /opt/tazko/current/tazko admin --data /var/lib/tazko/data --email <address>`.
 4. Start the timers: `sudo systemctl start tazko-backup.timer tazko-restore-test.timer`.

@@ -105,6 +105,20 @@ pub enum DevAction {
         #[arg(long, value_name = "PATH", help = "Settings file")]
         env_file: Option<PathBuf>,
     },
+    #[command(
+        about = "Run a local mail catcher that saves every email as a file instead of sending it"
+    )]
+    Mail {
+        #[arg(long, default_value_t = 2525, help = "Port on 127.0.0.1 to listen on")]
+        port: u16,
+        #[arg(
+            long,
+            value_name = "DIR",
+            default_value = "./mail-outbox",
+            help = "Folder to save the emails in"
+        )]
+        dir: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]

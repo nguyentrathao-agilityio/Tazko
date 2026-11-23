@@ -6,6 +6,8 @@ import { useLoad } from '@/ui/useLoad'
 import type { RunStatus, ServerInfo } from '@/admin/types'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { ADMIN_API } from '@/paths'
+import { useRun } from '@/projects/useRun'
+import { useToast } from '@/ui/toast'
 
 function RunRow({ label, run }: { label: string; run: RunStatus | null }) {
   if (!run) {
@@ -50,8 +52,49 @@ function RunRow({ label, run }: { label: string; run: RunStatus | null }) {
   )
 }
 
+function EmailBox({ s, onSent }: { s: ServerInfo; onSent: () => void }) {
+  const { error, run } = useRun(onSent)
+  const toast = useToast()
+  const q = s.email_queue
+  const server = s.email_server
+  const test = () =>
+    void run(async () => {
+      const r = await api<{ to: string }>('POST', `${ADMIN_API}/email/test`)
+      toast(t('server.emailTestSent', { email: r.to }))
+    })
+
+  return (
+    <section className="box">
+      <h2>{t('server.email')}</h2>
+      <div className="row">
+        <span className={`pill ${server ? 'ok' : ''}`}>{t(server ? 'server.emailConfigured' : 'server.emailNotSet')}</span>
+        <span className="muted grow">{server ? t('server.emailSendsAs', { host: server.host, port: server.port, from: server.from }) : t('server.emailOff')}</span>
+        {server && (
+          <button type="button" className="btn sm" onClick={test}>
+            {t('server.emailTest')}
+          </button>
+        )}
+      </div>
+      <ErrorNote message={error} />
+      <p className="hint" style={{ marginTop: 10 }}>
+        {t('server.emailHint')}
+      </p>
+      {server && (
+        <small className="muted" style={{ display: 'block' }}>
+          {t('server.emailStats', { sent: q.sent_24h, failed: q.failed_24h, pending: q.pending })}
+        </small>
+      )}
+      {q.last_error && (
+        <small className="text-bad" style={{ display: 'block' }}>
+          {t('server.emailLastError', { when: when(q.last_error.at), error: q.last_error.error })}
+        </small>
+      )}
+    </section>
+  )
+}
+
 export function Server() {
-  const { data: s, error } = useLoad(() => api<ServerInfo>('GET', `${ADMIN_API}/server`), 'server')
+  const { data: s, error, reload } = useLoad(() => api<ServerInfo>('GET', `${ADMIN_API}/server`), 'server')
   const last = s?.last_backup
 
   return (
@@ -82,10 +125,7 @@ export function Server() {
               </b>
             </div>
           </div>
-          <section className="box">
-            <h2>{t('server.email')}</h2>
-            <p className="muted">{s.email === 'on' ? t('server.emailOn') : t('server.emailOff')}</p>
-          </section>
+          <EmailBox s={s} onSent={reload} />
           <section className="box">
             <h2>{t('server.backups')}</h2>
             <div className="tw">

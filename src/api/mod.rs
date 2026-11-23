@@ -93,6 +93,7 @@ async fn me(
         "is_super_admin": user.is_super_admin,
         "csrf_token": user.csrf_token,
         "companies": companies,
+        "email_enabled": crate::mail::enabled(&state),
     })))
 }
 

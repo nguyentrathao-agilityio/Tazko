@@ -1,3 +1,5 @@
+import { EmailInviteOption } from '@/invite/EmailInviteOption'
+import { invitedMessage, useEmailEnabled, wantsEmail, type InviteResult } from '@/invite/invite'
 import type { FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
@@ -26,6 +28,7 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
     onChange()
   })
   const can = data?.can ?? project.can
+  const inviteHint = t(useEmailEnabled() ? 'project.inviteHintEmail' : 'project.inviteHint', { company: company.name })
 
   const onInvite = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -33,9 +36,9 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
     const f = new FormData(form)
     const email = String(f.get('email') ?? '').trim()
     void run(async () => {
-      const res = await api<{ result: string }>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? MEMBER) })
+      const res = await api<InviteResult>('POST', `${base}/invites`, { email, role: String(f.get('role') ?? MEMBER), send_email: wantsEmail(f) })
       form.reset()
-      toast(t(res?.result === 'added' ? 'project.toastAdded' : 'toast.invited', { email: email.toLowerCase() }))
+      toast(invitedMessage(res, email, 'project.toastAdded'))
     })
   }
 
@@ -65,13 +68,14 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
               <option value={OBSERVER}>{t('projectRole.observer')}</option>
               {can.manage && <option value={OWNER}>{t('projectRole.owner')}</option>}
             </select>
+            <EmailInviteOption />
             <button className="btn primary" type="submit">
               <Icon name="plus" />
               {t('project.inviteButton')}
             </button>
           </form>
           <p className="hint" style={{ marginTop: 10 }}>
-            {t('project.inviteHint', { company: company.name })}
+            {inviteHint}
           </p>
         </section>
       ) : (

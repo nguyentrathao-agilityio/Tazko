@@ -82,6 +82,8 @@ pub async fn list(
 pub struct NewInvite {
     email: String,
     role: String,
+    #[serde(default)]
+    send_email: bool,
 }
 
 enum Target {
@@ -159,7 +161,10 @@ pub async fn invite(
         }
         Target::Invite => {
             let project_name = project.info.name.clone();
-            state
+            let company = project.company.name.clone();
+            let mail =
+                crate::mail::InviteMail::new(&state, &project.company.user.0, body.send_email);
+            let sent = state
                 .dbs
                 .control()
                 .write(move |c| {
@@ -190,11 +195,15 @@ pub async fn invite(
                         &email,
                         json!({ "role": "member", "project": id, "project_name": project_name, "project_role": role.as_str(), "invite": invite }),
                     )?;
+                    let sent = mail.queue(&tx, &email, &company, Some(&project_name), org_id, by)?;
                     tx.commit()?;
-                    Ok(Ok(()))
+                    Ok(Ok(sent))
                 })
                 .await??;
-            Ok((StatusCode::CREATED, Json(json!({ "result": "invited" }))))
+            Ok((
+                StatusCode::CREATED,
+                Json(sent.json("invited", &state.settings.public_url)),
+            ))
         }
     }
 }
