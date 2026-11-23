@@ -1017,7 +1017,7 @@
   "settings.tab.tokens": "Access tokens",
   "tokens.personalTitle": "Personal access tokens",
   "tokens.personalLead": "A token acts as you, with your access, for scripts and the command line. It never sees more than you can.",
-  "tokens.personalHint": "Company integrations use company tokens instead, which owners manage under Integrations.",
+  "tokens.personalHint": "Signing in with tazko auth login creates a token like these for you. Company integrations use company tokens instead, which owners manage under Integrations.",
   "tokens.new": "New token",
   "tokens.newPersonal": "New personal token",
   "tokens.newCompany": "New company token",

@@ -110,6 +110,29 @@
     border: 0;
   }
 
+  .tabs2.mailtabs {
+    flex-wrap: wrap;
+    gap: 6px;
+    border-bottom: 0;
+    margin: 10px 0 12px;
+    overflow-x: visible;
+  }
+
+  .tabs2.mailtabs button {
+    padding: 5px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--ink);
+  }
+
+  .tabs2.mailtabs button.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
   .mailp {
     border: 1px solid var(--line);
     border-radius: 12px;
