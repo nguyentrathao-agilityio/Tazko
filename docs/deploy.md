@@ -63,6 +63,13 @@ sudo -u tazko-deploy tazko-release --rollback
 
 A release refuses a bundle that is not named `tazko-<time>-<commit>.tar.gz`, holds anything but `tazko` and `VERSION`, was already released, or whose binary does not run. It then points `current` at the new release, restarts the service and polls `http://127.0.0.1:8791/health` for 20 seconds. If the new release is not healthy, it points `current` back, restarts and exits with an error. After a healthy release it keeps the 5 newest releases.
 
+## Continuous integration and delivery
+
+- **CI:** `.github/workflows/ci.yml` runs `scripts/ci.sh` on GitHub Actions for every pull request to `dev` and every push to `dev`, on Ubuntu 24.04 with the stable Rust toolchain, `cargo-deny`, Node 24, pnpm 11.1.1 and `sqlite3`, in UTC. It checks out the pull request's own commits (not a merge commit) with full history, so the commit checks see the owner's commits. It needs no secrets and only reads the repository. A run takes several minutes; on a private repository it uses the account's Actions minutes.
+- **CD on Railway:** set the service to deploy from the `dev` branch and turn on **Wait for CI** (Settings → Source), so a merge to `dev` deploys only after this workflow passes. A failed run deploys nothing.
+- **CD on the Ubuntu machine:** releases stay manual with `tazko-release` (above), because the machine is not reachable from GitHub and every machine change waits for the owner.
+- **Rolling back on Railway:** open the service's **Deployments**, pick the last good one and choose **Redeploy**. A release older than the data's schema refuses to open it, so after a release that added a migration, fix forward instead of rolling back.
+
 ## Backups and restore
 
 - Nightly at 02:30: `tazko backup --data /var/lib/tazko/data --to /var/backups/tazko --keep-days 30` copies every database online (safe while the service runs) and every stored file into a dated snapshot, checks the copy and records the result. The newest snapshot is never removed.
