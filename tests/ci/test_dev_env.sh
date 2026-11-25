@@ -58,7 +58,7 @@ expect fail "node 25 is not an LTS line" run_check "$odd"
 new_repo init
 expect pass "init creates .env.local" bash scripts/dev-env.sh init
 expect pass "init copies the example" cmp .env.example .env.local
-expect pass "init makes .env.local owner-only" test "$(stat -f %Lp .env.local 2>/dev/null || stat -c %a .env.local)" = 600
+expect pass "init makes .env.local owner-only" test "$(stat -c %a .env.local 2>/dev/null || stat -f %Lp .env.local)" = 600
 echo "TAZKO_PORT=9999" > .env.local
 bash scripts/dev-env.sh init >/dev/null
 expect pass "init leaves an existing .env.local alone" grep -q 9999 .env.local
