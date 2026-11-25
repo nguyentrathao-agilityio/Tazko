@@ -83,3 +83,44 @@ sudo systemctl start tazko.service
 ```
 
 `backup restore` only writes into a new, empty folder and checks the result. Add `--snapshot <YYYYMMDD-HHMMSS>` for an older snapshot.
+
+## Railway
+
+A managed alternative to the Ubuntu machine: Railway builds the `Dockerfile` from the repository and runs one container with a volume for the data. It gives a fixed `https://<name>.up.railway.app` address, so Google sign-in keeps one redirect. Everything in this section is done by the owner in the Railway and Google consoles; no secret goes into the repository or a chat.
+
+### What the image does
+
+- `Dockerfile` builds the web app (Node 24, pnpm), then the server (`cargo build --release --locked` with the web app embedded), and copies only the binary and `deploy/railway/start.sh` into a small Debian image with the system certificates.
+- `deploy/railway/start.sh` refuses to start unless a volume is mounted at `/var/lib/tazko`, so data never lands on the container's throwaway disk. It keeps the data in `/var/lib/tazko/data`, makes the volume owned by an unprivileged `tazko` user and owner-only (umask 077), and runs `tazko serve` as that user without new privileges, listening on all addresses (IPv4 and IPv6) at Railway's `PORT` unless `TAZKO_PORT` is set.
+- Backups: ten minutes after start, then every hour, it takes a `tazko backup` snapshot into `/var/lib/tazko/backups` when the last one is more than 23 hours old (kept 14 days, `TAZKO_BACKUP_KEEP_DAYS`), and runs the restore test `tazko backup verify` when the last one is more than a week old. Both results show on Admin, Server. The times are kept in files on the volume, so frequent deploys do not postpone them.
+- Sign-in start limits count each visitor by the last address in `X-Forwarded-For`, which Railway's proxy adds (`TAZKO_CLIENT_IP_HEADER`, default `cf-connecting-ip` elsewhere for the tunnel).
+- `railway.json` builds from the `Dockerfile`, runs one replica (SQLite files allow one writer), checks `/health` before switching traffic, and restarts on failure.
+
+### First deploy
+
+1. In Railway, **New project → Deploy from GitHub repo**, pick the Tazko repository and the `dev` branch.
+2. On the service, **Settings → Volumes → Add volume**, mount path `/var/lib/tazko`.
+3. **Settings → Networking → Generate domain**. Note the address, for example `https://tazko-production.up.railway.app`.
+4. **Variables** (names only here; type the values in Railway):
+   - `TAZKO_PUBLIC_URL` = the address from step 3, with `https://` and no trailing slash
+   - `TAZKO_GOOGLE_CLIENT_ID`, `TAZKO_GOOGLE_CLIENT_SECRET`
+   - `TAZKO_SECRET`: leave unset to use the `secret` file the server creates on the volume, or 32+ random characters
+   - optional email: `TAZKO_SMTP_HOST`, `TAZKO_SMTP_PORT`, `TAZKO_SMTP_USER`, `TAZKO_SMTP_PASSWORD`, `TAZKO_MAIL_FROM` (see `docs/email.md`)
+   - never set `TAZKO_WEBHOOKS_ALLOW_LOCAL` here
+5. In the Google Cloud console (project Tazko), add the redirect URI `https://<address>/auth/google/callback` to the web OAuth client, and either publish the app or list the people who sign in as test users.
+6. Deploy. The deployment is healthy when `https://<address>/health` answers. If the log says no volume is mounted, add the volume from step 2 with exactly that path.
+7. Create the first super admin from the Railway CLI (`railway link`, then `railway ssh`), as the `tazko` user so the files keep their owner:
+
+   ```bash
+   setpriv --reuid=tazko --regid=tazko --init-groups tazko admin --data /var/lib/tazko/data --email <your Google address>
+   ```
+
+8. Sign in with that Google account, then send a test email from Admin, Server.
+
+### Updates and rollback
+
+Every push to the chosen branch builds and deploys a new image. Because the volume attaches to one container at a time, Railway stops the old container before the new one starts, so each deploy has a short outage (the new container runs any migrations and must answer `/health`); open boards reconnect by themselves. Deploy outside working hours when possible. To go back, open **Deployments**, pick an earlier one and choose **Redeploy**. The data on the volume stays; a newer release may already have migrated it, so roll back only to the release just before.
+
+### Backups on Railway
+
+Snapshots are written to the same volume, so they protect against mistakes and bad releases, not against losing the volume. To keep a copy elsewhere, open `railway ssh` and list `/var/lib/tazko/backups`, then copy a snapshot out with the Railway CLI, or use the volume backups Railway offers on the plan in use. `tazko check` runs in the container at any time. A restore needs the server stopped, which `railway ssh` cannot do from inside the running container: set the service's custom start command to `sleep infinity` for the restore, run the restore steps above as the `tazko` user with `/var/lib/tazko` paths, then clear the start command and redeploy.

@@ -45,7 +45,7 @@ tazko auth login --host https://<server>
 - `--company <slug>` picks the company; it defaults to `tazko config set company`, or your only company.
 - `--json` prints the JSON answer, `--json id,title` only those fields, and `--jq .cards[].title` parts of it. The `--jq` filter understands paths: `.key`, `.[n]`, `.[]` and their combinations.
 - Exit codes: 0 success, 1 failure, 2 wrong usage, 4 not signed in.
-- Starting a sign-in is limited to 10 a minute for each address, as the tunnel reports it (`CF-Connecting-IP`), and 120 a minute for the whole server; at most 1000 codes wait at once. The server listens only on `127.0.0.1`, so the address header comes from the tunnel.
+- Starting a sign-in is limited to 10 a minute for each address, as the proxy in front reports it (`CF-Connecting-IP` behind the tunnel by default, or the header named in `TAZKO_CLIENT_IP_HEADER`, such as `X-Forwarded-For`), and 120 a minute for the whole server; at most 1000 codes wait at once. Set the header to one the proxy itself writes, so visitors cannot choose their own address.
 
 ## Not yet
 

@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+!.env.example
+data
+target
+dist
+mail-outbox
+web/node_modules
+web/dist
+**/.DS_Store
+.claude

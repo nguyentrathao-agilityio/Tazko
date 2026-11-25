@@ -50,6 +50,17 @@ fn user_code() -> String {
     format!("{}-{}", &letters[..4], &letters[4..])
 }
 
+pub fn client_address(headers: &HeaderMap, header: &str) -> String {
+    headers
+        .get(header)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.rsplit(',').next())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("direct")
+        .to_string()
+}
+
 fn normalise(code: &str) -> String {
     let letters: String = code
         .chars()
@@ -85,10 +96,7 @@ async fn start(
     Json(body): Json<Start>,
 ) -> Result<Json<Value>, ApiError> {
     let at = now();
-    let from = headers
-        .get("cf-connecting-ip")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("direct");
+    let from = client_address(&headers, &state.settings.client_ip_header);
     state
         .rate
         .hit_up_to(&format!("device-sign-in:{from}"), at, STARTS_PER_MINUTE)
@@ -387,5 +395,15 @@ mod tests {
         assert_eq!(normalise("wdjb mjht"), "WDJB-MJHT");
         assert_eq!(normalise("short"), "");
         assert_eq!(client_name("lap\ntop"), "laptop");
+    }
+
+    #[test]
+    fn the_client_address_is_the_last_hop_the_platform_added() {
+        let mut h = HeaderMap::new();
+        assert_eq!(client_address(&h, "x-forwarded-for"), "direct");
+        h.insert("x-forwarded-for", "6.6.6.6, 203.0.113.7".parse().unwrap());
+        h.insert("cf-connecting-ip", "198.51.100.2".parse().unwrap());
+        assert_eq!(client_address(&h, "x-forwarded-for"), "203.0.113.7");
+        assert_eq!(client_address(&h, "cf-connecting-ip"), "198.51.100.2");
     }
 }
