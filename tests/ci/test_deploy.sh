@@ -14,7 +14,7 @@ expect() {
 }
 has() { grep -q -- "$1" "$2"; }
 
-for s in "$DEPLOY"/*.sh; do
+for s in "$DEPLOY"/*.sh "$DEPLOY"/oracle/*.sh; do
   expect pass "bash syntax of $(basename "$s")" bash -n "$s"
 done
 
@@ -95,6 +95,57 @@ expect pass "the newest is live" test "$(current)" = 20261118-0900-f9f9f9f
 BINARY="$TMP/b-20261118-0100-aaaaaaa/tazko" OUT="$TMP/dist" bash "$DEPLOY/bundle.sh" >"$TMP/bundle-path"
 expect pass "bundle.sh makes a bundle the release script accepts" bash -c "tar -tzf \"\$(cat '$TMP/bundle-path')\" | sort | tr '\n' ' ' | grep -qx 'VERSION tazko '"
 expect pass "bundle name has time and commit" bash -c "basename \"\$(cat '$TMP/bundle-path')\" | grep -Eq '^tazko-[0-9]{8}-[0-9]{6}-[0-9a-f]{12}\.tar\.gz$'"
+
+SRC="$TMP/src"; mkdir -p "$SRC/deploy"
+cp "$DEPLOY/bundle.sh" "$SRC/deploy/"; cp "$ROOT/Cargo.toml" "$SRC/"
+expect pass "bundle.sh outside a repository takes TAZKO_COMMIT" bash -c "cd '$SRC' && GIT_CEILING_DIRECTORIES='$TMP' TAZKO_COMMIT=0123456789ab BINARY='$TMP/b-20261118-0100-aaaaaaa/tazko' OUT='$TMP/dist2' bash deploy/bundle.sh | grep -Eq 'tazko-[0-9]{8}-[0-9]{6}-0123456789ab\.tar\.gz$'"
+expect fail "bundle.sh refuses a bad TAZKO_COMMIT" bash -c "cd '$SRC' && GIT_CEILING_DIRECTORIES='$TMP' TAZKO_COMMIT='x; rm' BINARY='$TMP/b-20261118-0100-aaaaaaa/tazko' OUT='$TMP/dist2' bash deploy/bundle.sh"
+expect fail "send-source.sh needs a destination" bash "$DEPLOY/oracle/send-source.sh"
+
+ORACLE="$DEPLOY/oracle"
+DRY_RUN=1 bash "$ORACLE/setup-proxy.sh" tazko-demo.duckdns.org >"$TMP/proxy.txt"
+expect pass "proxy setup installs caddy from the system packages" has 'apt-get install -y caddy' "$TMP/proxy.txt"
+expect pass "proxy setup opens 80" has '--dport 80 -j ACCEPT' "$TMP/proxy.txt"
+expect pass "proxy setup opens 443" has '--dport 443 -j ACCEPT' "$TMP/proxy.txt"
+expect pass "firewall rules are saved" has 'netfilter-persistent save' "$TMP/proxy.txt"
+expect pass "the Caddyfile is checked before it is installed" bash -c "grep -n 'caddy validate --config /' '$TMP/proxy.txt' | grep -v /etc/caddy/Caddyfile | grep -q . && [ \$(grep -n 'caddy validate' '$TMP/proxy.txt' | cut -d: -f1) -lt \$(grep -n 'Caddyfile$' '$TMP/proxy.txt' | tail -1 | cut -d: -f1) ]"
+expect pass "the DuckDNS timer is enabled" has 'systemctl enable tazko-duckdns.timer' "$TMP/proxy.txt"
+expect pass "the next steps start the DuckDNS timer" has 'systemctl start tazko-duckdns.service tazko-duckdns.timer' "$TMP/proxy.txt"
+expect pass "the Google redirect is named" has 'https://tazko-demo.duckdns.org/auth/google/callback' "$TMP/proxy.txt"
+expect pass "caddy proxies to the local server only" has 'reverse_proxy 127.0.0.1:8791' "$ORACLE/Caddyfile"
+expect pass "caddy replaces the client address header with the real one" has 'header_up Cf-Connecting-Ip {remote_host}' "$ORACLE/Caddyfile"
+for bad in "" "Tazko.duckdns.org" "a;b.duckdns.org" "localhost" "x.duckdns.org/evil"; do
+  expect fail "proxy setup refuses the host name '$bad'" env DRY_RUN=1 bash "$ORACLE/setup-proxy.sh" "$bad"
+done
+expect pass "the DuckDNS unit runs as a throwaway user" has '^DynamicUser=true' "$ORACLE/tazko-duckdns.service"
+expect pass "the DuckDNS unit gets the token as a credential" has '^LoadCredential=tazko.env:/etc/tazko/tazko.env' "$ORACLE/tazko-duckdns.service"
+
+DNS="$TMP/dns"; mkdir -p "$DNS/bin"
+cat >"$DNS/bin/curl" <<'CURL'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >"$DUCKDNS_LOG.args"
+cat >"$DUCKDNS_LOG.stdin"
+cat "$DUCKDNS_ANSWER"
+CURL
+chmod +x "$DNS/bin/curl"
+token=0a1b2c3d-1111-2222-3333-444455556666
+printf 'TAZKO_PUBLIC_URL=https://tazko-demo.duckdns.org\nDUCKDNS_DOMAIN=Tazko-Demo\nDUCKDNS_TOKEN=%s\n' "$token" >"$DNS/duckdns.env"
+printf 'OK' >"$DNS/ok"; printf 'KO' >"$DNS/ko"
+duck() { env PATH="$DNS/bin:$PATH" TAZKO_DUCKDNS_ENV="$1" DUCKDNS_LOG="$DNS/log" DUCKDNS_ANSWER="$2" bash "$ORACLE/duckdns-update.sh"; }
+expect pass "DuckDNS update succeeds on OK" duck "$DNS/duckdns.env" "$DNS/ok"
+expect pass "the token never appears in the command line" bash -c "! grep -q '$token' '$DNS/log.args' && grep -q 'token=$token' '$DNS/log.stdin'"
+expect pass "only https is allowed" has "--proto =https" "$DNS/log.args"
+expect fail "DuckDNS update fails on KO" duck "$DNS/duckdns.env" "$DNS/ko"
+printf 'DUCKDNS_DOMAIN=tazko-demo\nDUCKDNS_TOKEN=not-a-token\n' >"$DNS/bad.env"
+expect fail "a malformed token is refused before any request" duck "$DNS/bad.env" "$DNS/ok"
+printf 'DUCKDNS_DOMAIN=a&b\nDUCKDNS_TOKEN=%s\n' "$token" >"$DNS/bad2.env"
+expect fail "a malformed domain is refused" duck "$DNS/bad2.env" "$DNS/ok"
+printf 'DUCKDNS_TOKEN=%s\n' "$token" >"$DNS/missing.env"
+duck "$DNS/missing.env" "$DNS/ok" >"$TMP/duck-missing.txt" 2>&1 || true
+expect pass "a missing domain is named in the error" has 'DUCKDNS_DOMAIN' "$TMP/duck-missing.txt"
+expect pass "the domain is sent in lower case" has 'domains=tazko-demo&' "$DNS/log.stdin"
+duck "$DNS/duckdns.env" "$DNS/ko" >"$TMP/duck-ko.txt" 2>&1 || true
+expect fail "a refused update does not print the token" has "$token" "$TMP/duck-ko.txt"
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

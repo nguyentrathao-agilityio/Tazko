@@ -1,0 +1,21 @@
+[Unit]
+Description=Point the DuckDNS name at this machine
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=true
+LoadCredential=tazko.env:/etc/tazko/tazko.env
+ExecStart=/usr/local/bin/tazko-duckdns
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallArchitectures=native

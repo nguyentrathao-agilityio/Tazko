@@ -1,0 +1,5 @@
+TAZKO_HOSTNAME {
+	reverse_proxy 127.0.0.1:8791 {
+		header_up Cf-Connecting-Ip {remote_host}
+	}
+}

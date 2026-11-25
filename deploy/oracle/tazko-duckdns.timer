@@ -1,0 +1,9 @@
+[Unit]
+Description=Keep the DuckDNS name up to date
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

@@ -99,6 +99,10 @@ new_repo placeholders; printf 'TAZKO_SECRET=\nTAZKO_MAX_UPLOAD_MB=10\nTAZKO_GOOG
 expect pass "empty secret placeholders" checks secrets
 printf 'TAZKO_SECRET=%s\n' "$(printf 'x%.0s' $(seq 32))" > env2.example; git add env2.example
 expect fail "filled TAZKO_SECRET" checks secrets
+new_repo duckdns; printf 'DUCKDNS_TOKEN=0a1b2c3d-1111-2222-3333-444455556666\n' > duckdns.env.example; git add duckdns.env.example
+expect fail "filled DuckDNS token" checks secrets
+new_repo duckdnsurl; printf 'curl "https://www.duckdns.org/update?domains=x&token=%s"\n' "0a1b2c3d-1111-2222-3333-444455556666" > notes.md; git add notes.md
+expect fail "DuckDNS token in an update link" checks secrets
 new_repo jslic
 printf '{"MIT":[{"name":"react"}],"Apache-2.0":[{"name":"cva"}],"(MIT OR CC0-1.0)":[{"name":"dual"}]}' > prod.json
 printf '{"MIT":[{"name":"react"},{"name":"vite"}],"MPL-2.0":[{"name":"lightningcss"},{"name":"lightningcss-linux-x64-gnu"}],"BlueOak-1.0.0":[{"name":"lru-cache"}]}' > all.json
