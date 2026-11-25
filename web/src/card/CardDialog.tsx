@@ -972,6 +972,7 @@ function Feed({
                 <time>
                   {ago(c.created_at)}
                   {c.edited_at ? ` ${t('card.edited')}` : ''}
+                  {c.imported ? ` · ${t('card.imported')}` : ''}
                 </time>
               </div>
               {editing?.id === c.id ? (

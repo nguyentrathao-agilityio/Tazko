@@ -20,7 +20,7 @@ pub fn kind(action: &str) -> &'static str {
     match action {
         "sign_in_refused" => "refused",
         a if a.starts_with("company_") => "company",
-        a if a.starts_with("project_") => "projects",
+        a if a.starts_with("project_") || a == "board_imported" => "projects",
         a if a.starts_with("invite_") => "invites",
         _ => "people",
     }
@@ -43,6 +43,7 @@ pub fn actions_of(kind: &str) -> Option<&'static [&'static str]> {
             "project_deleted",
             "project_owner_added",
             "project_joined",
+            "board_imported",
         ]),
         "invites" => Some(&["invite_created", "invite_revoked"]),
         "people" => Some(&[

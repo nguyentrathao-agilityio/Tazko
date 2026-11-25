@@ -13,7 +13,7 @@ import { FieldsPage } from '@/card/Fields'
 import type { BoardData } from '@/board/types'
 import { ESCAPE } from '@/keys/keyNames'
 
-type Page = 'main' | 'about' | 'bg' | 'tpl' | 'fields' | 'arch' | 'access' | 'copy' | 'activity'
+type Page = 'main' | 'about' | 'bg' | 'tpl' | 'fields' | 'arch' | 'access' | 'export' | 'copy' | 'activity'
 
 export function BoardMenu({
   board,
@@ -47,6 +47,7 @@ export function BoardMenu({
     bg: t('boardMenu.background'),
     arch: t('boardMenu.archived'),
     access: t('boardMenu.access'),
+    export: t('boardMenu.export'),
     copy: t('boardMenu.copy'),
     activity: t('boardMenu.activity'),
     fields: t('fields.title'),
@@ -92,6 +93,7 @@ export function BoardMenu({
               {board.watching ? t('board.unwatch') : t('board.watch')}
             </button>
             {board.can.manage && item('access', 'lock', t('boardMenu.access'))}
+            {item('export', 'upload', t('boardMenu.export'))}
             {board.can.create_board && (
               <>
                 <hr />
@@ -122,6 +124,17 @@ export function BoardMenu({
         {page === 'arch' && <Archived board={board} base={base} run={run} />}
         {page === 'access' && <Access board={board} base={base} run={run} />}
         {page === 'activity' && <Activity board={board} base={base} />}
+        {page === 'export' && (
+          <>
+            <p>{t('boardMenu.exportBody', { name: board.name })}</p>
+            <a className="btn primary sm" href={`${base}/export`} download>
+              {t('boardMenu.exportDownload')}
+            </a>
+            <p className="hint" style={{ marginTop: 10 }}>
+              {t('boardMenu.exportHint')}
+            </p>
+          </>
+        )}
         {page === 'copy' && (
           <form
             onSubmit={(e) => {

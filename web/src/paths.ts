@@ -14,3 +14,9 @@ export const projectRoute = (slug: string, project: number): string => `${compan
 export const boardRoute = (slug: string, board: number): string => `${companyRoute(slug)}/b/${board}`
 export const cardRouteUnder = (boardPath: string, card: number): string => `${boardPath}/c/${card}`
 export const cardRoute = (slug: string, board: number, card: number): string => cardRouteUnder(boardRoute(slug, board), card)
+export const projectImportRoute = (slug: string, project: number): string => `${projectRoute(slug, project)}/import`
+
+export type ImportChoices = { archived: boolean; comments: boolean; links: boolean }
+
+export const importPreviewApi = (slug: string, project: number, file: string): string => `${projectApi(slug, project)}/imports/preview?name=${encodeURIComponent(file)}`
+export const importApi = (slug: string, project: number): string => `${projectApi(slug, project)}/imports`

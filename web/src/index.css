@@ -18,6 +18,7 @@
 @import './tokens/tokens.css';
 @import './webhooks/webhooks.css';
 @import './cli/cli.css';
+@import './import/import.css';
 
 body {
   margin: 0;
