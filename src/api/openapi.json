@@ -1715,6 +1715,145 @@
      }
     }
    }
+  },
+  "/api/v1/c/{company}/boards/{board}/export": {
+   "get": {
+    "summary": "The board as a Tazko export file (lists, cards, labels, checklists, dates, members, comments, links)",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "read",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/projects/{project}/imports/preview": {
+   "post": {
+    "summary": "Read a board export file and show what an import would bring, with suggested people matches; saves nothing",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "parameters": [
+     {
+      "name": "name",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string"
+      },
+      "description": "The file name"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "description": "A board export file: Tazko's own (format tazko-board-export, version 1) or a generic board export with lists, cards, labels, checklists, members and actions. Up to 50 MB."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/c/{company}/projects/{project}/imports": {
+   "post": {
+    "summary": "Import a board export file as a new board in the project",
+    "tags": [
+     "Boards"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "201": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "file"
+        ],
+        "properties": {
+         "name": {
+          "type": "string",
+          "description": "The file name"
+         },
+         "archived": {
+          "type": "boolean",
+          "description": "Bring archived cards (default true)"
+         },
+         "comments": {
+          "type": "boolean",
+          "description": "Bring comments (default true)"
+         },
+         "links": {
+          "type": "boolean",
+          "description": "Bring link attachments (default true)"
+         },
+         "people": {
+          "type": "object",
+          "description": "File person key to project member id, or null to leave out; only choices that differ from the preview's suggestions"
+         },
+         "file": {
+          "type": "object",
+          "description": "The board export file, up to 50 MB"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
   }
  }
 }

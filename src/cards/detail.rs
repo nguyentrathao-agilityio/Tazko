@@ -55,7 +55,7 @@ pub fn routes() -> Router<AppState> {
 
 type Params = Path<HashMap<String, String>>;
 
-type CommentRow = (i64, Option<i64>, String, i64, Option<i64>);
+type CommentRow = (i64, Option<i64>, String, i64, Option<i64>, Option<String>);
 
 fn short(raw: &str, what: &str, max: usize) -> Result<String, ApiError> {
     let t = raw.trim();
@@ -210,17 +210,23 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
             v["fields"] = Value::Object(super::fields::card_values(c, card, false)?);
             v["created_by"] = person(c, creator)?;
             let mut stmt = c.prepare(
-                "SELECT id, user_id, body, created_at, edited_at FROM comments WHERE card_id = ?1 ORDER BY id DESC",
+                "SELECT id, user_id, body, created_at, edited_at, author_name FROM comments WHERE card_id = ?1 ORDER BY id DESC",
             )?;
             let rows: Vec<CommentRow> = stmt
-                .query_map([card], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
+                .query_map([card], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))?
                 .collect::<Result<_, _>>()?;
             let mut comments = Vec::new();
-            for (cid, user, body, at, edited) in rows {
+            for (cid, user, body, at, edited, imported_name) in rows {
+                let imported = imported_name.is_some();
+                let author = match (person(c, user)?, imported_name) {
+                    (Value::Null, Some(name)) => json!({ "id": null, "name": name, "email": "" }),
+                    (found, _) => found,
+                };
                 comments.push(json!({
                     "reactions": super::reactions::of_comment(c, cid, me)?,
                     "id": cid,
-                    "author": person(c, user)?,
+                    "author": author,
+                    "imported": imported,
                     "body": body,
                     "created_at": at,
                     "edited_at": edited,

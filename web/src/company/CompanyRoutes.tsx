@@ -1,4 +1,5 @@
 import { TemplatesPage } from '@/templates/TemplatesPage'
+import { ImportPage } from '@/import/ImportPage'
 import { useEffect, type ReactNode } from 'react'
 import type { Me } from '@/api'
 import { t } from '@/i18n'
@@ -29,7 +30,7 @@ function Centered({ title, body, children }: { title: string; body: string; chil
 }
 
 export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; path: string; go: Go; onSignOut: () => void; onProfile: () => void }) {
-  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/integrations|\/me(?<me>\/appearance|\/notifications|\/tokens|\/cli|\/sessions)?)?\/?$/.exec(path)
+  const match = /^\/c\/([a-z0-9-]+)(?<section>\/settings|\/projects|\/p\/(?<project>\d+)(?<tab>\/members|\/settings|\/templates|\/import)?|\/b\/(?<board>\d+)(?<view>\/table|\/dashboard)?(?:\/c\/(?<card>\d+))?|\/my-cards|\/integrations|\/me(?<me>\/appearance|\/notifications|\/tokens|\/cli|\/sessions)?)?\/?$/.exec(path)
   const slug = match?.[1]
   const g = match?.groups ?? {}
   const company = me.companies.find((c) => c.slug === slug)
@@ -88,7 +89,8 @@ export function CompanyRoutes({ me, path, go, onSignOut, onProfile }: { me: Me; 
     <MeContext.Provider value={me}>
     <CompanyShell me={me} company={company} active={section} go={go} onSignOut={onSignOut}>
       {projectId && g.tab === '/templates' && <TemplatesPage key={`${company.slug}:t${projectId}`} company={company} project={projectId} go={go} />}
-      {projectId && g.tab !== '/templates' && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
+      {projectId && g.tab === '/import' && <ImportPage key={`${company.slug}:i${projectId}`} company={company} project={projectId} go={go} />}
+      {projectId && g.tab !== '/templates' && g.tab !== '/import' && <ProjectPage key={`${company.slug}:${projectId}`} company={company} id={projectId} tab={tab} go={go} />}
       {!projectId && section === 'home' && <YourProjects key={company.slug} company={company} go={go} />}
       {section === 'me' && (
         <SettingsPage me={me} company={company} tab={g.me ? (g.me.slice(1) as SettingsTab) : 'profile'} go={go} onProfile={onProfile} />

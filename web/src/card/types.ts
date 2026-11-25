@@ -4,7 +4,7 @@ export type ActivityEntry = { id: number; type: string; actor: PersonRef; payloa
 
 import type { FieldValue, Reaction } from '@/card/fieldTypes'
 
-export type Comment = { id: number; author: PersonRef; body: string; created_at: number; edited_at: number | null; reactions?: Reaction[] }
+export type Comment = { id: number; author: PersonRef; body: string; created_at: number; edited_at: number | null; imported?: boolean; reactions?: Reaction[] }
 
 export type ChecklistItem = { id: number; text: string; done: boolean; assignee?: number | null; due_at?: number | null }
 

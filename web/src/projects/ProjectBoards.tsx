@@ -12,7 +12,7 @@ import { background, backgroundNames } from '@/projects/look'
 import type { ProjectView } from '@/projects/types'
 import type { TemplateList } from '@/templates/types'
 import { useRun } from '@/projects/useRun'
-import { boardApiOf, boardRoute, companyApi, projectApi, projectRoute } from '@/paths'
+import { boardApiOf, boardRoute, companyApi, projectApi, projectImportRoute, projectRoute } from '@/paths'
 
 export function ProjectBoards({ company, project, go }: { company: Company; project: ProjectView; go: Go }) {
   const path = `${projectApi(company.slug, project.id)}/boards`
@@ -39,6 +39,11 @@ export function ProjectBoards({ company, project, go }: { company: Company; proj
           <Icon name="tmpl" />
           {t('tpl.button')}
         </button>
+        {project.can.create_board && (
+          <button type="button" className="btn" onClick={() => go(projectImportRoute(company.slug, project.id))}>
+            {t('import.button')}
+          </button>
+        )}
         {closed.length > 0 && (
           <button type="button" className="btn quiet" onClick={() => setShowClosed((s) => !s)}>
             {t(showClosed ? 'project.hideClosed' : 'project.showClosed', { n: closed.length })}

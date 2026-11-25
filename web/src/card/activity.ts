@@ -109,6 +109,8 @@ export function describe(e: ActivityEntry, ctx: Ctx): string {
       return 'changed the board'
     case 'board_closed':
       return 'closed this board'
+    case 'board_imported':
+      return str(p.file) ? `imported this board from ${str(p.file)}` : 'imported this board'
     case 'board_reopened':
       return 'reopened this board'
     case 'board_access_changed':

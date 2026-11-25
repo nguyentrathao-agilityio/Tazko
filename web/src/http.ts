@@ -40,12 +40,20 @@ export async function api<T>(method: HttpMethod, path: string, body?: unknown): 
   return (await res.json()) as T
 }
 
-export async function upload<T>(path: string, file: File): Promise<T> {
-  const res = await fetch(`${path}?name=${encodeURIComponent(file.name)}`, {
+async function sendFile<T>(url: string, file: Blob, headers: Record<string, string>): Promise<T> {
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { ...ACCEPT_JSON, [CSRF_HEADER]: csrf, 'content-type': BINARY_TYPE },
+    headers: { ...ACCEPT_JSON, [CSRF_HEADER]: csrf, ...headers },
     body: file,
   })
   if (!res.ok) throw await errorFrom(res, res.status === 413 ? 'this file is too large' : `upload failed (${res.status})`)
   return (await res.json()) as T
+}
+
+export function upload<T>(path: string, file: File): Promise<T> {
+  return sendFile<T>(`${path}?name=${encodeURIComponent(file.name)}`, file, { 'content-type': BINARY_TYPE })
+}
+
+export function sendJsonFile<T>(url: string, file: Blob): Promise<T> {
+  return sendFile<T>(url, file, { 'content-type': JSON_TYPE })
 }
