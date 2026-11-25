@@ -58,7 +58,7 @@ This copies `.env.example` to `.env.local` with owner-only permissions and never
 - `TAZKO_GOOGLE_CLIENT_ID`, `TAZKO_GOOGLE_CLIENT_SECRET`: from the localhost OAuth client below
 - `TAZKO_SECRET`: leave empty to use a random `secret` file in the data folder
 - `TAZKO_WEBHOOKS_ALLOW_LOCAL`: set to `1` only on a dev machine to let webhooks reach `http://` and loopback addresses (see `docs/webhooks.md`)
-- `TAZKO_CLIENT_IP_HEADER`: the header the proxy in front uses for the visitor's address, used to limit sign-in starts per address; default `cf-connecting-ip` (the tunnel). For a proxy that appends to `x-forwarded-for`, the last address in it is used.
+- `TAZKO_CLIENT_IP_HEADER`: the header the proxy in front uses for the visitor's address, used to limit sign-in starts per address; default `cf-connecting-ip` (the tunnel). The last address of the last line of that header is used, so for a proxy that appends to `x-forwarded-for` it is the one the proxy added. The server cannot see whether a request really came through the proxy, so with a header the proxy does not write, visitors could pick their own address; the server-wide limit still applies.
 - Email settings: leave empty, or point them at `tazko dev mail` to catch emails as files (see `docs/email.md`)
 
 Secrets go only into `.env.local`. Never paste them into the repository, a commit, a test fixture, a log or a chat.

@@ -52,7 +52,9 @@ fn user_code() -> String {
 
 pub fn client_address(headers: &HeaderMap, header: &str) -> String {
     headers
-        .get(header)
+        .get_all(header)
+        .iter()
+        .next_back()
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.rsplit(',').next())
         .map(str::trim)
@@ -403,6 +405,10 @@ mod tests {
         assert_eq!(client_address(&h, "x-forwarded-for"), "direct");
         h.insert("x-forwarded-for", "6.6.6.6, 203.0.113.7".parse().unwrap());
         h.insert("cf-connecting-ip", "198.51.100.2".parse().unwrap());
+        h.append("x-forwarded-for", "192.0.2.9".parse().unwrap());
+        assert_eq!(client_address(&h, "x-forwarded-for"), "192.0.2.9");
+        h.remove("x-forwarded-for");
+        h.insert("x-forwarded-for", "6.6.6.6, 203.0.113.7".parse().unwrap());
         assert_eq!(client_address(&h, "x-forwarded-for"), "203.0.113.7");
         assert_eq!(client_address(&h, "cf-connecting-ip"), "198.51.100.2");
     }
