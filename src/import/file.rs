@@ -7,6 +7,8 @@ use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde_json::Value;
 
 use crate::cards::MAX_TITLE;
+use crate::cards::repeat::days_from_civil;
+use crate::files::valid_link as link_url;
 use crate::sanitize;
 
 pub const MAX_FILE_BYTES: usize = 50 * 1024 * 1024;
@@ -27,7 +29,6 @@ const MAX_ACTIONS: usize = 500_000;
 const BOARD_ABOUT: usize = 5_000;
 const MAX_COMMENT_CHARS: usize = 10_000;
 const MAX_NAME_CHARS: usize = 120;
-const MAX_LINK: usize = 2_000;
 const UNTITLED: &str = "Untitled card";
 
 #[derive(Debug, Clone, PartialEq)]
@@ -126,12 +127,11 @@ impl BoardFile {
             labels: self.labels.len(),
             ..Counts::default()
         };
-        for card in self
+        for (list, card) in self
             .lists
             .iter()
             .flat_map(|l| l.cards.iter().map(move |c| (l, c)))
         {
-            let (list, card) = card;
             if card.archived || list.archived {
                 n.archived += 1;
             } else {
@@ -295,9 +295,7 @@ fn text(raw: &str, max: usize) -> String {
         .to_string()
 }
 
-fn description_from_html(raw: &str) -> String {
-    let raw = truncate(raw, sanitize::MAX_INPUT);
-    let html = sanitize::clean_html(raw);
+fn non_blank(html: String) -> String {
     if sanitize::plain_text(&html).is_empty() {
         String::new()
     } else {
@@ -305,14 +303,15 @@ fn description_from_html(raw: &str) -> String {
     }
 }
 
+fn description_from_html(raw: &str) -> String {
+    non_blank(sanitize::clean_html(truncate(raw, sanitize::MAX_INPUT)))
+}
+
 fn description_from_markdown(raw: &str) -> String {
-    let raw = truncate(raw, sanitize::MAX_INPUT);
-    let html = sanitize::markdown_to_html(raw);
-    if sanitize::plain_text(&html).is_empty() {
-        String::new()
-    } else {
-        html
-    }
+    non_blank(sanitize::markdown_to_html(truncate(
+        raw,
+        sanitize::MAX_INPUT,
+    )))
 }
 
 fn truncate(s: &str, max: usize) -> &str {
@@ -325,18 +324,6 @@ fn truncate(s: &str, max: usize) -> &str {
         end -= 1;
     }
     &s[..end]
-}
-
-pub fn link_url(raw: &str) -> Option<String> {
-    let u = raw.trim();
-    let lower = u.to_ascii_lowercase();
-    let rest = lower
-        .strip_prefix("https://")
-        .or_else(|| lower.strip_prefix("http://"))?;
-    (!rest.is_empty()
-        && u.len() <= MAX_LINK
-        && !u.chars().any(|c| c.is_whitespace() || c.is_control()))
-    .then(|| u.to_string())
 }
 
 fn plausible(t: i64) -> Option<i64> {
@@ -385,16 +372,6 @@ fn zone_offset(rest: &str) -> Option<i64> {
     let h: i64 = tail.get(1..3)?.parse().ok()?;
     let m: i64 = tail.get(4..6)?.parse().ok()?;
     Some(sign * (h * 3600 + m * 60))
-}
-
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (m + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
 }
 
 pub fn colour(name: &str) -> i64 {
@@ -589,12 +566,7 @@ fn from_tazko(raw: TazkoFile, fallback: &str) -> Result<BoardFile, String> {
                     links: c
                         .links
                         .into_iter()
-                        .filter_map(|a| {
-                            link_url(&a.url).map(|url| Link {
-                                name: link_name(&a.name, &url),
-                                url,
-                            })
-                        })
+                        .filter_map(|a| make_link(&a.name, &a.url))
                         .collect(),
                     files: c.files.len(),
                 })
@@ -635,9 +607,15 @@ fn board_name(raw: &str, fallback: &str) -> String {
     }
 }
 
-fn link_name(raw: &str, url: &str) -> String {
-    let n = line(raw, 200);
-    if n.is_empty() { line(url, 200) } else { n }
+fn make_link(raw_name: &str, raw_url: &str) -> Option<Link> {
+    let url = link_url(raw_url)?;
+    let name = line(raw_name, 200);
+    let name = if name.is_empty() {
+        line(&url, 200)
+    } else {
+        name
+    };
+    Some(Link { name, url })
 }
 
 fn dedupe_people(people: Vec<Person>) -> Vec<Person> {
@@ -774,23 +752,23 @@ fn by_pos<T>(items: &mut [T], pos: impl Fn(&T) -> Option<f64>) {
     });
 }
 
+fn generic_person(m: &GenericMember) -> Person {
+    Person {
+        key: m.id.clone(),
+        name: line(
+            if m.full_name.trim().is_empty() {
+                &m.username
+            } else {
+                &m.full_name
+            },
+            MAX_NAME_CHARS,
+        ),
+        email: line(m.email.as_deref().unwrap_or(""), 254).to_ascii_lowercase(),
+    }
+}
+
 fn from_generic(mut raw: GenericFile, fallback: &str) -> Result<BoardFile, String> {
-    let mut people: Vec<Person> = raw
-        .members
-        .iter()
-        .map(|m| Person {
-            key: m.id.clone(),
-            name: line(
-                if m.full_name.trim().is_empty() {
-                    &m.username
-                } else {
-                    &m.full_name
-                },
-                MAX_NAME_CHARS,
-            ),
-            email: line(m.email.as_deref().unwrap_or(""), 254).to_ascii_lowercase(),
-        })
-        .collect();
+    let mut people: Vec<Person> = raw.members.iter().map(generic_person).collect();
     let mut seen: HashSet<String> = people.iter().map(|p| p.key.clone()).collect();
     for a in &raw.actions {
         if let (Some(id), Some(m)) = (&a.id_member_creator, &a.member_creator)
@@ -805,15 +783,7 @@ fn from_generic(mut raw: GenericFile, fallback: &str) -> Result<BoardFile, Strin
             seen.insert(id.clone());
             people.push(Person {
                 key: id.clone(),
-                name: line(
-                    if m.full_name.trim().is_empty() {
-                        &m.username
-                    } else {
-                        &m.full_name
-                    },
-                    MAX_NAME_CHARS,
-                ),
-                email: line(m.email.as_deref().unwrap_or(""), 254).to_ascii_lowercase(),
+                ..generic_person(m)
             });
         }
     }
@@ -925,12 +895,7 @@ fn from_generic(mut raw: GenericFile, fallback: &str) -> Result<BoardFile, Strin
                             .attachments
                             .iter()
                             .filter(|a| !a.is_upload)
-                            .filter_map(|a| {
-                                link_url(&a.url).map(|url| Link {
-                                    name: link_name(&a.name, &url),
-                                    url,
-                                })
-                            })
+                            .filter_map(|a| make_link(&a.name, &a.url))
                             .collect(),
                         files: c.attachments.iter().filter(|a| a.is_upload).count(),
                     }

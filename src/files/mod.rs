@@ -270,22 +270,20 @@ struct LinkBody {
     name: Option<String>,
 }
 
-fn link_url(raw: &str) -> Result<String, ApiError> {
+pub(crate) fn valid_link(raw: &str) -> Option<String> {
     let u = raw.trim();
     let lower = u.to_ascii_lowercase();
     let rest = lower
         .strip_prefix("https://")
-        .or_else(|| lower.strip_prefix("http://"));
-    match rest {
-        Some(r)
-            if !r.is_empty()
-                && u.len() <= LINK_MAX
-                && !u.chars().any(|c| c.is_whitespace() || c.is_control()) =>
-        {
-            Ok(u.to_string())
-        }
-        _ => Err(bad("enter a link that starts with https://")),
-    }
+        .or_else(|| lower.strip_prefix("http://"))?;
+    (!rest.is_empty()
+        && u.len() <= LINK_MAX
+        && !u.chars().any(|c| c.is_whitespace() || c.is_control()))
+    .then(|| u.to_string())
+}
+
+fn link_url(raw: &str) -> Result<String, ApiError> {
+    valid_link(raw).ok_or_else(|| bad("enter a link that starts with https://"))
 }
 
 async fn add_link(

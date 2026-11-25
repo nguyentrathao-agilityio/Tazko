@@ -113,13 +113,16 @@ fn counts_json(n: &Counts) -> Value {
 
 static PARSING: Semaphore = Semaphore::const_new(2);
 
-async fn parse_bytes(bytes: Vec<u8>, file_name: &str) -> Result<BoardFile, ApiError> {
+async fn parse_bytes<B: AsRef<[u8]> + Send + 'static>(
+    bytes: B,
+    file_name: &str,
+) -> Result<BoardFile, ApiError> {
     let _turn = PARSING
         .acquire()
         .await
         .map_err(|_| bad("the file could not be read"))?;
     let name = file_name.to_string();
-    tokio::task::spawn_blocking(move || file::parse(&bytes, &name))
+    tokio::task::spawn_blocking(move || file::parse(bytes.as_ref(), &name))
         .await
         .map_err(|_| bad("the file could not be read"))?
         .map_err(|e| bad(&e))
@@ -232,7 +235,11 @@ async fn import(
         links: request.links,
     };
     let mapping = request.people;
-    let parsed = parse_bytes(request.file.get().as_bytes().to_vec(), &file_name).await?;
+    let parsed = parse_bytes(
+        Box::<str>::from(request.file).into_boxed_bytes(),
+        &file_name,
+    )
+    .await?;
     let pid = project.id;
     let all = project.db().read(move |c| Ok(candidates(c, pid)?)).await?;
     let people = plan_people(&parsed, &mapping, &all)?;
@@ -243,12 +250,11 @@ async fn import(
         people,
     };
     let at = now();
-    let fname = file_name.clone();
     let (board, name, done) = project
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
-            let result = write(&tx, pid, by, &background, &plan, &fname, at)?;
+            let result = write(&tx, pid, by, &background, &plan, &file_name, at)?;
             tx.commit()?;
             Ok(result)
         })
@@ -274,6 +280,10 @@ async fn import(
     ))
 }
 
+fn run(c: &Connection, sql: &str, p: impl rusqlite::Params) -> rusqlite::Result<usize> {
+    c.prepare_cached(sql)?.execute(p)
+}
+
 fn write(
     c: &Connection,
     project: i64,
@@ -288,7 +298,8 @@ fn write(
     let name = f.name.clone();
     let board = crate::boards::insert_board(c, project, &name, background, false, by)?;
     if !f.description.is_empty() {
-        c.execute(
+        run(
+            c,
             "UPDATE boards SET description = ?2 WHERE id = ?1",
             params![board, f.description],
         )?;
@@ -296,7 +307,8 @@ fn write(
 
     let mut labels: HashMap<&str, i64> = HashMap::new();
     for (i, l) in f.labels.iter().enumerate() {
-        c.execute(
+        run(
+            c,
             "INSERT INTO labels (board_id, name, color, position) VALUES (?1, ?2, ?3, ?4)",
             params![board, l.name, l.color, i as i64],
         )?;
@@ -319,7 +331,8 @@ fn write(
         .filter(|l| o.archived || !l.archived)
         .collect();
     for (list, pos) in lists.iter().zip(order::spread(lists.len())) {
-        c.execute(
+        run(
+            c,
             "INSERT INTO lists (board_id, title, position, archived_at) VALUES (?1, ?2, ?3, ?4)",
             params![board, list.title, pos, list.archived.then_some(at)],
         )?;
@@ -335,7 +348,7 @@ fn write(
             .collect();
         for (card, cpos) in cards.iter().zip(order::spread(cards.len())) {
             let archived = card.archived || list.archived;
-            c.execute(
+            run(c,
                 "INSERT INTO cards (board_id, list_id, title, position, created_by, description, description_text,
                                     start_at, due_at, done, archived_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -362,7 +375,8 @@ fn write(
 
             for l in &card.labels {
                 if let Some(label) = labels.get(l.as_str()) {
-                    c.execute(
+                    run(
+                        c,
                         "INSERT INTO card_labels (card_id, label_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
                         params![id, label],
                     )?;
@@ -370,7 +384,8 @@ fn write(
             }
             for m in &card.members {
                 if let Some(user) = person(m, true) {
-                    c.execute(
+                    run(
+                        c,
                         "INSERT INTO card_members (card_id, user_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
                         params![id, user],
                     )?;
@@ -381,7 +396,8 @@ fn write(
                 .iter()
                 .zip(order::spread(card.checklists.len()))
             {
-                c.execute(
+                run(
+                    c,
                     "INSERT INTO checklists (card_id, title, position) VALUES (?1, ?2, ?3)",
                     params![
                         id,
@@ -396,7 +412,7 @@ fn write(
                 let checklist = c.last_insert_rowid();
                 done.checklists += 1;
                 for (item, ipos) in k.items.iter().zip(order::spread(k.items.len())) {
-                    c.execute(
+                    run(c,
                         "INSERT INTO checklist_items (checklist_id, text, done, position, assignee_id, due_at)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                         params![
@@ -429,22 +445,18 @@ fn write(
                     } else {
                         m.author_name.clone()
                     };
-                    c.execute(
+                    run(
+                        c,
                         "INSERT INTO comments (card_id, user_id, body, created_at, author_name) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        params![
-                            id,
-                            author,
-                            m.text,
-                            m.created_at.unwrap_or(at),
-                            shown
-                        ],
+                        params![id, author, m.text, m.created_at.unwrap_or(at), shown],
                     )?;
                     done.comments += 1;
                 }
             }
             if o.links {
                 for link in &card.links {
-                    c.execute(
+                    run(
+                        c,
                         "INSERT INTO attachments (card_id, kind, name, url, created_by) VALUES (?1, 'link', ?2, ?3, ?4)",
                         params![id, link.name, link.url, by],
                     )?;
@@ -460,7 +472,8 @@ fn write(
         .iter()
         .map(|(k, p)| (k.as_str(), p.id))
         .collect();
-    c.execute(
+    run(
+        c,
         "INSERT INTO imports (board_id, file_name, format, counts, people, created_by, finished_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![

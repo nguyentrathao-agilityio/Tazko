@@ -7,8 +7,8 @@ import { ErrorNote } from '@/ui/ErrorNote'
 import { Link, type Go } from '@/ui/Link'
 import { useLoad } from '@/ui/useLoad'
 import type { ProjectView } from '@/projects/types'
-import type { ImportPerson, ImportPreview, ImportResult } from '@/import/types'
-import { boardRoute, importApi, importPreviewApi, projectApi, projectRoute, type ImportChoices } from '@/paths'
+import type { ImportChoices, ImportPerson, ImportPreview, ImportResult } from '@/import/types'
+import { boardRoute, importApi, importPreviewApi, projectApi, projectRoute } from '@/paths'
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const TAZKO_COLOURS = 8

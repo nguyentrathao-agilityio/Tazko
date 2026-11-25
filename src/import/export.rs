@@ -16,7 +16,7 @@ fn rows<T>(
     p: impl rusqlite::Params,
     f: impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
 ) -> rusqlite::Result<Vec<T>> {
-    c.prepare(sql)?.query_map(p, f)?.collect()
+    c.prepare_cached(sql)?.query_map(p, f)?.collect()
 }
 
 pub fn board(c: &Connection, board: i64, info: &BoardInfo, at: i64) -> rusqlite::Result<Value> {
@@ -136,9 +136,7 @@ fn card_detail(
         let items: Vec<Value> = items
             .into_iter()
             .map(|(text, done, assignee, due)| {
-                if let Some(p) = assignee {
-                    people.insert(p);
-                }
+                people.extend(assignee);
                 json!({ "text": text, "done": done, "assignee": assignee.map(key), "due_at": due })
             })
             .collect();
@@ -157,9 +155,7 @@ fn card_detail(
         comments
             .into_iter()
             .map(|(user, name, text, at)| {
-                if let Some(p) = user {
-                    people.insert(p);
-                }
+                people.extend(user);
                 json!({ "author": user.map(key), "author_name": name, "text": text, "created_at": at })
             })
             .collect::<Vec<_>>()

@@ -26,3 +26,5 @@ export type ImportPreview = {
 }
 
 export type ImportResult = { id: number; name: string; counts: ImportCounts }
+
+export type ImportChoices = { archived: boolean; comments: boolean; links: boolean }
