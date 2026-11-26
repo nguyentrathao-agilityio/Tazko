@@ -55,6 +55,7 @@ pub async fn list(
                 "SELECT i.id, i.email, i.project_role, coalesce(nullif(u.name, ''), u.email), i.created_at
                  FROM invites i LEFT JOIN users u ON u.id = i.created_by
                  WHERE i.org_id = ?1 AND i.project_id = ?2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
+                   AND i.expires_at > unixepoch()
                  ORDER BY i.created_at DESC, i.id DESC",
             )?;
             let rows = stmt
@@ -171,7 +172,7 @@ pub async fn invite(
                     let tx = c.transaction()?;
                     let pending: bool = tx.query_row(
                         "SELECT EXISTS (SELECT 1 FROM invites WHERE org_id = ?1 AND email = ?2 AND project_id = ?3
-                         AND accepted_at IS NULL AND revoked_at IS NULL)",
+                         AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > unixepoch())",
                         params![org_id, email, id],
                         |r| r.get(0),
                     )?;
@@ -227,7 +228,7 @@ pub async fn revoke(
             let found: Option<(String, String, Option<i64>)> = tx
                 .query_row(
                     "SELECT email, project_role, created_by FROM invites WHERE id = ?1 AND org_id = ?2 AND project_id = ?3
-                     AND accepted_at IS NULL AND revoked_at IS NULL",
+                     AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > unixepoch()",
                     params![invite, org_id, id],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )

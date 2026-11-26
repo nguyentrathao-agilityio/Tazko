@@ -11,6 +11,7 @@ pub enum Refusal {
     NotInvited,
     Disabled,
     AccountMismatch,
+    InviteExpired,
 }
 
 impl Refusal {
@@ -20,6 +21,7 @@ impl Refusal {
             Refusal::NotInvited => "not_invited",
             Refusal::Disabled => "disabled",
             Refusal::AccountMismatch => "account_mismatch",
+            Refusal::InviteExpired => "invite_expired",
         }
     }
 }
@@ -113,12 +115,23 @@ fn decide(tx: &Connection, claims: &Claims, email: &str) -> DbResult<Result<i64,
 
     let invited: bool = tx.query_row(
         "SELECT EXISTS (SELECT 1 FROM invites i JOIN orgs o ON o.id = i.org_id
-         WHERE i.email = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND o.status = 'active')",
+         WHERE i.email = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > unixepoch()
+           AND o.status = 'active')",
         params![email],
         |r| r.get(0),
     )?;
     if !invited {
-        return Ok(Err(Refusal::NotInvited));
+        let expired: bool = tx.query_row(
+            "SELECT EXISTS (SELECT 1 FROM invites i JOIN orgs o ON o.id = i.org_id
+             WHERE i.email = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND o.status = 'active')",
+            params![email],
+            |r| r.get(0),
+        )?;
+        return Ok(Err(if expired {
+            Refusal::InviteExpired
+        } else {
+            Refusal::NotInvited
+        }));
     }
 
     tx.execute(
@@ -134,14 +147,15 @@ pub fn accept_invites(tx: &Connection, user_id: i64, email: &str) -> DbResult<()
         "INSERT INTO org_members (org_id, user_id, role)
          SELECT i.org_id, ?1, CASE WHEN max(i.company_role = 'owner') THEN 'owner' ELSE 'member' END
          FROM invites i JOIN orgs o ON o.id = i.org_id
-         WHERE i.email = ?2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND o.status = 'active'
+         WHERE i.email = ?2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > unixepoch()
+           AND o.status = 'active'
          GROUP BY i.org_id
          ON CONFLICT (org_id, user_id) DO NOTHING",
         params![user_id, email],
     )?;
     tx.execute(
         "UPDATE invites SET accepted_at = ?2
-         WHERE email = ?1 AND accepted_at IS NULL AND revoked_at IS NULL
+         WHERE email = ?1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > unixepoch()
            AND org_id IN (SELECT id FROM orgs WHERE status = 'active')",
         params![email, at],
     )?;

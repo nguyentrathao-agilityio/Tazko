@@ -38,6 +38,12 @@ describe('Refused', () => {
     expect(screen.getByRole('link', { name: 'Try another Google account' }).getAttribute('href')).toBe('/auth/google/start')
   })
 
+  it('explains an expired invitation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'x@example.com', reason: 'invite_expired' }))))
+    render(<Refused />)
+    expect(await screen.findByText(/invitation has expired/)).toBeTruthy()
+  })
+
   it('explains a disabled account', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'x@example.com', reason: 'disabled' }))))
     render(<Refused />)

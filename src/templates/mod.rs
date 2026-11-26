@@ -78,7 +78,7 @@ pub fn routes() -> Router<AppState> {
         .merge(cards::routes())
 }
 
-pub fn snapshot(c: &Connection, board: i64) -> rusqlite::Result<TemplateData> {
+pub fn snapshot(c: &Connection, board: i64, with_cards: bool) -> rusqlite::Result<TemplateData> {
     let mut stmt =
         c.prepare("SELECT id, name, color FROM labels WHERE board_id = ?1 ORDER BY position, id")?;
     let labels: Vec<(i64, String, i64)> = stmt
@@ -97,10 +97,10 @@ pub fn snapshot(c: &Connection, board: i64) -> rusqlite::Result<TemplateData> {
     let mut total = 0;
     for (list, title) in lists {
         let mut stmt = c.prepare(
-            "SELECT id, title FROM cards WHERE list_id = ?1 AND archived_at IS NULL ORDER BY position",
+            "SELECT id, title FROM cards WHERE list_id = ?1 AND archived_at IS NULL AND ?2 ORDER BY position",
         )?;
         let rows: Vec<(i64, String)> = stmt
-            .query_map([list], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .query_map(params![list, with_cards], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?;
         let mut cards = Vec::new();
         for (card, t) in rows {
@@ -382,7 +382,9 @@ async fn save(
                 return Ok(Err(bad("this company has 100 templates; delete some first")));
             }
 
-            let data = snapshot(&tx, id)?;
+            let restricted: bool =
+                tx.query_row("SELECT restricted FROM boards WHERE id = ?1", [id], |r| r.get(0))?;
+            let data = snapshot(&tx, id, !restricted)?;
             if data.lists.is_empty() {
                 return Ok(Err(bad("add a list before saving a template")));
             }
@@ -394,7 +396,7 @@ async fn save(
             let template = tx.last_insert_rowid();
             events::record(&tx, by, "board_saved_as_template", at, json!({ "template": template, "name": name }))?;
             tx.commit()?;
-            Ok(Ok(json!({ "id": format!("c:{template}"), "name": name })))
+            Ok(Ok(json!({ "id": format!("c:{template}"), "name": name, "cards_left_out": restricted })))
         })
         .await??;
     Ok((StatusCode::CREATED, Json(saved)))

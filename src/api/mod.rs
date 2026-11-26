@@ -39,7 +39,8 @@ async fn me(
             move |c| {
                 Ok(c.query_row(
                     "SELECT EXISTS (SELECT 1 FROM invites i JOIN orgs o ON o.id = i.org_id
-                     WHERE i.email = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND o.status = 'active')",
+                     WHERE i.email = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > unixepoch()
+                       AND o.status = 'active')",
                     [email],
                     |r| r.get(0),
                 )?)

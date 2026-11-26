@@ -184,7 +184,7 @@ Each database file carries its schema version (`PRAGMA user_version`) and migrat
 | Audit log      | Who did what and when: company created or deleted, invite created or revoked, role changed, person disabled, sign-in refused, company exported. (v2)                                                              |
 | Server         | Version, uptime, data size, last backup and last restore test, email status with a send-test-email button. (v2)                                                                                                   |
 
-**Company owners** get the same member and invite screens for their own company only, plus **Export company**. **An invite** authorizes one email address for one company and role. Until email is set up (M6) the admin sends the person the site address by hand; with email on, the invitation can be emailed from the invite form. When they sign in with that Google account they join automatically. Invites stay valid until revoked.
+**Company owners** get the same member and invite screens for their own company only, plus **Export company**. **An invite** authorizes one email address for one company and role. Until email is set up (M6) the admin sends the person the site address by hand; with email on, the invitation can be emailed from the invite form. When they sign in with that Google account they join automatically. Invites expire 7 days after they are sent (owner decision, 26 Nov 2026); signing in with an expired invite shows "invitation expired", and the owner can invite the address again.
 
 ## Command line
 

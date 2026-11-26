@@ -307,7 +307,8 @@ pub(crate) fn invite_or_add(
     }
 
     let pending: bool = tx.query_row(
-        "SELECT EXISTS (SELECT 1 FROM invites WHERE org_id = ?1 AND email = ?2 AND accepted_at IS NULL AND revoked_at IS NULL)",
+        "SELECT EXISTS (SELECT 1 FROM invites WHERE org_id = ?1 AND email = ?2 AND accepted_at IS NULL AND revoked_at IS NULL
+           AND expires_at > unixepoch())",
         params![org.id, email],
         |r| r.get(0),
     )?;
@@ -465,7 +466,7 @@ pub(crate) fn pending_invites(c: &Connection, org_id: Option<i64>) -> rusqlite::
     let mut stmt = c.prepare(
         "SELECT i.id, i.email, i.company_role, coalesce(nullif(u.name, ''), u.email), i.created_at, o.slug, o.name
          FROM invites i JOIN orgs o ON o.id = i.org_id LEFT JOIN users u ON u.id = i.created_by
-         WHERE i.accepted_at IS NULL AND i.revoked_at IS NULL AND o.status != 'deleted'
+         WHERE i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > unixepoch() AND o.status != 'deleted'
            AND (?1 IS NULL OR i.org_id = ?1)
          ORDER BY i.created_at DESC, i.id DESC",
     )?;
@@ -758,7 +759,7 @@ pub(crate) fn revoke_pending_invite(
 ) -> rusqlite::Result<bool> {
     let found: Option<(i64, String)> = tx
         .query_row(
-            "SELECT org_id, email FROM invites WHERE id = ?1 AND (?2 IS NULL OR org_id = ?2) AND accepted_at IS NULL AND revoked_at IS NULL",
+            "SELECT org_id, email FROM invites WHERE id = ?1 AND (?2 IS NULL OR org_id = ?2) AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > unixepoch()",
             params![id, org_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )

@@ -735,3 +735,38 @@ async fn google_sign_in_is_limited_per_address_not_for_everyone() {
     let other = app.send(start("198.51.100.4")).await;
     assert!(location(&other).starts_with("https://accounts.google.com/"));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_expired_invite_is_refused_with_its_own_reason_and_can_be_sent_again() {
+    let h = harness().await;
+    invite(&h, "acme", "late@example.com", "member").await;
+    h.app
+        .sql(|c| {
+            c.execute(
+                "UPDATE invites SET expires_at = unixepoch() - 1 WHERE email = 'late@example.com'",
+                [],
+            )
+        })
+        .await;
+    assert_eq!(
+        location(&sign_in(&h, claims("sub-late", "late@example.com", None)).await),
+        "/signin/refused"
+    );
+    let reasons = refusals(&h).await;
+    assert!(
+        reasons.last().unwrap().1.contains("invite_expired"),
+        "{reasons:?}"
+    );
+
+    h.app
+        .sql(|c| {
+            c.execute(
+                "INSERT INTO invites (org_id, email, company_role, expires_at)
+                 SELECT org_id, email, company_role, unixepoch() + 7 * 86400 FROM invites WHERE email = 'late@example.com'",
+                [],
+            )
+        })
+        .await;
+    let res = sign_in(&h, claims("sub-late", "late@example.com", None)).await;
+    assert!(session_cookie(&res).is_some(), "a new invite lets them in");
+}
