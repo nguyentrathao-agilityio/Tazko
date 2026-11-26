@@ -639,12 +639,11 @@ pub async fn revoke_company_tokens(
     state: &AppState,
     slug: &str,
     user_id: i64,
-) -> Result<(), ApiError> {
-    if let Some(db) = tenant_if_any(state, slug)? {
-        db.write(move |c| Ok(revoke_tokens_of(c, user_id)?)).await?;
+) -> Result<usize, ApiError> {
+    match tenant_if_any(state, slug)? {
+        Some(db) => Ok(db.write(move |c| Ok(revoke_tokens_of(c, user_id)?)).await?),
+        None => Ok(0),
     }
-
-    Ok(())
 }
 
 pub async fn forget_member(

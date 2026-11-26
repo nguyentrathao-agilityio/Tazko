@@ -793,6 +793,20 @@ async fn company_tokens_stay_revoked_after_their_maker_is_made_an_owner_again() 
         StatusCode::UNAUTHORIZED,
         "stepping down revokes company tokens for good"
     );
+    let audited: String = w
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT detail FROM audit_log WHERE action = 'api_token_revoked' ORDER BY id DESC LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+        })
+        .await;
+    assert!(
+        audited.contains("\"count\":1") && audited.contains("no longer a company owner"),
+        "{audited}"
+    );
 
     let again = company_token(&w, &w.lead).await;
     assert_eq!(

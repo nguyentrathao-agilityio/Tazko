@@ -781,10 +781,42 @@ pub(crate) fn revoke_pending_invite(
     Ok(true)
 }
 
+pub(crate) async fn revoke_company_tokens(
+    state: &AppState,
+    slug: &str,
+    user_id: i64,
+    by: i64,
+) -> Result<(), ApiError> {
+    let revoked = crate::projects::revoke_company_tokens(state, slug, user_id).await?;
+    if revoked == 0 {
+        return Ok(());
+    }
+
+    let name = slug.to_string();
+    state
+        .dbs
+        .control()
+        .write(move |c| {
+            let org_id = org(c, &name)?.map(|o| o.id);
+            audit::record(
+                c,
+                Some(by),
+                "api_token_revoked",
+                org_id,
+                "token",
+                json!({ "maker": user_id, "count": revoked, "reason": "no longer a company owner" }),
+            )?;
+            Ok(())
+        })
+        .await?;
+    Ok(())
+}
+
 pub(crate) async fn revoke_before_ownership_ends(
     state: &AppState,
     slug: &str,
     user_id: i64,
+    by: i64,
 ) -> Result<(), ApiError> {
     let name = slug.to_string();
     let ends = state
@@ -799,7 +831,7 @@ pub(crate) async fn revoke_before_ownership_ends(
         })
         .await?;
     if ends {
-        crate::projects::revoke_company_tokens(state, slug, user_id).await?;
+        revoke_company_tokens(state, slug, user_id, by).await?;
     }
 
     Ok(())
@@ -914,7 +946,7 @@ async fn change_role(
     let by = admin.writing(&headers)?;
     let role = company_role(&body.role)?;
     if role == "member" {
-        revoke_before_ownership_ends(&state, &slug, user_id).await?;
+        revoke_before_ownership_ends(&state, &slug, user_id, by).await?;
     }
 
     let slug_for_tokens = slug.clone();
@@ -933,7 +965,7 @@ async fn change_role(
         .await?;
     finish(outcome)?.into_result()?;
     if role == "member" {
-        crate::projects::revoke_company_tokens(&state, &slug_for_tokens, user_id).await?;
+        revoke_company_tokens(&state, &slug_for_tokens, user_id, by).await?;
     }
 
     Ok(StatusCode::NO_CONTENT)
@@ -946,7 +978,7 @@ async fn remove_member(
     UrlPath((slug, user_id)): UrlPath<(String, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
-    revoke_before_ownership_ends(&state, &slug, user_id).await?;
+    revoke_before_ownership_ends(&state, &slug, user_id, by).await?;
     let slug_for_projects = slug.clone();
     let outcome = state
         .dbs

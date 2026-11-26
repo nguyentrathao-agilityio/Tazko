@@ -121,7 +121,7 @@ struct StartQuery {
 }
 
 fn too_many(state: &AppState, headers: &HeaderMap) -> bool {
-    let from = crate::device::client_address(headers);
+    let from = crate::device::client_address(headers, &state.settings.client_ip_header);
     state
         .rate
         .hit_up_to(
@@ -300,6 +300,45 @@ async fn refusal(
         .and_then(|v| cookies::open(state.secret.expose(), REFUSAL_PURPOSE, &v))
         .ok_or(ApiError::NotFound)?;
     Ok(Json(json!({ "email": note.email, "reason": note.reason })))
+}
+
+pub const CSRF_EXEMPT: [&str; 3] = [
+    "/api/v1/email/unsubscribe",
+    "/api/v1/cli/device",
+    "/api/v1/cli/token",
+];
+
+pub async fn require_csrf(
+    State(state): State<AppState>,
+    mut req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let safe = matches!(
+        *req.method(),
+        axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+    );
+    let headers = req.headers();
+    if safe
+        || crate::api::tokens::bearer(headers).is_some()
+        || CSRF_EXEMPT.contains(&req.uri().path())
+    {
+        return next.run(req).await;
+    }
+
+    let Some(token) = session::cookie_token(headers) else {
+        return next.run(req).await;
+    };
+    let user = match session::lookup(state.dbs.control(), &token).await {
+        Ok(Some(user)) => CurrentUser(user),
+        Ok(None) => return next.run(req).await,
+        Err(e) => return ApiError::from(e).into_response(),
+    };
+    if let Err(refused) = check_csrf(&user, req.headers()) {
+        return refused.into_response();
+    }
+
+    req.extensions_mut().insert(user);
+    next.run(req).await
 }
 
 pub fn check_csrf(user: &CurrentUser, headers: &HeaderMap) -> Result<(), ApiError> {

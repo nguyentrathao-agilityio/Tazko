@@ -164,7 +164,15 @@ impl InviteMail {
     ) -> Outgoing {
         let company = name(company);
         let place = match project {
-            Some(p) => format!("the {} project in {company}", name(p)),
+            Some(p) => {
+                let project = name(p);
+                let named = project
+                    .rsplit(|c: char| !c.is_alphanumeric())
+                    .next()
+                    .is_some_and(|w| w.eq_ignore_ascii_case("project"));
+                let word = if named { "" } else { " project" };
+                format!("the {project}{word} in {company}")
+            }
             None => company.clone(),
         };
         Outgoing {
@@ -463,6 +471,18 @@ mod tests {
         let page = bodies(&mail).1;
         assert!(page.contains("Lan &lt;script&gt; Bcc: x@y. z"));
         assert!(page.contains("the Web project in Acme &amp; Co"));
+        let named = invite.mail("mai@example.com", "Acme", Some("Website Project"), 1, 2);
+        assert!(
+            bodies(&named)
+                .0
+                .contains("to the Website Project in Acme on Tazko")
+        );
+        let bare = invite.mail("mai@example.com", "Acme", Some("Side-project"), 1, 2);
+        assert!(
+            bodies(&bare)
+                .0
+                .contains("to the Side-project in Acme on Tazko")
+        );
         assert!(!page.contains("<script>"));
         assert_eq!(mail.link, "https://tazko.example.com/");
     }
