@@ -8,6 +8,7 @@ const notes: Record<string, MessageKey> = {
   email_not_verified: 'refused.note.email_not_verified',
   disabled: 'refused.note.disabled',
   account_mismatch: 'refused.note.account_mismatch',
+  invite_expired: 'refused.note.invite_expired',
 }
 
 export function Refused() {

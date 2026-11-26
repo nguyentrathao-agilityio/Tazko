@@ -424,3 +424,108 @@ async fn an_owner_cannot_tell_whether_an_address_already_has_an_account() {
     assert_eq!(members_of_a(existing.id).await, 1);
     assert_eq!(members_of_a(off).await, 0);
 }
+
+#[tokio::test]
+async fn invites_last_seven_days_and_an_expired_one_can_be_sent_again() {
+    let w = world().await;
+    let send = || {
+        call(
+            &w.app,
+            &w.owner,
+            Method::POST,
+            "/api/v1/c/company-a/invites",
+            Some(json!({ "email": "late@example.com", "role": "member" })),
+        )
+    };
+    assert_eq!(send().await.status(), StatusCode::CREATED);
+    let left: i64 = w
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT expires_at - unixepoch() FROM invites WHERE email = 'late@example.com'",
+                [],
+                |r| r.get(0),
+            )
+        })
+        .await;
+    assert!((7 * 86400 - 5..=7 * 86400).contains(&left), "{left}");
+    assert_eq!(send().await.status(), StatusCode::CONFLICT, "still pending");
+
+    w.app
+        .sql(|c| {
+            c.execute(
+                "UPDATE invites SET expires_at = unixepoch() - 1 WHERE email = 'late@example.com'",
+                [],
+            )
+        })
+        .await;
+    assert_eq!(
+        send().await.status(),
+        StatusCode::CREATED,
+        "an expired invite can be sent again"
+    );
+}
+
+#[tokio::test]
+async fn expired_invites_are_not_accepted_on_sign_in_and_project_invites_expire_too() {
+    let w = world().await;
+    let (member, b) = (w.member.id, w.b);
+    let invite_member_to_b = move |expires: &'static str| {
+        move |c: &mut rusqlite::Connection| {
+            c.execute(
+                &format!(
+                    "INSERT INTO invites (org_id, email, company_role, expires_at) VALUES (?1, 'member@a.example', 'member', {expires})"
+                ),
+                [b],
+            )
+        }
+    };
+    let in_b = move |c: &mut rusqlite::Connection| {
+        c.query_row(
+            "SELECT EXISTS (SELECT 1 FROM org_members WHERE org_id = ?1 AND user_id = ?2)",
+            params![b, member],
+            |r| r.get::<_, bool>(0),
+        )
+    };
+    w.app.sql(invite_member_to_b("unixepoch() - 1")).await;
+    w.app.get("/api/v1/me", Some(&w.member.cookie)).await;
+    assert!(!w.app.sql(in_b).await, "an expired invite is not accepted");
+    w.app.sql(invite_member_to_b("unixepoch() + 60")).await;
+    w.app.get("/api/v1/me", Some(&w.member.cookie)).await;
+    assert!(w.app.sql(in_b).await, "a live invite is accepted");
+
+    let project = body_json(
+        call(
+            &w.app,
+            &w.owner,
+            Method::POST,
+            "/api/v1/c/company-a/projects",
+            Some(json!({ "name": "Web", "owner_id": w.owner.id })),
+        )
+        .await,
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let path = format!("/api/v1/c/company-a/projects/{project}/invites");
+    let send = || {
+        call(
+            &w.app,
+            &w.owner,
+            Method::POST,
+            &path,
+            Some(json!({ "email": "guest@example.com", "role": "member" })),
+        )
+    };
+    assert_eq!(send().await.status(), StatusCode::CREATED);
+    assert_eq!(send().await.status(), StatusCode::CONFLICT);
+    w.app
+        .sql(|c| {
+            c.execute(
+                "UPDATE invites SET expires_at = unixepoch() - 1 WHERE email = 'guest@example.com'",
+                [],
+            )
+        })
+        .await;
+    assert_eq!(send().await.status(), StatusCode::CREATED);
+}

@@ -65,6 +65,11 @@ pub static CONTROL: Migrations = Migrations {
             name: "0008_device_sign_in.sql",
             sql: include_str!("../../migrations/control/0008_device_sign_in.sql"),
         },
+        Migration {
+            version: 9,
+            name: "0009_invite_expiry.sql",
+            sql: include_str!("../../migrations/control/0009_invite_expiry.sql"),
+        },
     ],
 };
 

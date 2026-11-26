@@ -808,3 +808,42 @@ async fn only_manage_tokens_delete_templates() {
         StatusCode::NO_CONTENT
     );
 }
+
+#[tokio::test]
+async fn a_template_from_a_restricted_board_keeps_its_structure_but_no_cards() {
+    let w = world().await;
+    fill(&w).await;
+    req(
+        &w.app,
+        &w.lead,
+        Method::PUT,
+        &format!("{A}/boards/{}/access", w.board),
+        Some(json!({ "restricted": true, "people": [] })),
+    )
+    .await;
+    let saved = req(
+        &w.app,
+        &w.lead,
+        Method::POST,
+        &format!("{A}/boards/{}/save-template", w.board),
+        Some(json!({ "name": "Private plan" })),
+    )
+    .await;
+    assert_eq!(saved["cards_left_out"], true);
+    let listed = req(&w.app, &w.dev, Method::GET, &format!("{A}/templates"), None).await;
+    let template = listed["templates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "Private plan")
+        .unwrap()
+        .clone();
+    let lists = template["lists"].as_array().unwrap();
+    assert!(!lists.is_empty(), "the lists are kept");
+    assert!(
+        lists
+            .iter()
+            .all(|l| l["cards"].as_array().unwrap().is_empty()),
+        "no card titles from a restricted board reach the template: {template}"
+    );
+}

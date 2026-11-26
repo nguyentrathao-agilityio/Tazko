@@ -315,11 +315,11 @@ function SaveTemplate({ board, base, onDone }: { board: BoardData; base: string;
   const [name, setName] = useState(t('tpl.nameDefault', { name: board.name }))
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+  const [saved, setSaved] = useState<{ cards_left_out: boolean } | null>(null)
   const save = () =>
-    void api('POST', `${base}/save-template`, { name, description }).then(
-      () => {
-        setSaved(true)
+    void api<{ cards_left_out: boolean }>('POST', `${base}/save-template`, { name, description }).then(
+      (r) => {
+        setSaved(r)
         setError(null)
       },
       (e: unknown) => setError(e instanceof HttpError ? e.message : String(e)),
@@ -328,7 +328,7 @@ function SaveTemplate({ board, base, onDone }: { board: BoardData; base: string;
   if (saved)
     return (
       <>
-        <p role="status">{t('tpl.saved')}</p>
+        <p role="status">{t(saved.cards_left_out ? 'tpl.savedWithoutCards' : 'tpl.saved')}</p>
         <button type="button" className="btn sm" onClick={onDone}>
           {t('pop.back')}
         </button>
@@ -344,7 +344,7 @@ function SaveTemplate({ board, base, onDone }: { board: BoardData; base: string;
         <label htmlFor="st-d">{t('tpl.saveDesc')}</label>
         <input type="text" id="st-d" placeholder={t('tpl.saveDescHint')} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-      <p className="hint">{t('tpl.saveHint')}</p>
+      <p className="hint">{t(board.restricted ? 'tpl.saveHintRestricted' : 'tpl.saveHint')}</p>
       {error && (
         <p className="error" role="alert">
           {error}
