@@ -221,6 +221,10 @@ async fn change_role(
         })
         .await?;
     change.into_result()?;
+    if role == "member" {
+        crate::projects::revoke_company_tokens(&state, &owner.0.slug, user_id).await?;
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -917,6 +917,7 @@ async fn change_role(
         revoke_before_ownership_ends(&state, &slug, user_id).await?;
     }
 
+    let slug_for_tokens = slug.clone();
     let outcome = state
         .dbs
         .control()
@@ -931,6 +932,10 @@ async fn change_role(
         })
         .await?;
     finish(outcome)?.into_result()?;
+    if role == "member" {
+        crate::projects::revoke_company_tokens(&state, &slug_for_tokens, user_id).await?;
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
