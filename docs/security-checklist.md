@@ -56,7 +56,7 @@ Result: **no permission bypass, no injection found.** Six gaps were found and fi
 
 ## Known limits
 
-- **Client address.** Per-address limits trust the `cf-connecting-ip` header. Behind a Cloudflare tunnel, or a reverse proxy set to overwrite it (the Oracle + Caddy deploy does), the proxy overwrites it with the real address. Behind ngrok it is not overwritten: visitors who send no header share one bucket, and a visitor who sends a made-up header gets a bucket of their own, so the per-address limit is weak there. The per-token API limit does not depend on it.
+- **Client address.** Per-address limits trust the `cf-connecting-ip` header. Behind a Cloudflare tunnel, or a reverse proxy set to overwrite it, the proxy overwrites it with the real address. Behind ngrok it is not overwritten: visitors who send no header share one bucket, and a visitor who sends a made-up header gets a bucket of their own, so the per-address limit is weak there. The per-token API limit does not depend on it.
 - **Invites never expire** until revoked or used, as the plan decided.
 - **Board templates** list the list and card titles of the board they were saved from to every company member; saving a template is an owner's deliberate share.
 - **Automatic token revocations are not in the audit log** (the role change is). Webhook secret rotation writes no audit entry, like adding a webhook.
