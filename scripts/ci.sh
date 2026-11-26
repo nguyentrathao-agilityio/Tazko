@@ -47,7 +47,7 @@ if [ -f Cargo.toml ]; then
   run cargo fmt --check
   run cargo clippy --all-targets -- -D warnings
   run cargo test
-  run cargo deny --log-level error check licenses bans sources
+  run cargo deny --log-level error check advisories licenses bans sources
 else
   printf '\n== rust: skip, no Cargo.toml yet\n'
 fi

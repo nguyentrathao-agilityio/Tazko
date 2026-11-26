@@ -111,7 +111,11 @@ fn copy_db(from: &Path, to: &Path) -> rusqlite::Result<()> {
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
     src.busy_timeout(Duration::from_secs(10))?;
-    src.backup(rusqlite::MAIN_DB, to, None)
+    src.backup(
+        rusqlite::MAIN_DB,
+        to,
+        None::<fn(rusqlite::backup::Progress)>,
+    )
 }
 
 fn copy_tree(from: &Path, to: &Path, files: &mut usize, bytes: &mut u64) -> io::Result<()> {

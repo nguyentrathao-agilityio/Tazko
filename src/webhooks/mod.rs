@@ -41,6 +41,7 @@ pub fn routes() -> Router<AppState> {
         .route(&p("/webhooks"), get(list).post(create))
         .route(&p("/webhooks/{hook}"), patch(update).delete(remove))
         .route(&p("/webhooks/{hook}/test"), post(test))
+        .route(&p("/webhooks/{hook}/secret"), post(rotate_secret))
         .route(&p("/webhooks/{hook}/deliveries"), get(deliveries))
         .route(
             &p("/webhooks/{hook}/deliveries/{delivery}/redeliver"),
@@ -275,6 +276,49 @@ async fn remove(
     }
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn rotate_secret(
+    State(state): State<AppState>,
+    owner: CompanyOwner,
+    headers: HeaderMap,
+    Path(params): Path<HashMap<String, String>>,
+) -> Result<Json<Value>, ApiError> {
+    let by = owner.writing(&headers)?;
+    let hook = path_id(&params, "hook")?;
+    let salt = random_token();
+    let stored = salt.clone();
+    let maker = owner
+        .0
+        .db
+        .write(move |c| {
+            let maker: Option<Option<i64>> = c
+                .query_row(
+                    "SELECT created_by FROM webhooks WHERE id = ?1",
+                    [hook],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if maker == Some(Some(by)) {
+                c.execute(
+                    "UPDATE webhooks SET salt = ?2 WHERE id = ?1",
+                    params![hook, stored],
+                )?;
+            }
+
+            Ok(maker)
+        })
+        .await?;
+    match maker {
+        None => return Err(ApiError::NotFound),
+        Some(m) if m != Some(by) => {
+            return Err(ApiError::Forbidden);
+        }
+        Some(_) => {}
+    }
+
+    let secret = signing_secret(state.secret.expose(), &owner.0.slug, hook, &salt);
+    Ok(Json(json!({ "secret": secret })))
 }
 
 async fn test(

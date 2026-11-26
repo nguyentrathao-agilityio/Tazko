@@ -105,3 +105,49 @@ async fn non_get_requests_to_the_app_are_refused() {
     let res = send(req).await;
     assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
+
+#[tokio::test]
+async fn every_response_carries_the_browser_security_headers() {
+    let app = TestApp::new();
+    let page = app.get("/", None).await;
+    let policy = page.headers()[header::CONTENT_SECURITY_POLICY]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(policy.contains("default-src 'self'"));
+    assert!(policy.contains("script-src 'self'"));
+    assert!(policy.contains("frame-ancestors 'none'"));
+    assert!(policy.contains("object-src 'none'"));
+    assert!(!policy.contains("unsafe-eval"));
+    for res in [
+        page,
+        app.get("/api/v1/me", None).await,
+        app.get("/health", None).await,
+        app.get("/api/docs", None).await,
+    ] {
+        let h = res.headers();
+        assert_eq!(h[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(h[header::REFERRER_POLICY], "same-origin");
+        assert_eq!(h[header::X_FRAME_OPTIONS], "DENY");
+        assert!(h.get(header::STRICT_TRANSPORT_SECURITY).is_none());
+    }
+
+    let api = app.get("/api/v1/me", None).await;
+    assert!(api.headers().get(header::CONTENT_SECURITY_POLICY).is_none());
+    let docs = app.get("/api/docs", None).await;
+    let docs_policy = docs.headers()[header::CONTENT_SECURITY_POLICY]
+        .to_str()
+        .unwrap();
+    assert!(docs_policy.starts_with("default-src 'none'"));
+    assert!(docs_policy.contains("frame-ancestors 'none'"));
+}
+
+#[tokio::test]
+async fn https_servers_ask_browsers_to_stay_on_https() {
+    let app = TestApp::with_env("TAZKO_PUBLIC_URL=https://tazko.example.com\n");
+    let res = app.get("/health", None).await;
+    assert_eq!(
+        res.headers()[header::STRICT_TRANSPORT_SECURITY],
+        "max-age=31536000"
+    );
+}

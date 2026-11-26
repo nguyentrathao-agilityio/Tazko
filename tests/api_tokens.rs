@@ -743,3 +743,86 @@ async fn a_project_limited_owner_token_cannot_manage_other_projects() {
         StatusCode::NOT_FOUND
     );
 }
+
+async fn set_role(w: &World, who: &Who, role: &str) -> StatusCode {
+    call(
+        &w.app,
+        &w.boss,
+        Method::PATCH,
+        &format!("{C}/members/{}", who.id),
+        Some(json!({ "role": role })),
+    )
+    .await
+    .status()
+}
+
+async fn company_token(w: &World, who: &Who) -> String {
+    body_json(
+        call(
+            &w.app,
+            who,
+            Method::POST,
+            &format!("{C}/tokens"),
+            Some(json!({ "name": "CI", "scope": "read", "projects": [w.project_a] })),
+        )
+        .await,
+    )
+    .await["token"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[tokio::test]
+async fn company_tokens_stay_revoked_after_their_maker_is_made_an_owner_again() {
+    let w = world().await;
+    let board = format!("{C}/boards/{}", w.board_a);
+    assert_eq!(set_role(&w, &w.lead, "owner").await, StatusCode::NO_CONTENT);
+    let token = company_token(&w, &w.lead).await;
+    assert_eq!(
+        status(&w.app, &token, Method::GET, &board, None).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        set_role(&w, &w.lead, "member").await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(set_role(&w, &w.lead, "owner").await, StatusCode::NO_CONTENT);
+    assert_eq!(
+        status(&w.app, &token, Method::GET, &board, None).await,
+        StatusCode::UNAUTHORIZED,
+        "stepping down revokes company tokens for good"
+    );
+
+    let again = company_token(&w, &w.lead).await;
+    assert_eq!(
+        status(&w.app, &again, Method::GET, &board, None).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        call(
+            &w.app,
+            &w.boss,
+            Method::DELETE,
+            &format!("{C}/members/{}", w.lead.id),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    let org = w
+        .app
+        .sql(|c| {
+            c.query_row("SELECT id FROM orgs WHERE slug = 'company-a'", [], |r| {
+                r.get(0)
+            })
+        })
+        .await;
+    w.app.member(org, w.lead.id, "owner").await;
+    assert_eq!(
+        status(&w.app, &again, Method::GET, &board, None).await,
+        StatusCode::UNAUTHORIZED,
+        "leaving the company revokes company tokens for good"
+    );
+}

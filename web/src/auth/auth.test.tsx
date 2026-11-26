@@ -21,6 +21,7 @@ describe('SignIn', () => {
     ['expired', 'took too long'],
     ['failed', 'did not complete'],
     ['cancelled', 'was cancelled'],
+    ['busy', 'Too many sign-in attempts'],
   ])('explains the %s error', (code, text) => {
     render(<SignIn search={`?error=${code}`} />)
     expect(screen.getByRole('alert').textContent).toContain(text)

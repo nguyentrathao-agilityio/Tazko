@@ -620,6 +620,33 @@ async fn update(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+fn revoke_tokens_of(c: &Connection, user_id: i64) -> rusqlite::Result<usize> {
+    c.execute(
+        "UPDATE api_tokens SET revoked_at = ?2 WHERE created_by = ?1 AND revoked_at IS NULL",
+        params![user_id, now()],
+    )
+}
+
+fn tenant_if_any(state: &AppState, slug: &str) -> Result<Option<crate::db::Database>, ApiError> {
+    match state.dbs.tenant(slug) {
+        Ok(db) => Ok(Some(db)),
+        Err(crate::db::DbError::Missing(_)) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+pub async fn revoke_company_tokens(
+    state: &AppState,
+    slug: &str,
+    user_id: i64,
+) -> Result<(), ApiError> {
+    if let Some(db) = tenant_if_any(state, slug)? {
+        db.write(move |c| Ok(revoke_tokens_of(c, user_id)?)).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn forget_member(
     state: &AppState,
     slug: &str,
@@ -639,10 +666,8 @@ pub async fn forget_member(
             Ok(())
         })
         .await?;
-    let db = match state.dbs.tenant(slug) {
-        Ok(db) => db,
-        Err(crate::db::DbError::Missing(_)) => return Ok(()),
-        Err(e) => return Err(e.into()),
+    let Some(db) = tenant_if_any(state, slug)? else {
+        return Ok(());
     };
     db.write(move |c| {
         let tx = c.transaction()?;
@@ -652,6 +677,7 @@ pub async fn forget_member(
             stmt.query_map([user_id], |r| Ok((r.get(0)?, r.get(1)?)))?
                 .collect::<Result<_, _>>()?
         };
+        revoke_tokens_of(&tx, user_id)?;
         for (project, role) in projects {
             drop_member(&tx, project, user_id)?;
             events::record(

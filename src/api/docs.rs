@@ -28,7 +28,9 @@ pub(crate) fn with_headers(body: String, kind: &'static str) -> Response {
     );
     h.insert(
         header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'"),
+        HeaderValue::from_static(
+            "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+        ),
     );
     h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     res

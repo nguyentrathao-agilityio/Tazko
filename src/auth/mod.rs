@@ -28,6 +28,7 @@ const OAUTH_TTL: i64 = 10 * 60;
 const REFUSAL_PATH: &str = "/auth/refusal";
 const REFUSAL_PURPOSE: &str = "refusal";
 const REFUSAL_TTL: i64 = 10 * 60;
+const SIGN_INS_PER_MINUTE: u32 = 20;
 
 #[derive(Serialize, Deserialize)]
 struct Pending {
@@ -119,7 +120,32 @@ struct StartQuery {
     next: Option<String>,
 }
 
-async fn start(State(state): State<AppState>, Query(q): Query<StartQuery>) -> Response {
+fn too_many(state: &AppState, headers: &HeaderMap) -> bool {
+    let from = crate::device::client_address(headers);
+    state
+        .rate
+        .hit_up_to(
+            &format!("google-sign-in:{from}"),
+            session::now(),
+            SIGN_INS_PER_MINUTE,
+        )
+        .is_err()
+}
+
+async fn start(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<StartQuery>,
+) -> Response {
+    if too_many(&state, &headers) {
+        let mut to = form_urlencoded::Serializer::new(String::new());
+        to.append_pair("error", "busy");
+        if let Some(next) = q.next.as_deref() {
+            to.append_pair("next", &safe_next(Some(next)));
+        }
+        return Redirect::to(&format!("/signin?{}", to.finish())).into_response();
+    }
+
     let pending = Pending {
         state: random_token(),
         nonce: random_token(),

@@ -781,6 +781,30 @@ pub(crate) fn revoke_pending_invite(
     Ok(true)
 }
 
+pub(crate) async fn revoke_before_ownership_ends(
+    state: &AppState,
+    slug: &str,
+    user_id: i64,
+) -> Result<(), ApiError> {
+    let name = slug.to_string();
+    let ends = state
+        .dbs
+        .control()
+        .read(move |c| {
+            let Some(o) = org(c, &name)? else {
+                return Ok(false);
+            };
+            let owner = member(c, o.id, user_id)?.is_some_and(|(role, _)| role == "owner");
+            Ok(owner && owners(c, o.id)? > 1)
+        })
+        .await?;
+    if ends {
+        crate::projects::revoke_company_tokens(state, slug, user_id).await?;
+    }
+
+    Ok(())
+}
+
 fn owners(c: &Connection, org_id: i64) -> rusqlite::Result<i64> {
     c.query_row(
         "SELECT count(*) FROM org_members WHERE org_id = ?1 AND role = 'owner'",
@@ -889,6 +913,10 @@ async fn change_role(
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
     let role = company_role(&body.role)?;
+    if role == "member" {
+        revoke_before_ownership_ends(&state, &slug, user_id).await?;
+    }
+
     let outcome = state
         .dbs
         .control()
@@ -913,6 +941,7 @@ async fn remove_member(
     UrlPath((slug, user_id)): UrlPath<(String, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
+    revoke_before_ownership_ends(&state, &slug, user_id).await?;
     let slug_for_projects = slug.clone();
     let outcome = state
         .dbs
