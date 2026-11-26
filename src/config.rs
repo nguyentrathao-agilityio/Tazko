@@ -6,6 +6,7 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_HOST: &str = "127.0.0.1";
+pub const DEFAULT_CLIENT_IP_HEADER: &str = "cf-connecting-ip";
 pub const DEFAULT_PORT: u16 = 8791;
 pub const DEFAULT_MAX_UPLOAD_MB: u32 = 10;
 pub const SYSTEM_ENV_FILE: &str = "/etc/tazko/tazko.env";
@@ -59,6 +60,7 @@ pub struct Settings {
     pub max_upload_mb: u32,
     pub smtp: Option<Smtp>,
     pub webhooks_allow_local: bool,
+    pub client_ip_header: String,
     pub source: Option<PathBuf>,
 }
 
@@ -195,6 +197,14 @@ pub fn from_map(map: &BTreeMap<String, String>) -> Result<Settings, ConfigError>
 
     let smtp = smtp(&get, &mut problems);
 
+    let client_ip_header = get("TAZKO_CLIENT_IP_HEADER")
+        .unwrap_or(DEFAULT_CLIENT_IP_HEADER)
+        .to_ascii_lowercase();
+    if axum::http::HeaderName::from_bytes(client_ip_header.as_bytes()).is_err() {
+        problems
+            .push("TAZKO_CLIENT_IP_HEADER must be a header name such as x-forwarded-for".into());
+    }
+
     if !problems.is_empty() {
         return Err(ConfigError::Invalid(problems));
     }
@@ -213,6 +223,7 @@ pub fn from_map(map: &BTreeMap<String, String>) -> Result<Settings, ConfigError>
             get("TAZKO_WEBHOOKS_ALLOW_LOCAL"),
             Some("1" | "true" | "yes")
         ),
+        client_ip_header,
         source: None,
     })
 }
@@ -434,6 +445,20 @@ mod tests {
         assert_eq!(s.max_upload_mb, 10);
         assert!(s.smtp.is_none());
         assert!(s.secret.is_none());
+        assert_eq!(s.client_ip_header, "cf-connecting-ip");
+    }
+
+    #[test]
+    fn the_client_address_header_can_be_chosen() {
+        let mut map = base();
+        map.insert("TAZKO_CLIENT_IP_HEADER".into(), "X-Forwarded-For".into());
+        assert_eq!(from_map(&map).unwrap().client_ip_header, "x-forwarded-for");
+        map.insert("TAZKO_CLIENT_IP_HEADER".into(), "not a header".into());
+        assert!(
+            problems(&map)
+                .iter()
+                .any(|p| p.contains("TAZKO_CLIENT_IP_HEADER"))
+        );
     }
 
     #[test]

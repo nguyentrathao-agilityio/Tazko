@@ -21,11 +21,15 @@ const ALPHABET: &[u8] = b"BCDFGHJKLMNPQRSTVWXZ";
 const MAX_WAITING: i64 = 1000;
 const STARTS_PER_MINUTE: u32 = 10;
 
-pub fn client_address(headers: &HeaderMap) -> &str {
+pub fn client_address(headers: &HeaderMap, header: &str) -> String {
     headers
-        .get("cf-connecting-ip")
+        .get_all(header)
+        .iter()
+        .next_back()
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("direct")
+        .and_then(|v| v.rsplit(',').next())
+        .and_then(|v| v.trim().parse::<std::net::IpAddr>().ok())
+        .map_or_else(|| "direct".to_string(), |ip| ip.to_string())
 }
 
 pub fn routes() -> Router<AppState> {
@@ -92,7 +96,7 @@ async fn start(
     Json(body): Json<Start>,
 ) -> Result<Json<Value>, ApiError> {
     let at = now();
-    let from = client_address(&headers);
+    let from = client_address(&headers, &state.settings.client_ip_header);
     state
         .rate
         .hit_up_to(&format!("device-sign-in:{from}"), at, STARTS_PER_MINUTE)
@@ -391,5 +395,19 @@ mod tests {
         assert_eq!(normalise("wdjb mjht"), "WDJB-MJHT");
         assert_eq!(normalise("short"), "");
         assert_eq!(client_name("lap\ntop"), "laptop");
+    }
+
+    #[test]
+    fn the_client_address_is_the_last_hop_the_proxy_added() {
+        let mut h = HeaderMap::new();
+        assert_eq!(client_address(&h, "x-forwarded-for"), "direct");
+        h.insert("x-forwarded-for", "6.6.6.6, 203.0.113.7".parse().unwrap());
+        h.insert("cf-connecting-ip", "198.51.100.2".parse().unwrap());
+        assert_eq!(client_address(&h, "x-forwarded-for"), "203.0.113.7");
+        h.append("x-forwarded-for", "192.0.2.9".parse().unwrap());
+        assert_eq!(client_address(&h, "x-forwarded-for"), "192.0.2.9");
+        assert_eq!(client_address(&h, "cf-connecting-ip"), "198.51.100.2");
+        h.insert("cf-connecting-ip", "not an address".parse().unwrap());
+        assert_eq!(client_address(&h, "cf-connecting-ip"), "direct");
     }
 }

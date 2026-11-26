@@ -37,6 +37,10 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::device::routes())
         .merge(crate::notifications::email::routes())
         .fallback(static_file)
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth::require_csrf,
+        ))
         .layer(map_response(move |res| security_headers(res, https)))
         .with_state(state)
 }

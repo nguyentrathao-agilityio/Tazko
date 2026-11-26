@@ -317,6 +317,25 @@ async fn rotate_secret(
         Some(_) => {}
     }
 
+    let org = owner.0.org_id;
+    let audited = state
+        .dbs
+        .control()
+        .write(move |c| {
+            Ok(crate::admin::audit::record(
+                c,
+                Some(by),
+                "webhook_secret_rotated",
+                Some(org),
+                "webhook",
+                json!({ "webhook": hook }),
+            )?)
+        })
+        .await;
+    if let Err(e) = audited {
+        eprintln!("tazko: the audit entry for a webhook secret could not be written: {e:?}");
+    }
+
     let secret = signing_secret(state.secret.expose(), &owner.0.slug, hook, &salt);
     Ok(Json(json!({ "secret": secret })))
 }
