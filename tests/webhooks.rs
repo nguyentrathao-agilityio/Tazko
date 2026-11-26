@@ -559,4 +559,15 @@ async fn owners_can_rotate_a_signing_secret_and_the_old_one_stops_verifying() {
     let (headers, body) = got.last().unwrap();
     assert!(verify(&new, headers, body));
     assert!(!verify(&old, headers, body));
+    let rotations: i64 = w
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT count(*) FROM audit_log WHERE action = 'webhook_secret_rotated'",
+                [],
+                |r| r.get(0),
+            )
+        })
+        .await;
+    assert_eq!(rotations, 1);
 }
