@@ -205,6 +205,10 @@ async fn change_role(
 ) -> Result<StatusCode, ApiError> {
     let by = owner.writing(&headers)?;
     let role = admin::company_role(&body.role)?;
+    if role == "member" {
+        admin::revoke_before_ownership_ends(&state, &owner.0.slug, user_id).await?;
+    }
+
     let org_id = owner.0.org_id;
     let change = state
         .dbs
@@ -217,6 +221,10 @@ async fn change_role(
         })
         .await?;
     change.into_result()?;
+    if role == "member" {
+        crate::projects::revoke_company_tokens(&state, &owner.0.slug, user_id).await?;
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -227,6 +235,7 @@ async fn remove_member(
     UrlPath((_, user_id)): UrlPath<(String, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let by = owner.writing(&headers)?;
+    admin::revoke_before_ownership_ends(&state, &owner.0.slug, user_id).await?;
     let org_id = owner.0.org_id;
     let change = state
         .dbs

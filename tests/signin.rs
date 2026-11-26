@@ -705,3 +705,33 @@ async fn an_owner_invites_a_member_who_joins_on_first_sign_in() {
             .any(|m| m["email"] == "newbie@gmail.com")
     );
 }
+
+#[tokio::test]
+async fn google_sign_in_is_limited_per_address_not_for_everyone() {
+    let app = TestApp::new();
+    let start = |from: &'static str| {
+        Request::get("/auth/google/start")
+            .header("cf-connecting-ip", from)
+            .body(Body::empty())
+            .unwrap()
+    };
+    for _ in 0..20 {
+        let res = app.send(start("203.0.113.9")).await;
+        assert!(location(&res).starts_with("https://accounts.google.com/"));
+    }
+    let busy = app
+        .send(
+            Request::get("/auth/google/start?next=/c/acme")
+                .header("cf-connecting-ip", "203.0.113.9")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(location(&busy), "/signin?error=busy&next=%2Fc%2Facme");
+    assert!(
+        set_cookies(&busy).is_empty(),
+        "a refused start leaves a sign-in in another tab alone"
+    );
+    let other = app.send(start("198.51.100.4")).await;
+    assert!(location(&other).starts_with("https://accounts.google.com/"));
+}

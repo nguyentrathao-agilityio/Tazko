@@ -9,6 +9,7 @@ use crate::db::{Database, DbResult};
 pub const COOKIE: &str = "tazko_session";
 pub const LIFETIME_SECS: i64 = 30 * 24 * 60 * 60;
 const TOUCH_AFTER_SECS: i64 = 60 * 60;
+pub const MAX_AGE_SECS: i64 = 90 * 24 * 60 * 60;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionUser {
@@ -76,8 +77,8 @@ pub async fn lookup(control: &Database, token: &str) -> DbResult<Option<SessionU
                 Ok(c.query_row(
                     "SELECT u.id, u.email, u.name, u.is_super_admin, s.csrf_token, s.last_used_at
                      FROM sessions s JOIN users u ON u.id = s.user_id
-                     WHERE s.id_hash = ?1 AND s.expires_at > ?2 AND u.disabled = 0",
-                    params![id_hash, now()],
+                     WHERE s.id_hash = ?1 AND s.expires_at > ?2 AND s.created_at > ?2 - ?3 AND u.disabled = 0",
+                    params![id_hash, now(), MAX_AGE_SECS],
                     |r| {
                         Ok((
                             SessionUser {

@@ -17,7 +17,7 @@ hmac = "0.13.0"
 http-body-util = "0.1"
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
-rusqlite = { version = "0.37", features = ["bundled", "backup"] }
+rusqlite = { version = "0.41", features = ["bundled", "backup"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-platform-verifier = "0.7"
 serde = { version = "1", features = ["derive"] }

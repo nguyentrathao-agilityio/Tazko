@@ -6,6 +6,7 @@ const errors: Record<string, MessageKey> = {
   expired: 'signin.error.expired',
   failed: 'signin.error.failed',
   cancelled: 'signin.error.cancelled',
+  busy: 'signin.error.busy',
 }
 
 export function SignIn({ search }: { search: string }) {

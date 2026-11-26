@@ -1664,6 +1664,32 @@
     }
    }
   },
+  "/api/v1/c/{company}/webhooks/{hook}/secret": {
+   "post": {
+    "summary": "Replace the signing secret; the new secret is returned once",
+    "tags": [
+     "Webhooks"
+    ],
+    "x-scope": "manage",
+    "responses": {
+     "200": {
+      "description": "OK"
+     },
+     "401": {
+      "description": "Sign in or send a valid token"
+     },
+     "403": {
+      "description": "Not allowed for this person or token"
+     },
+     "404": {
+      "description": "Not found or not visible"
+     },
+     "429": {
+      "description": "Rate limit for this token reached"
+     }
+    }
+   }
+  },
   "/api/v1/c/{company}/webhooks/{hook}/deliveries": {
    "get": {
     "summary": "The latest 50 deliveries with result and timing",

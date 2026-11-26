@@ -502,3 +502,61 @@ async fn webhooks_cannot_target_private_addresses_or_other_projects() {
             "only projects the owner belongs to"
     );
 }
+
+#[tokio::test]
+async fn owners_can_rotate_a_signing_secret_and_the_old_one_stops_verifying() {
+    let w = world("TAZKO_WEBHOOKS_ALLOW_LOCAL=1\n").await;
+    let (rx, url) = Receiver::start().await;
+    let made = hook(&w, &url, &["card.created"]).await;
+    let id = made["id"].as_i64().unwrap();
+    let old = made["secret"].as_str().unwrap().to_string();
+    let path = format!("{C}/webhooks/{id}/secret");
+    assert_eq!(
+        call(&w.app, &w.dev, Method::POST, &path, None)
+            .await
+            .status(),
+        StatusCode::FORBIDDEN,
+        "only company owners rotate secrets"
+    );
+    let dev = w.dev.id;
+    w.app
+        .sql(move |c| {
+            c.execute(
+                "UPDATE org_members SET role = 'owner' WHERE user_id = ?1",
+                [dev],
+            )
+        })
+        .await;
+    assert_eq!(
+        call(&w.app, &w.dev, Method::POST, &path, None)
+            .await
+            .status(),
+        StatusCode::FORBIDDEN,
+        "another owner cannot take over the secret"
+    );
+    assert_eq!(
+        call(
+            &w.app,
+            &w.boss,
+            Method::POST,
+            &format!("{C}/webhooks/9999/secret"),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    let rotated = req(&w.app, &w.boss, Method::POST, &path, None).await;
+    let new = rotated["secret"].as_str().unwrap().to_string();
+    assert!(new.starts_with("whsec_"));
+    assert_ne!(new, old);
+    let listed = req(&w.app, &w.boss, Method::GET, &format!("{C}/webhooks"), None).await;
+    assert!(listed["webhooks"][0].get("secret").is_none());
+
+    card(&w.app, &w.boss, w.open, "After rotation").await;
+    assert_eq!(tick(&w, tazko::session::now()).await, (1, 1));
+    let got = rx.got.lock().unwrap().clone();
+    let (headers, body) = got.last().unwrap();
+    assert!(verify(&new, headers, body));
+    assert!(!verify(&old, headers, body));
+}

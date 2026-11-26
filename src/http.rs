@@ -1,6 +1,7 @@
 use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
+use axum::middleware::map_response;
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::get;
 use serde_json::json;
@@ -9,8 +10,11 @@ use crate::state::AppState;
 use crate::web::{self, Asset};
 
 const RESERVED: [&str; 3] = ["/api/", "/auth/", "/ws"];
+const PAGE_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'";
+const HSTS: &str = "max-age=31536000";
 
 pub fn router(state: AppState) -> Router {
+    let https = state.settings.public_url.starts_with("https://");
     Router::new()
         .route("/health", get(health))
         .merge(crate::api::routes())
@@ -33,7 +37,33 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::device::routes())
         .merge(crate::notifications::email::routes())
         .fallback(static_file)
+        .layer(map_response(move |res| security_headers(res, https)))
         .with_state(state)
+}
+
+async fn security_headers(mut res: Response, https: bool) -> Response {
+    let headers = res.headers_mut();
+    let page = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|t| t.starts_with("text/html"));
+    let mut add = |name: header::HeaderName, value: &'static str| {
+        headers
+            .entry(name)
+            .or_insert(HeaderValue::from_static(value));
+    };
+    add(header::X_CONTENT_TYPE_OPTIONS, "nosniff");
+    add(header::REFERRER_POLICY, "same-origin");
+    add(header::X_FRAME_OPTIONS, "DENY");
+    if page {
+        add(header::CONTENT_SECURITY_POLICY, PAGE_POLICY);
+    }
+
+    if https {
+        add(header::STRICT_TRANSPORT_SECURITY, HSTS);
+    }
+
+    res
 }
 
 async fn health() -> Json<serde_json::Value> {

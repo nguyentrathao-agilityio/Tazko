@@ -32,6 +32,10 @@ allow-wildcard-paths = true
 
 [advisories]
 yanked = "deny"
+ignore = [
+  { id = "RUSTSEC-2023-0071", reason = "rsa timing attack needs private-key operations; Tazko only verifies Google RS256 signatures with public keys" },
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint is reached only through ECDSA in jsonwebtoken; Tazko accepts RS256 only, so that code never runs" },
+]
 
 [sources]
 unknown-registry = "deny"

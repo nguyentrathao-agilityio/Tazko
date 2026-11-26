@@ -114,6 +114,21 @@ async fn expired_sessions_and_disabled_people_are_signed_out() {
         StatusCode::UNAUTHORIZED
     );
 
+    let carol = app.user("carol@example.com").await;
+    let kept = app.sign_in(carol).await;
+    app.sql(|c| {
+        c.execute(
+            "UPDATE sessions SET created_at = unixepoch() - 91 * 86400, last_used_at = unixepoch()",
+            [],
+        )
+    })
+    .await;
+    assert_eq!(
+        app.get("/api/v1/me", Some(&kept)).await.status(),
+        StatusCode::UNAUTHORIZED,
+        "a session in steady use still ends 90 days after sign-in"
+    );
+
     let bob = app
         .sql(|c| {
             c.query_row(

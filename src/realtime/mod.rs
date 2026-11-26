@@ -107,8 +107,15 @@ pub fn signed_in(c: &Connection, session: &str, org: i64, user: i64) -> rusqlite
            JOIN users u ON u.id = s.user_id
            JOIN org_members m ON m.user_id = u.id AND m.org_id = ?2
            JOIN orgs o ON o.id = m.org_id
-          WHERE s.id_hash = ?1 AND s.user_id = ?3 AND s.expires_at > ?4 AND u.disabled = 0 AND o.status = 'active')",
-        params![session, org, user, crate::session::now()],
+          WHERE s.id_hash = ?1 AND s.user_id = ?3 AND s.expires_at > ?4 AND s.created_at > ?4 - ?5
+            AND u.disabled = 0 AND o.status = 'active')",
+        params![
+            session,
+            org,
+            user,
+            crate::session::now(),
+            crate::session::MAX_AGE_SECS
+        ],
         |r| r.get(0),
     )
 }

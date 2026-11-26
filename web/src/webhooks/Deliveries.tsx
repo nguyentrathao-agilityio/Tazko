@@ -1,16 +1,24 @@
+import { useState } from 'react'
 import { api } from '@/http'
 import { t } from '@/i18n'
 import { useRun } from '@/projects/useRun'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { when } from '@/ui/format'
 import { useLoad } from '@/ui/useLoad'
+import { SecretModal } from '@/tokens/SecretModal'
 import type { Delivery, Webhook } from '@/webhooks/types'
 
 export function Deliveries({ path, hook, onRemoved }: { path: string; hook: Webhook; onRemoved: () => void }) {
   const base = `${path}/${hook.id}`
   const { data, error: loadError, reload } = useLoad(() => api<{ deliveries: Delivery[] }>('GET', `${base}/deliveries`), `${base}/deliveries`)
-  const { error, runAndToast } = useRun(reload)
+  const { error, run, runAndToast } = useRun(reload)
   const removing = useRun(onRemoved)
+  const [secret, setSecret] = useState<string | null>(null)
+  const rotate = () =>
+    void run(async () => {
+      const r = await api<{ secret: string }>('POST', `${base}/secret`)
+      setSecret(r.secret)
+    })
 
   return (
     <div className="hookd">
@@ -21,11 +29,15 @@ export function Deliveries({ path, hook, onRemoved }: { path: string; hook: Webh
         <button type="button" className="btn sm" disabled={!hook.active} title={hook.active ? undefined : t('webhooks.resumeFirst')} onClick={() => void runAndToast(() => api('POST', `${base}/test`), t('webhooks.testQueued'))}>
           {t('webhooks.test')}
         </button>
+        <button type="button" className="btn sm" title={t('webhooks.rotateHint')} onClick={rotate}>
+          {t('webhooks.rotate')}
+        </button>
         <button type="button" className="btn sm danger" onClick={() => void removing.runAndToast(() => api('DELETE', base), t('webhooks.deleted'))}>
           {t('webhooks.delete')}
         </button>
       </div>
       <ErrorNote message={error ?? removing.error ?? loadError} />
+      {secret && <SecretModal title={t('webhooks.rotated')} lead={t('webhooks.rotatedLead')} label={t('webhooks.secret')} text={secret} onClose={() => setSecret(null)} />}
       <div className="tw">
         <table>
           <thead>

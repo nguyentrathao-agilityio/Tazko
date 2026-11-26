@@ -21,6 +21,13 @@ const ALPHABET: &[u8] = b"BCDFGHJKLMNPQRSTVWXZ";
 const MAX_WAITING: i64 = 1000;
 const STARTS_PER_MINUTE: u32 = 10;
 
+pub fn client_address(headers: &HeaderMap) -> &str {
+    headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("direct")
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/cli/device", post(start))
@@ -85,10 +92,7 @@ async fn start(
     Json(body): Json<Start>,
 ) -> Result<Json<Value>, ApiError> {
     let at = now();
-    let from = headers
-        .get("cf-connecting-ip")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("direct");
+    let from = client_address(&headers);
     state
         .rate
         .hit_up_to(&format!("device-sign-in:{from}"), at, STARTS_PER_MINUTE)

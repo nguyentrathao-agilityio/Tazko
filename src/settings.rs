@@ -214,10 +214,10 @@ async fn sessions(
         .read(move |c| {
             let mut stmt = c.prepare(
                 "SELECT id_hash, user_agent, created_at, last_used_at FROM sessions
-                 WHERE user_id = ?1 AND expires_at > ?2 ORDER BY last_used_at DESC",
+                 WHERE user_id = ?1 AND expires_at > ?2 AND created_at > ?2 - ?3 ORDER BY last_used_at DESC",
             )?;
             let rows = stmt
-                .query_map(params![id, now()], |r| {
+                .query_map(params![id, now(), crate::session::MAX_AGE_SECS], |r| {
                     let hash: String = r.get(0)?;
                     Ok(json!({
                         "id": &hash[..16],

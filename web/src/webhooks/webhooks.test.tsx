@@ -31,6 +31,7 @@ beforeEach(() => {
       if (url === '/api/v1/c/acme/webhooks' && method === 'GET') return json({ webhooks: hooks, events: EVENTS })
       if (url === '/api/v1/c/acme/webhooks' && method === 'POST') return json({ ...hooks[0], id: 9, secret: 'whsec_abc123' }, 201)
       if (url === '/api/v1/c/acme/webhooks/2/deliveries') return json({ deliveries })
+      if (url === '/api/v1/c/acme/webhooks/2/secret' && method === 'POST') return json({ secret: 'whsec_new456' })
       if (url === '/api/v1/c/acme/my-projects') return json({ projects: [{ id: 4, name: 'Website', description: '', color: 'c0', role: 'owner', members: [], boards: 1 }] })
       if (method !== 'GET') return new Response(null, { status: method === 'POST' ? 202 : 204 })
       return json({ error: 'not found' }, 404)
@@ -91,5 +92,14 @@ describe('webhooks', () => {
     const made = await screen.findByRole('dialog', { name: 'Webhook added' })
     expect(within(made).getByText('whsec_abc123')).toBeTruthy()
     expect(calls.find((c) => c.method === 'POST' && c.url === '/api/v1/c/acme/webhooks')?.body).toEqual({ url: 'https://example.com/in', events: ['comment.created'], projects: [4] })
+  })
+
+  it('replaces the signing secret and shows the new one once', async () => {
+    await openHooks()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Deliveries' })[1])
+    fireEvent.click(await screen.findByRole('button', { name: 'New secret' }))
+    const shown = await screen.findByRole('dialog', { name: 'New signing secret' })
+    expect(within(shown).getByText('whsec_new456')).toBeTruthy()
+    expect(calls.some((c) => c.method === 'POST' && c.url === '/api/v1/c/acme/webhooks/2/secret')).toBe(true)
   })
 })
