@@ -20,6 +20,7 @@ const me = {
 
 let role = 'member'
 let calls: Call[] = []
+let media: object[] = []
 
 const board = () => ({
   id: 7,
@@ -61,6 +62,7 @@ const card = () => ({
     { id: 72, kind: 'file', name: 'spec.pdf', size: 3_200_000, url: null, image: false, type: 'application/pdf', created_at: 1_700_000_001 },
     { id: 73, kind: 'link', name: 'Brand guide', size: 0, url: 'https://example.com/brand', image: false, type: '', created_at: 1_700_000_002 },
     { id: 74, kind: 'file', name: 'hero.png', size: 482_000, url: null, image: true, type: 'image/png', created_at: 1_700_000_003 },
+    ...media,
   ],
   list: { id: 11, title: 'To do' },
   archived: false,
@@ -83,7 +85,7 @@ beforeEach(() => {
       const method = init.method ?? 'GET'
       calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body })
       if (url === '/api/v1/me') return json(me)
-      if (url === '/api/v1/c/acme/storage') return json({ max_file: 10 * 1024 * 1024, used: 1_932_735_283, limit: 5 * 1024 ** 3 })
+      if (url === '/api/v1/c/acme/storage') return json({ max_file: 10 * 1024 * 1024, max_video: 100 * 1024 * 1024, used: 1_932_735_283, limit: 5 * 1024 ** 3 })
       if (url === '/api/v1/c/acme/boards/7/card-templates') return json({ saved: [{ id: 21, title: 'Write copy' }], builtin: [{ key: 'bug', title: 'Bug report' }] })
       if (url === '/api/v1/c/acme/boards/7/card-templates/use') return json({ id: 99 }, 201)
       if (url.startsWith('/api/v1/c/acme/boards/7/background?name=')) return json({ error: 'choose a PNG, JPEG, GIF or WebP picture for the background' }, 415)
@@ -201,6 +203,25 @@ describe('card dialog', () => {
     expect(within(files).getByRole('link', { name: 'hero.png' }).getAttribute('href')).toBe('/api/v1/c/acme/boards/7/attachments/74')
   })
 
+  it('plays attached videos in the card and allows larger videos', async () => {
+    media = [{ id: 75, kind: 'file', name: 'demo.mp4', size: 30_000_000, url: null, image: false, type: 'video/mp4', created_at: 1_700_000_004 }]
+    open('/c/acme/b/7/c/21')
+    const dialog = await screen.findByRole('dialog', { name: 'Card' })
+    const files = await within(dialog).findByRole('region', { name: 'Attachments' })
+    const player = within(files).getByLabelText('Play demo.mp4') as HTMLVideoElement
+    expect(player.tagName).toBe('VIDEO')
+    expect(player.getAttribute('src')).toBe('/api/v1/c/acme/boards/7/attachments/75')
+    media = []
+
+    fireEvent.click(within(files).getByRole('button', { name: 'Add' }))
+    const pop = screen.getByRole('dialog', { name: 'Attach' })
+    expect(await within(pop).findByText(/Videos up to 100 MB\./)).toBeTruthy()
+    const clip = new File(['x'], 'clip.mov', { type: 'video/quicktime' })
+    Object.defineProperty(clip, 'size', { value: 60 * 1024 * 1024 })
+    fireEvent.change(within(pop).getByLabelText('Upload a file'), { target: { files: [clip] } })
+    await waitFor(() => expect(calls.find((c) => c.url.includes('/attachments?name='))?.url).toBe('/api/v1/c/acme/boards/7/cards/21/attachments?name=clip.mov'))
+  })
+
   it('lists attachments, makes a cover and explains a refused upload', async () => {
     open('/c/acme/b/7/c/21')
     const dialog = await screen.findByRole('dialog', { name: 'Card' })
@@ -216,7 +237,7 @@ describe('card dialog', () => {
 
     fireEvent.click(within(files).getByRole('button', { name: 'Add' }))
     const pop = screen.getByRole('dialog', { name: 'Attach' })
-    expect(await within(pop).findByText('Files up to 10 MB. This company uses 1.8 of 5 GB.')).toBeTruthy()
+    expect(await within(pop).findByText('Files up to 10 MB. This company uses 1.8 of 5 GB. Videos up to 100 MB.')).toBeTruthy()
     const big = new File(['x'], 'huge.png', { type: 'image/png' })
     Object.defineProperty(big, 'size', { value: 11 * 1024 * 1024 })
     fireEvent.change(within(pop).getByLabelText('Upload a file'), { target: { files: [big] } })

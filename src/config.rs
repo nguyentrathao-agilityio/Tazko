@@ -9,6 +9,7 @@ pub const DEFAULT_HOST: &str = "127.0.0.1";
 pub const DEFAULT_CLIENT_IP_HEADER: &str = "cf-connecting-ip";
 pub const DEFAULT_PORT: u16 = 8791;
 pub const DEFAULT_MAX_UPLOAD_MB: u32 = 10;
+pub const DEFAULT_MAX_VIDEO_MB: u32 = 100;
 pub const SYSTEM_ENV_FILE: &str = "/etc/tazko/tazko.env";
 pub const LOCAL_ENV_FILE: &str = ".env.local";
 const MIN_SECRET_LEN: usize = 32;
@@ -58,6 +59,7 @@ pub struct Settings {
     pub google_client_secret: Secret,
     pub secret: Option<Secret>,
     pub max_upload_mb: u32,
+    pub max_video_mb: u32,
     pub smtp: Option<Smtp>,
     pub webhooks_allow_local: bool,
     pub client_ip_header: String,
@@ -175,6 +177,16 @@ pub fn from_map(map: &BTreeMap<String, String>) -> Result<Settings, ConfigError>
         problems.push("TAZKO_MAX_UPLOAD_MB must be at least 1".into());
     }
 
+    let max_video_mb = number(
+        get("TAZKO_MAX_VIDEO_MB"),
+        DEFAULT_MAX_VIDEO_MB,
+        "TAZKO_MAX_VIDEO_MB",
+        &mut problems,
+    );
+    if max_video_mb == 0 {
+        problems.push("TAZKO_MAX_VIDEO_MB must be at least 1".into());
+    }
+
     let public_url = get("TAZKO_PUBLIC_URL")
         .unwrap_or("")
         .trim_end_matches('/')
@@ -218,6 +230,7 @@ pub fn from_map(map: &BTreeMap<String, String>) -> Result<Settings, ConfigError>
         google_client_secret: Secret::new(get("TAZKO_GOOGLE_CLIENT_SECRET").unwrap()),
         secret,
         max_upload_mb,
+        max_video_mb,
         smtp,
         webhooks_allow_local: matches!(
             get("TAZKO_WEBHOOKS_ALLOW_LOCAL"),
@@ -443,6 +456,7 @@ mod tests {
         assert_eq!(s.host.to_string(), "127.0.0.1");
         assert_eq!(s.port, 8791);
         assert_eq!(s.max_upload_mb, 10);
+        assert_eq!(s.max_video_mb, 100);
         assert!(s.smtp.is_none());
         assert!(s.secret.is_none());
         assert_eq!(s.client_ip_header, "cf-connecting-ip");

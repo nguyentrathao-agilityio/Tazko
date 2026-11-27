@@ -12,6 +12,14 @@ struct Format {
     what: &'static str,
 }
 
+fn iso_media(b: &[u8]) -> bool {
+    b.len() >= 12 && &b[4..8] == b"ftyp"
+}
+
+fn webm(b: &[u8]) -> bool {
+    b.starts_with(b"\x1a\x45\xdf\xa3")
+}
+
 const FORMATS: &[Format] = &[
     Format {
         magic: |b| b.starts_with(b"\x89PNG\r\n\x1a\n"),
@@ -63,11 +71,25 @@ const FORMATS: &[Format] = &[
         what: "an office document",
     },
     Format {
-        magic: |b| b.len() >= 12 && &b[4..8] == b"ftyp",
-        exts: &["mp4", "m4v", "mov", "m4a"],
-        mime: "application/octet-stream",
+        magic: iso_media,
+        exts: &["mp4", "m4v", "mov"],
+        mime: "video/mp4",
         image: false,
         what: "a video",
+    },
+    Format {
+        magic: iso_media,
+        exts: &["m4a"],
+        mime: "audio/mp4",
+        image: false,
+        what: "a sound recording",
+    },
+    Format {
+        magic: webm,
+        exts: &["webm"],
+        mime: "video/webm",
+        image: false,
+        what: "a WebM video",
     },
 ];
 
@@ -89,6 +111,25 @@ const IMAGE_NAMES: &[&str] = &[
 ];
 
 const NEVER: &[&str] = &["svg", "svgz", "html", "htm", "xhtml", "xml", "js", "mjs"];
+
+pub fn is_media(mime: &str) -> bool {
+    mime.starts_with("video/") || mime.starts_with("audio/")
+}
+
+fn media_format(name: &str) -> Option<&'static Format> {
+    let ext = extension(name)?;
+    FORMATS
+        .iter()
+        .find(|f| is_media(f.mime) && f.exts.contains(&ext.as_str()))
+}
+
+pub fn is_media_name(name: &str) -> bool {
+    media_format(name).is_some()
+}
+
+pub fn could_be_media(name: &str, head: &[u8]) -> bool {
+    media_format(name).is_none_or(|f| head.len() < 12 || (f.magic)(head))
+}
 
 pub fn extension(name: &str) -> Option<String> {
     let (stem, ext) = name.rsplit_once('.')?;
@@ -112,7 +153,11 @@ pub fn check(name: &str, bytes: &[u8]) -> Result<Kind, String> {
         ));
     }
 
-    if let Some(f) = FORMATS.iter().find(|f| (f.magic)(bytes)) {
+    let matching: Vec<&Format> = FORMATS.iter().filter(|f| (f.magic)(bytes)).collect();
+    let named = matching
+        .iter()
+        .find(|f| ext.is_some_and(|e| f.exts.contains(&e)));
+    if let Some(f) = named.or(matching.first()) {
         return match ext {
             Some(e) if !f.exts.contains(&e) => Err(format!(
                 "this file is named .{e} but it is really {}; rename it or upload another file",
@@ -193,6 +238,27 @@ mod tests {
         assert!(check("setup.exe", b"MZ\x90\0").is_err());
         assert!(check("data.csv", b"a,b\0c").is_err());
         assert!(check("blob", b"\0\x01\x02").is_err());
+    }
+
+    #[test]
+    fn videos_and_sound_get_a_type_browsers_can_play() {
+        let mp4 = b"\0\0\0\x18ftypisom\0\0\x02\0";
+        assert_eq!(check("clip.mp4", mp4).unwrap().mime, "video/mp4");
+        assert_eq!(check("clip.MOV", mp4).unwrap().mime, "video/mp4");
+        assert_eq!(check("talk.m4a", mp4).unwrap().mime, "audio/mp4");
+        assert_eq!(
+            check("clip.webm", b"\x1a\x45\xdf\xa3\x9f\x42\x86\x81")
+                .unwrap()
+                .mime,
+            "video/webm"
+        );
+        let e = check("clip.webm", mp4).unwrap_err();
+        assert!(e.contains("really a video"), "{e}");
+        let e = check("clip.mp4", PNG).unwrap_err();
+        assert!(e.contains("really a PNG"), "{e}");
+        assert!(is_media_name("Demo.MP4") && !is_media_name("demo.png"));
+        assert!(could_be_media("a.mp4", mp4) && !could_be_media("a.mp4", &[b'x'; 64]));
+        assert!(could_be_media("a.mp4", b"short") && could_be_media("a.png", b"anything"));
     }
 
     #[test]

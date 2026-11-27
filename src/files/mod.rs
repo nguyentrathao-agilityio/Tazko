@@ -1,4 +1,5 @@
 pub mod kind;
+mod media;
 pub mod store;
 
 use std::collections::HashMap;
@@ -47,12 +48,52 @@ pub fn routes() -> Router<AppState> {
 
 type Params = Path<HashMap<String, String>>;
 
+pub fn file_body(file: tokio::fs::File, len: u64) -> Body {
+    use tokio::io::AsyncReadExt;
+    const CHUNK: u64 = 64 * 1024;
+    Body::from_stream(futures_util::stream::unfold(
+        (file, len),
+        |(mut file, left)| async move {
+            if left == 0 {
+                return None;
+            }
+
+            let mut buf = vec![0; CHUNK.min(left) as usize];
+            match file.read(&mut buf).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    buf.truncate(n);
+                    Some((Ok::<_, std::io::Error>(buf), (file, left - n as u64)))
+                }
+                Err(e) => Some((Err(e), (file, 0))),
+            }
+        },
+    ))
+}
+
 pub fn org_dir(state: &AppState, slug: &str) -> PathBuf {
     state.dbs.layout().orgs.join(slug)
 }
 
 pub fn max_bytes(state: &AppState) -> u64 {
     u64::from(state.settings.max_upload_mb) * MB
+}
+
+pub fn max_media_bytes(state: &AppState) -> u64 {
+    u64::from(
+        state
+            .settings
+            .max_video_mb
+            .max(state.settings.max_upload_mb),
+    ) * MB
+}
+
+fn max_bytes_for(state: &AppState, name: &str) -> u64 {
+    if kind::is_media_name(name) {
+        max_media_bytes(state)
+    } else {
+        max_bytes(state)
+    }
 }
 
 pub fn size_text(n: u64) -> String {
@@ -88,6 +129,7 @@ async fn storage(State(state): State<AppState>, co: Company) -> Result<Json<Valu
     let used = joined(tokio::task::spawn_blocking(move || dir_size(&dir)).await)?;
     Ok(Json(json!({
         "max_file": max_bytes(&state),
+        "max_video": max_media_bytes(&state),
         "used": used,
         "limit": limit,
     })))
@@ -167,8 +209,18 @@ pub fn too_large(max: u64) -> ApiError {
 }
 
 pub async fn read_limited(body: Body, max: u64) -> Result<Vec<u8>, ApiError> {
+    read_checked(body, max, None, |_| true).await
+}
+
+async fn read_checked(
+    body: Body,
+    max: u64,
+    expected: Option<u64>,
+    head_ok: impl Fn(&[u8]) -> bool,
+) -> Result<Vec<u8>, ApiError> {
     let mut body = body;
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(expected.unwrap_or(0).min(max).min(8 * MB) as usize);
+    let mut checked = false;
     while let Some(frame) = body.frame().await {
         let frame = frame.map_err(|_| bad("the upload was interrupted; try again"))?;
         if let Ok(data) = frame.into_data() {
@@ -177,6 +229,14 @@ pub async fn read_limited(body: Body, max: u64) -> Result<Vec<u8>, ApiError> {
             }
 
             out.extend_from_slice(&data);
+            if !checked && out.len() >= 64 {
+                checked = true;
+                if !head_ok(&out) {
+                    return Err(ApiError::Unsupported(
+                        "this file is named like a video but it is not one".into(),
+                    ));
+                }
+            }
         }
     }
     Ok(out)
@@ -192,17 +252,21 @@ async fn upload(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
     let card = path_id(&params, "card")?;
-    let max = max_bytes(&state);
-    if declared_length(&headers).is_some_and(|n| n > max) {
+    let name = kind::clean_name(q.name.as_deref().unwrap_or(""));
+    let max = max_bytes_for(&state, &name);
+    let declared = declared_length(&headers);
+    if declared.is_some_and(|n| n > max) {
         return Err(too_large(max));
     }
 
-    let bytes = read_limited(body, max).await?;
+    let bytes = read_checked(body, max, declared, |head| {
+        kind::could_be_media(&name, head)
+    })
+    .await?;
     if bytes.is_empty() {
         return Err(bad("this file is empty"));
     }
 
-    let name = kind::clean_name(q.name.as_deref().unwrap_or(""));
     let found = kind::check(&name, &bytes).map_err(ApiError::Unsupported)?;
     let limit = storage_limit(&state, board.project.company.org_id).await?;
     let dir = org_dir(&state, &board.project.company.slug);
@@ -403,6 +467,7 @@ pub fn disposition(inline: bool, name: &str) -> String {
 async fn download(
     State(state): State<AppState>,
     board: Board,
+    headers: HeaderMap,
     Path(params): Params,
     Query(q): Query<DownloadQuery>,
 ) -> Result<Response, ApiError> {
@@ -418,6 +483,19 @@ async fn download(
         return Err(ApiError::NotFound);
     };
     let dir = org_dir(&state, &board.project.company.slug);
+    if kind::is_media(&found.mime) {
+        let path = store::path_of(&dir, &hash).ok_or(ApiError::NotFound)?;
+        return media::response(
+            &path,
+            &hash,
+            &found.mime,
+            &found.name,
+            q.download.is_none(),
+            &headers,
+        )
+        .await;
+    }
+
     let bytes = read_stored(&dir, &hash).await?;
     let image = found.mime.starts_with("image/");
     let inline = image && q.download.is_none();
@@ -425,10 +503,14 @@ async fn download(
 }
 
 pub fn file_response(bytes: Vec<u8>, mime: &str, name: &str, inline: bool) -> Response {
+    let mut res = (StatusCode::OK, bytes).into_response();
+    safe_file_headers(res.headers_mut(), mime, name, inline);
+    res
+}
+
+pub(crate) fn safe_file_headers(h: &mut HeaderMap, mime: &str, name: &str, inline: bool) {
     let mime =
         HeaderValue::from_str(mime).unwrap_or(HeaderValue::from_static("application/octet-stream"));
-    let mut res = (StatusCode::OK, bytes).into_response();
-    let h = res.headers_mut();
     h.insert(header::CONTENT_TYPE, mime);
     h.insert(
         header::CONTENT_DISPOSITION,
@@ -451,7 +533,6 @@ pub fn file_response(bytes: Vec<u8>, mime: &str, name: &str, inline: bool) -> Re
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, max-age=300"),
     );
-    res
 }
 
 async fn remove(

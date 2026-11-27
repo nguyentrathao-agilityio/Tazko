@@ -342,29 +342,12 @@ pub fn target() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
-const CHUNK: usize = 64 * 1024;
-
 async fn download() -> Result<Response, ApiError> {
-    use tokio::io::AsyncReadExt;
-
     let path = std::env::current_exe().map_err(|_| ApiError::NotFound)?;
     let file = tokio::fs::File::open(path)
         .await
         .map_err(|_| ApiError::NotFound)?;
     let size = file.metadata().await.map_err(|_| ApiError::NotFound)?.len();
-    let chunks =
-        futures_util::stream::unfold(Some(file), |file: Option<tokio::fs::File>| async move {
-            let mut file = file?;
-            let mut buf = vec![0u8; CHUNK];
-            match file.read(&mut buf).await {
-                Ok(0) => None,
-                Ok(n) => {
-                    buf.truncate(n);
-                    Some((Ok(axum::body::Bytes::from(buf)), Some(file)))
-                }
-                Err(e) => Some((Err(e), None)),
-            }
-        });
     Ok((
         [
             (header::CONTENT_TYPE, "application/octet-stream".to_string()),
@@ -375,7 +358,7 @@ async fn download() -> Result<Response, ApiError> {
             ),
             (header::CACHE_CONTROL, "no-cache".to_string()),
         ],
-        axum::body::Body::from_stream(chunks),
+        crate::files::file_body(file, size),
     )
         .into_response())
 }

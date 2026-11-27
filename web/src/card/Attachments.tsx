@@ -3,13 +3,13 @@ import { api, HttpError, upload } from '@/http'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { ago } from '@/card/look'
-import { extOf, fileSize, fileUrl, shortUrl, shownName, sizeShort, usage } from '@/card/files'
+import { extOf, fileSize, fileUrl, isMediaName, playerOf, shortUrl, shownName, sizeShort, usage } from '@/card/files'
 import type { CardDetail } from '@/card/types'
 import { ENTER } from '@/keys/keyNames'
 
 const SHOWN = 3
 
-type Storage = { max_file: number; used: number; limit: number | null }
+type Storage = { max_file: number; max_video?: number; used: number; limit: number | null }
 
 export function AttachmentsSection({
   card,
@@ -46,39 +46,43 @@ export function AttachmentsSection({
         const isCover = card.cover_image === a.id
         const isLink = a.kind === 'link'
         const href = isLink ? a.url ?? '#' : fileUrl(base, a.id, !a.image)
+        const Player = isLink ? null : playerOf(a.type)
         return (
-          <div className="atr" key={a.id}>
-            <a className="thumb" href={href} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden="true">
-              {isLink ? <Icon name="link" /> : a.image ? <img src={fileUrl(base, a.id)} alt="" loading="lazy" /> : extOf(a.name)}
-            </a>
-            <div className="meta">
-              <b title={isLink ? a.url ?? '' : a.name}>
-                <a className="alk" href={href} target="_blank" rel="noopener noreferrer">
-                  {shownName(a)}
-                </a>
-              </b>
-              <small>
-                {isLink ? (a.name.startsWith('http') ? t('attach.link') : shortUrl(a.url ?? '')) : fileSize(a.size)} · {t('attach.added', { when: ago(a.created_at).replace(/^Just/, 'just') })}
-              </small>
-              {isCover && <span className="pill accent">{t('card.cover')}</span>}
-            </div>
-            {edit && (
-              <div className="row" style={{ flexWrap: 'nowrap' }}>
-                {a.image && (
-                  <button type="button" className="btn sm" onClick={() => void run(() => api(isCover ? 'DELETE' : 'PUT', `${base}/attachments/${a.id}/cover`))}>
-                    {isCover ? t('cardPop.removeCover') : t('attach.makeCover')}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="ibtn sm"
-                  aria-label={t('attach.delete', { name: a.name })}
-                  onClick={() => void run(() => api('DELETE', `${base}/attachments/${a.id}`))}
-                >
-                  <Icon name="trash" />
-                </button>
+          <div key={a.id}>
+            <div className="atr">
+              <a className="thumb" href={href} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden="true">
+                {isLink ? <Icon name="link" /> : a.image ? <img src={fileUrl(base, a.id)} alt="" loading="lazy" /> : extOf(a.name)}
+              </a>
+              <div className="meta">
+                <b title={isLink ? a.url ?? '' : a.name}>
+                  <a className="alk" href={href} target="_blank" rel="noopener noreferrer">
+                    {shownName(a)}
+                  </a>
+                </b>
+                <small>
+                  {isLink ? (a.name.startsWith('http') ? t('attach.link') : shortUrl(a.url ?? '')) : fileSize(a.size)} · {t('attach.added', { when: ago(a.created_at).replace(/^Just/, 'just') })}
+                </small>
+                {isCover && <span className="pill accent">{t('card.cover')}</span>}
               </div>
-            )}
+              {edit && (
+                <div className="row" style={{ flexWrap: 'nowrap' }}>
+                  {a.image && (
+                    <button type="button" className="btn sm" onClick={() => void run(() => api(isCover ? 'DELETE' : 'PUT', `${base}/attachments/${a.id}/cover`))}>
+                      {isCover ? t('cardPop.removeCover') : t('attach.makeCover')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="ibtn sm"
+                    aria-label={t('attach.delete', { name: a.name })}
+                    onClick={() => void run(() => api('DELETE', `${base}/attachments/${a.id}`))}
+                  >
+                    <Icon name="trash" />
+                  </button>
+                </div>
+              )}
+            </div>
+            {Player && <Player className="atv" src={fileUrl(base, a.id)} controls preload="metadata" playsInline aria-label={t('attach.play', { name: a.name })} />}
           </div>
         )
       })}
@@ -124,8 +128,9 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
 
   const pick = (file: File | undefined) => {
     if (!file) return
-    if (storage && file.size > storage.max_file) {
-      setError(t('attach.tooLarge', { size: sizeShort(storage.max_file) }))
+    const limit = storage && (isMediaName(file.name) ? (storage.max_video ?? storage.max_file) : storage.max_file)
+    if (limit && file.size > limit) {
+      setError(t('attach.tooLarge', { size: sizeShort(limit) }))
       return
     }
 
@@ -155,6 +160,7 @@ export function AttachPop({ base, path, onDone }: { base: string; path: string; 
         {storage?.limit
           ? t('attach.hintLimit', { max, usage: usage(storage.used, storage.limit) })
           : t('attach.hint', { max })}
+        {storage?.max_video && storage.max_video > storage.max_file && ` ${t('attach.videoHint', { max: sizeShort(storage.max_video) })}`}
       </p>
       {error && (
         <p className="error" role="alert" style={{ margin: '0 8px 10px' }}>

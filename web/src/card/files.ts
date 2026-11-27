@@ -44,3 +44,7 @@ export function extOf(name: string): string {
 export function fileUrl(base: string, id: number, download = false): string {
   return `${base}/attachments/${id}${download ? '?download=1' : ''}`
 }
+
+export const isMediaName = (name: string): boolean => /\.(mp4|m4v|mov|m4a|webm)$/i.test(name)
+
+export const playerOf = (type: string): 'video' | 'audio' | null => (type.startsWith('video/') ? 'video' : type.startsWith('audio/') ? 'audio' : null)
