@@ -62,7 +62,7 @@ Tazko waits 10 seconds for an answer and does not follow redirects. Any `2xx` an
 
 ## Checking the signature
 
-When a webhook is added, Tazko shows its signing secret (`whsec_…`) once. Keep it in your receiver's settings. If it is lost, delete the webhook and add it again.
+When a webhook is added, Tazko shows its signing secret (`whsec_…`) once. Keep it in your receiver's settings. If it is lost or leaked, open Integrations → Webhooks → Deliveries and press **New secret** (or `POST /api/v1/c/{company}/webhooks/{hook}/secret`): Tazko shows a new secret once, deliveries sent from then on are signed with it, and the old one stops matching, so update the receiver right away. Only the owner who added the webhook can do this, while they are still a company owner (or with their manage token that is not limited to projects); the change is written to the audit log.
 
 `Tazko-Signature` is `t=<unix seconds>,v1=<hex>`, where `<hex>` is HMAC-SHA256 with the secret as the key over `<t>.<raw body>`. To check a message:
 

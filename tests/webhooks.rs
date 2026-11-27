@@ -527,12 +527,16 @@ async fn owners_can_rotate_a_signing_secret_and_the_old_one_stops_verifying() {
             )
         })
         .await;
+    let refused = call(&w.app, &w.dev, Method::POST, &path, None).await;
     assert_eq!(
-        call(&w.app, &w.dev, Method::POST, &path, None)
-            .await
-            .status(),
+        refused.status(),
         StatusCode::FORBIDDEN,
         "another owner cannot take over the secret"
+    );
+    assert!(
+        common::body_text(refused)
+            .await
+            .contains("only the owner who added this webhook")
     );
     assert_eq!(
         call(
