@@ -52,7 +52,7 @@ pub async fn list(
         .control()
         .read(move |c| {
             let mut stmt = c.prepare(
-                "SELECT i.id, i.email, i.project_role, coalesce(nullif(u.name, ''), u.email), i.created_at
+                "SELECT i.id, i.email, i.project_role, coalesce(nullif(u.name, ''), u.email), i.created_at, i.expires_at
                  FROM invites i LEFT JOIN users u ON u.id = i.created_by
                  WHERE i.org_id = ?1 AND i.project_id = ?2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
                    AND i.expires_at > unixepoch()
@@ -66,6 +66,7 @@ pub async fn list(
                         "role": r.get::<_, String>(2)?,
                         "invited_by": r.get::<_, Option<String>>(3)?,
                         "created_at": r.get::<_, i64>(4)?,
+                        "expires_at": r.get::<_, i64>(5)?,
                     }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;

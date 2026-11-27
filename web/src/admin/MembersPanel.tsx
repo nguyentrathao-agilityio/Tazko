@@ -3,7 +3,7 @@ import { invitedMessage, useEmailEnabled, wantsEmail, type InviteResult } from '
 import type { FormEvent } from 'react'
 import { api } from '@/http'
 import { t } from '@/i18n'
-import { when } from '@/ui/format'
+import { expiresIn, when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { AccountPill, Person } from '@/ui/people'
@@ -205,7 +205,9 @@ export function InviteTable({
                 <span className="pill">{v.role}</span>
               </td>
               <td className="muted">{v.invited_by ?? '—'}</td>
-              <td className="muted">{when(v.created_at)}</td>
+              <td className="muted">
+                {when(v.created_at)} · {expiresIn(v.expires_at)}
+              </td>
               <td>
                 <button type="button" className="btn sm" onClick={() => onRevoke(v)}>
                   {t('common.revoke')}

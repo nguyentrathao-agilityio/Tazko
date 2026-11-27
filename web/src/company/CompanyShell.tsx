@@ -99,55 +99,58 @@ export function CompanyShell({
   const owner = isOwner(company.role)
   const palette = usePalette()
   const personal = usePersonal(go, base)
+  const role = me.is_super_admin ? t('rail.superAdmin') : t(companyRoleLabel(company.role))
 
   return (
     <div className="shell">
       <aside className="rail">
         <Switcher me={me} company={company} go={go} />
-        <Link to={base} go={go} className={`nav${active === 'home' ? ' on' : ''}`}>
-          <Icon name="grid" />
-          {t('nav.projects')}
-        </Link>
-        <Link to={`${base}/my-cards`} go={go} className={`nav${active === 'mycards' ? ' on' : ''}`}>
-          <Icon name="checksq" />
-          {t('nav.myCards')}
-        </Link>
-        {owner && (
-          <>
-            <Link to={`${base}/projects`} go={go} className={`nav${active === 'projects' ? ' on' : ''}`}>
-              <Icon name="building" />
-              {t('nav.manageProjects')}
-            </Link>
-            <Link to={`${base}/settings`} go={go} className={`nav${active === 'settings' ? ' on' : ''}`}>
-              <Icon name="gear" />
-              {t('nav.companySettings')}
-            </Link>
-            <Link to={`${base}/integrations`} go={go} className={`nav${active === 'integrations' ? ' on' : ''}`}>
-              <Icon name="bolt" />
-              {t('nav.integrations')}
-            </Link>
-          </>
-        )}
-        <div className="grow" />
-        <Link to={`${base}/me`} go={go} className={`nav me${active === 'me' ? ' on' : ''}`}>
-          <Avatar name={name} />
-          <div>
-            <b>{name}</b>
-            <small>
-              {me.is_super_admin ? t('rail.superAdmin') : t('nav.member')} · {t('settings.title')}
-            </small>
-          </div>
-        </Link>
-        {palette.open && (
-          <Palette
-            items={personalCommands(personal)}
-            onClose={palette.close}
-          />
-        )}
-        <button type="button" className="nav" onClick={onSignOut}>
-          <Icon name="out" />
-          {t('home.signOut')}
-        </button>
+        <div className="railnav">
+          <Link to={base} go={go} className={`nav${active === 'home' ? ' on' : ''}`}>
+            <Icon name="grid" />
+            {t('nav.projects')}
+          </Link>
+          <Link to={`${base}/my-cards`} go={go} className={`nav${active === 'mycards' ? ' on' : ''}`}>
+            <Icon name="checksq" />
+            {t('nav.myCards')}
+          </Link>
+          {owner && (
+            <>
+              <Link to={`${base}/projects`} go={go} className={`nav${active === 'projects' ? ' on' : ''}`}>
+                <Icon name="building" />
+                {t('nav.manageProjects')}
+              </Link>
+              <Link to={`${base}/settings`} go={go} className={`nav${active === 'settings' ? ' on' : ''}`}>
+                <Icon name="gear" />
+                {t('nav.companySettings')}
+              </Link>
+              <Link to={`${base}/integrations`} go={go} className={`nav${active === 'integrations' ? ' on' : ''}`}>
+                <Icon name="bolt" />
+                {t('nav.integrations')}
+              </Link>
+            </>
+          )}
+          <div className="grow" />
+          <Link to={`${base}/me`} go={go} className={`nav me${active === 'me' ? ' on' : ''}`} label={`${name} · ${role} · ${t('settings.title')}`}>
+            <Avatar name={name} />
+            <div>
+              <b>{name}</b>
+              <small>
+                {role} · {t('settings.title')}
+              </small>
+            </div>
+          </Link>
+          {palette.open && (
+            <Palette
+              items={personalCommands(personal)}
+              onClose={palette.close}
+            />
+          )}
+          <button type="button" className="nav" onClick={onSignOut}>
+            <Icon name="out" />
+            {t('home.signOut')}
+          </button>
+                </div>
       </aside>
       <main className="page">{children}</main>
     </div>

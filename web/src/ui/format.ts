@@ -1,3 +1,5 @@
+import { t } from '@/i18n'
+
 const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' })
 const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' })
 const dayYear = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -11,6 +13,13 @@ export function when(unix: number | null | undefined, now: Date = new Date()): s
   if (ms >= start - 86_400_000) return `Yesterday ${time.format(d)}`
   if (d.getFullYear() === now.getFullYear()) return `${day.format(d)} ${time.format(d)}`
   return dayYear.format(d)
+}
+
+export function expiresIn(unix: number, now: Date = new Date()): string {
+  const days = Math.floor((unix * 1000 - now.getTime()) / 86_400_000)
+  if (days < 1) return t('invite.expiresSoon')
+  if (days === 1) return t('invite.expiresTomorrow')
+  return t('invite.expiresIn', { days })
 }
 
 export function bytes(n: number | null | undefined): string {

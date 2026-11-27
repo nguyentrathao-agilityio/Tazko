@@ -70,7 +70,7 @@ beforeEach(() => {
             { id: 1, name: 'Mai Tran', email: 'mai@example.com', role, last_active: null, you: true },
             { id: 2, name: 'Jo Lee', email: 'jo@gmail.com', role: 'owner', last_active: null, you: false },
           ],
-          invites: [{ id: 5, email: 'new@example.com', role: 'member', invited_by: 'Jo Lee', created_at: 1_700_000_000 }],
+          invites: [{ id: 5, email: 'new@example.com', role: 'member', invited_by: 'Jo Lee', created_at: 1_700_000_000, expires_at: Math.floor(Date.now() / 1000) + 5 * 86_400 + 60 }],
           can: project(role).can,
         })
       if (url === '/api/v1/c/acme/projects')
@@ -118,6 +118,7 @@ describe('projects', () => {
 
   it('lets owners invite, change roles and save settings', async () => {
     open('/c/acme/p/4/members')
+    expect(await screen.findByText(/expires in 5 days/)).toBeTruthy()
     fireEvent.change(await screen.findByLabelText('Email address'), { target: { value: 'x@example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))

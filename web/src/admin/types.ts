@@ -26,6 +26,7 @@ export type Invite = {
   role: CompanyRole
   invited_by: string | null
   created_at: number
+  expires_at: number
   company_slug: string
   company_name: string
 }
@@ -58,7 +59,7 @@ export type AuditEntry = {
   id: number
   at: number
   action: string
-  kind: 'refused' | 'company' | 'invites' | 'people'
+  kind: 'refused' | 'company' | 'projects' | 'invites' | 'integrations' | 'people'
   target: string | null
   detail: Record<string, unknown>
   actor: string | null

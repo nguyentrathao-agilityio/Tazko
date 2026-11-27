@@ -4,7 +4,7 @@ import type { FormEvent } from 'react'
 import type { Company } from '@/api'
 import { api } from '@/http'
 import { t } from '@/i18n'
-import { when } from '@/ui/format'
+import { expiresIn, when } from '@/ui/format'
 import { Icon } from '@/ui/Icon'
 import { displayName } from '@/ui/names'
 import { AccountPill, Avatar } from '@/ui/people'
@@ -172,7 +172,9 @@ export function ProjectMembers({ company, project, onChange }: { company: Compan
                       <span className="pill">{t(`projectRole.${v.role}`)}</span>
                     </td>
                     <td className="muted">{v.invited_by ?? '—'}</td>
-                    <td className="muted">{when(v.created_at)}</td>
+                    <td className="muted">
+                      {when(v.created_at)} · {expiresIn(v.expires_at)}
+                    </td>
                     <td>
                       {can.invite && (
                         <button type="button" className="btn sm" onClick={() => revoke(v)}>

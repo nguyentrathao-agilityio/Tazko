@@ -22,6 +22,7 @@ pub fn kind(action: &str) -> &'static str {
         a if a.starts_with("company_") => "company",
         a if a.starts_with("project_") || a == "board_imported" => "projects",
         a if a.starts_with("invite_") => "invites",
+        a if a.starts_with("api_token_") || a.starts_with("webhook_") => "integrations",
         _ => "people",
     }
 }
@@ -46,6 +47,11 @@ pub fn actions_of(kind: &str) -> Option<&'static [&'static str]> {
             "board_imported",
         ]),
         "invites" => Some(&["invite_created", "invite_revoked"]),
+        "integrations" => Some(&[
+            "api_token_created",
+            "api_token_revoked",
+            "webhook_secret_rotated",
+        ]),
         "people" => Some(&[
             "role_changed",
             "member_removed",
@@ -55,5 +61,19 @@ pub fn actions_of(kind: &str) -> Option<&'static [&'static str]> {
             "person_enabled",
         ]),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_and_webhook_actions_are_filed_under_integrations() {
+        for action in actions_of("integrations").unwrap() {
+            assert_eq!(kind(action), "integrations", "{action}");
+        }
+        assert_eq!(kind("webhook_secret_rotated"), "integrations");
+        assert_eq!(kind("invite_created"), "invites");
     }
 }

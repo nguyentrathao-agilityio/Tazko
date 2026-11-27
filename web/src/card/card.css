@@ -959,6 +959,10 @@
     padding-top: 56px;
   }
 
+  .cm.nocv .cm-t {
+    padding-right: 0;
+  }
+
   .cm-cm,
   .cm.nocv .cm-cm {
     overflow: visible;
