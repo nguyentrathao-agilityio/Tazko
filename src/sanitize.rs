@@ -325,11 +325,15 @@ pub fn clean_html(input: &str) -> String {
 }
 
 pub fn markdown_to_html(md: &str) -> String {
-    use pulldown_cmark::{Options, Parser, html};
+    use pulldown_cmark::{Event, Options, Parser, html};
     let mut raw = String::new();
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_STRIKETHROUGH);
-    html::push_html(&mut raw, Parser::new_ext(md, opts));
+    let events = Parser::new_ext(md, opts).map(|e| match e {
+        Event::SoftBreak => Event::HardBreak,
+        e => e,
+    });
+    html::push_html(&mut raw, events);
     let raw = raw
         .replace("<h1>", "<h2>")
         .replace("</h1>", "</h2>")
@@ -463,6 +467,14 @@ mod tests {
             "[x](javascript:alert(1)) <script>alert(1)</script> <img src=x onerror=alert(1)>",
         );
         assert!(!has_danger(&out), "{out}");
+    }
+
+    #[test]
+    fn markdown_keeps_single_line_breaks() {
+        assert_eq!(
+            markdown_to_html("first line\nsecond line\n\nnew paragraph"),
+            "<p>first line<br>\nsecond line</p>\n<p>new paragraph</p>\n"
+        );
     }
 
     #[test]
