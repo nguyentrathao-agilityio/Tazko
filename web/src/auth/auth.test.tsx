@@ -32,7 +32,7 @@ describe('Refused', () => {
   it('names the refused email and offers another account', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'jo.lee@gmail.com', reason: 'not_invited' }))))
     render(<Refused />)
-    expect(screen.getByRole('heading', { name: 'This account is not invited' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'This account is not invited' })).toBeTruthy()
     expect(await screen.findByText('jo.lee@gmail.com')).toBeTruthy()
     expect(screen.getByText(/invite this exact email address/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Try another Google account' }).getAttribute('href')).toBe('/auth/google/start')
@@ -41,13 +41,17 @@ describe('Refused', () => {
   it('explains an expired invitation', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'x@example.com', reason: 'invite_expired' }))))
     render(<Refused />)
-    expect(await screen.findByText(/invitation has expired/)).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Your invitation has expired' })).toBeTruthy()
+    expect(screen.getByText(/invitations last 7 days/)).toBeTruthy()
+    expect(screen.getByText(/The invitation for/).textContent).toContain('x@example.com')
+    expect(screen.queryByText(/not on the list/)).toBeNull()
   })
 
   it('explains a disabled account', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ email: 'x@example.com', reason: 'disabled' }))))
     render(<Refused />)
-    expect(await screen.findByText(/turned off/)).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'This account is turned off' })).toBeTruthy()
+    expect(screen.getByText(/Ask your administrator to turn it back on/)).toBeTruthy()
   })
 
   it('still renders when the note has expired', async () => {

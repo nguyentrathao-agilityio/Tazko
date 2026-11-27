@@ -312,7 +312,9 @@ async fn rotate_secret(
     match maker {
         None => return Err(ApiError::NotFound),
         Some(m) if m != Some(by) => {
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::ForbiddenBecause(
+                "only the owner who added this webhook can replace its secret".into(),
+            ));
         }
         Some(_) => {}
     }
