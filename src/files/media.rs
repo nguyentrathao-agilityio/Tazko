@@ -106,10 +106,10 @@ pub async fn response(
     if let Ok(v) = HeaderValue::from_str(&etag) {
         h.insert(header::ETAG, v);
     }
-    if status == StatusCode::PARTIAL_CONTENT {
-        if let Ok(v) = HeaderValue::from_str(&format!("bytes {start}-{}/{size}", start + len - 1)) {
-            h.insert(header::CONTENT_RANGE, v);
-        }
+    if status == StatusCode::PARTIAL_CONTENT
+        && let Ok(v) = HeaderValue::from_str(&format!("bytes {start}-{}/{size}", start + len - 1))
+    {
+        h.insert(header::CONTENT_RANGE, v);
     }
     Ok(res)
 }
