@@ -70,6 +70,11 @@ pub static CONTROL: Migrations = Migrations {
             name: "0009_invite_expiry.sql",
             sql: include_str!("../../migrations/control/0009_invite_expiry.sql"),
         },
+        Migration {
+            version: 10,
+            name: "0010_deleted_accounts.sql",
+            sql: include_str!("../../migrations/control/0010_deleted_accounts.sql"),
+        },
     ],
 };
 

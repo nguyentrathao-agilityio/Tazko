@@ -847,3 +847,109 @@ async fn a_template_from_a_restricted_board_keeps_its_structure_but_no_cards() {
         "no card titles from a restricted board reach the template: {template}"
     );
 }
+
+#[tokio::test]
+async fn cleaning_removes_cards_from_old_templates_of_restricted_boards_and_their_shared_copies() {
+    let w = world().await;
+    fill(&w).await;
+    let saved = req(
+        &w.app,
+        &w.lead,
+        Method::POST,
+        &format!("{A}/boards/{}/save-template", w.board),
+        Some(json!({ "name": "Old private plan" })),
+    )
+    .await;
+    let id = saved["id"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("c:")
+        .to_string();
+    let offer = format!("{A}/templates/{id}/offer");
+    assert_eq!(
+        call(&w.app, &w.admin, Method::PUT, &offer, None)
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+    req(
+        &w.app,
+        &w.lead,
+        Method::PUT,
+        &format!("{A}/boards/{}/access", w.board),
+        Some(json!({ "restricted": true, "people": [] })),
+    )
+    .await;
+
+    let dbs = &w.app.state.dbs;
+    let preview = tazko::templates::clean::restricted(dbs, false)
+        .await
+        .unwrap();
+    assert_eq!(preview.len(), 1);
+    assert_eq!(preview[0].name, "Old private plan");
+    assert_eq!(preview[0].shared_copies, 1);
+    assert!(preview[0].cards > 0);
+    let cards_in = |listed: &Value, name: &str| -> usize {
+        listed["templates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|t| t["name"] == name)
+            .flat_map(|t| t["lists"].as_array().unwrap().clone())
+            .map(|l| l["cards"].as_array().unwrap().len())
+            .sum()
+    };
+    let before = req(
+        &w.app,
+        &w.other,
+        Method::GET,
+        &format!("{B}/templates"),
+        None,
+    )
+    .await;
+    assert!(
+        cards_in(&before, "Old private plan") > 0,
+        "a preview changes nothing"
+    );
+
+    let applied = tazko::templates::clean::restricted(dbs, true)
+        .await
+        .unwrap();
+    assert_eq!(applied, preview);
+    let in_a = req(&w.app, &w.dev, Method::GET, &format!("{A}/templates"), None).await;
+    let in_b = req(
+        &w.app,
+        &w.other,
+        Method::GET,
+        &format!("{B}/templates"),
+        None,
+    )
+    .await;
+    assert_eq!(cards_in(&in_a, "Old private plan"), 0);
+    assert_eq!(cards_in(&in_b, "Old private plan"), 0);
+    let kept = in_b["templates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "Old private plan")
+        .unwrap();
+    assert!(!kept["lists"].as_array().unwrap().is_empty(), "lists stay");
+
+    let audited = w
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT count(*) FROM audit_log WHERE action = 'template_cards_removed'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+        })
+        .await;
+    assert_eq!(audited, 1);
+    assert!(
+        tazko::templates::clean::restricted(dbs, true)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

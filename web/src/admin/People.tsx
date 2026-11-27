@@ -3,6 +3,7 @@ import { api } from '@/http'
 import { t } from '@/i18n'
 import { when } from '@/ui/format'
 import { ErrorNote } from '@/ui/ErrorNote'
+import { TypeToConfirm } from '@/ui/TypeToConfirm'
 import { AccountPill, Person } from '@/ui/people'
 import { displayName } from '@/ui/names'
 import { PageHead } from '@/ui/PageHead'
@@ -12,11 +13,12 @@ import type { PersonRow } from '@/admin/types'
 import { useRun } from '@/projects/useRun'
 import { ADMIN_API } from '@/paths'
 
-export function People() {
+export function People({ me }: { me: number }) {
   const { data, error, reload } = useLoad(() => api<{ people: PersonRow[] }>('GET', `${ADMIN_API}/people`), 'people')
   const [q, setQ] = useState('')
   const { error: problem, run } = useRun(reload)
   const toast = useToast()
+  const [deleting, setDeleting] = useState<PersonRow | null>(null)
   const needle = q.trim().toLowerCase()
   const list = (data?.people ?? []).filter(
     (p) => !needle || p.name.toLowerCase().includes(needle) || p.email.toLowerCase().includes(needle),
@@ -52,6 +54,7 @@ export function People() {
               <th>{t('members.col.last')}</th>
               <th>{t('people.col.super')}</th>
               <th>{t('people.col.active')}</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -93,12 +96,19 @@ export function People() {
                       onClick={() => void change(p, { disabled: !p.disabled })}
                     />
                   </td>
+                  <td>
+                    {p.id !== me && (
+                      <button type="button" className="btn sm danger" aria-label={t('people.deleteFor', { name })} onClick={() => setDeleting(p)}>
+                        {t('people.delete')}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               )
             })}
             {data && list.length === 0 && (
               <tr>
-                <td colSpan={6} className="muted">
+                <td colSpan={7} className="muted">
                   {t('people.none')}
                 </td>
               </tr>
@@ -106,6 +116,23 @@ export function People() {
           </tbody>
         </table>
       </div>
+      {deleting && (
+        <TypeToConfirm
+          title={t('deletePerson.title', { name: displayName(deleting.name, deleting.email) })}
+          lead={t('deletePerson.lead')}
+          prompt={t('deletePerson.confirm')}
+          word={deleting.email}
+          url={`${ADMIN_API}/people/${deleting.id}`}
+          go={t('deletePerson.go')}
+          sameCase={false}
+          onClose={() => setDeleting(null)}
+          onDone={() => {
+            toast(t('toast.personDeleted', { name: displayName(deleting.name, deleting.email) }))
+            setDeleting(null)
+            reload()
+          }}
+        />
+      )}
     </>
   )
 }

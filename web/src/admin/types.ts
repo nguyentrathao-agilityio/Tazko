@@ -59,7 +59,7 @@ export type AuditEntry = {
   id: number
   at: number
   action: string
-  kind: 'refused' | 'company' | 'projects' | 'invites' | 'integrations' | 'people'
+  kind: 'refused' | 'company' | 'projects' | 'invites' | 'integrations' | 'templates' | 'people'
   target: string | null
   detail: Record<string, unknown>
   actor: string | null

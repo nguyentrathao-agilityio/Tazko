@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use tazko::admin::cli::Granted;
 use tazko::backup;
-use tazko::cli::{BackupAction, Cli, Command, DevAction};
+use tazko::cli::{BackupAction, Cli, Command, DevAction, TemplatesAction};
 use tazko::config::{self, DataLayout};
 use tazko::db::Databases;
 use tazko::state::AppState;
@@ -40,6 +40,14 @@ async fn run_server(command: Command) -> ExitCode {
             env_file,
         } => run_backup(action, data, to, keep_days, env_file),
         Command::Check { data, env_file } => run_check(data, env_file),
+        Command::Templates {
+            action:
+                TemplatesAction::CleanRestricted {
+                    apply,
+                    data,
+                    env_file,
+                },
+        } => clean_templates(apply, data, env_file.as_deref()).await,
         Command::Dev {
             action: DevAction::Seed { owner, env_file },
         } => dev_seed(owner.as_deref(), env_file.as_deref()).await,
@@ -204,6 +212,49 @@ async fn admin(email: &str, data: Option<PathBuf>, env_file: Option<&Path>) -> E
             eprintln!("tazko admin: {e}");
             return ExitCode::FAILURE;
         }
+    }
+
+    ExitCode::SUCCESS
+}
+
+async fn clean_templates(apply: bool, data: Option<PathBuf>, env_file: Option<&Path>) -> ExitCode {
+    let data = match data_dir(data, env_file) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let dbs = match Databases::open(DataLayout::new(&data)) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("tazko templates: cannot open {}: {e}", data.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let result = tazko::templates::clean::restricted(&dbs, apply).await;
+    dbs.close();
+    let found = match result {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("tazko templates: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    for f in &found {
+        println!(
+            "{}: template \"{}\" (from restricted board {}): {} cards, {} shared copies",
+            f.company, f.name, f.board, f.cards, f.shared_copies
+        );
+    }
+    let copies: usize = found.iter().map(|f| f.shared_copies).sum();
+    match (found.is_empty(), apply) {
+        (true, _) => println!("No template from a restricted board has cards."),
+        (false, true) => println!(
+            "Removed the cards from {} templates and {copies} shared copies.",
+            found.len()
+        ),
+        (false, false) => println!(
+            "{} templates and {copies} shared copies would lose their cards. Run again with --apply to remove them.",
+            found.len()
+        ),
     }
 
     ExitCode::SUCCESS

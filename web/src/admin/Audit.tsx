@@ -17,6 +17,7 @@ const filters: [string, MessageKey][] = [
   ['invites', 'audit.invites'],
   ['people', 'audit.people'],
   ['integrations', 'audit.integrations'],
+  ['templates', 'audit.templates'],
 ]
 
 function describe(e: AuditEntry): string {

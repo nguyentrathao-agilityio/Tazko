@@ -233,6 +233,16 @@ async fn every_admin_action_writes_an_audit_row() {
     let n = a.audit().await.len();
     ok(a.call(
         Method::DELETE,
+        &format!("/api/v1/admin/people/{jo}"),
+        Some(json!({ "confirm": "jo@gmail.com" })),
+    )
+    .await)
+    .await;
+    check.push((a.new_actions(n).await, vec!["person_deleted"]));
+
+    let n = a.audit().await.len();
+    ok(a.call(
+        Method::DELETE,
         "/api/v1/admin/companies/acme-studio",
         Some(json!({ "confirm": "acme-studio" })),
     )
@@ -836,4 +846,167 @@ async fn a_turned_off_person_is_invited_but_never_added_at_once() {
         })
         .await;
     assert_eq!(members, 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn deleting_a_person_removes_their_access_and_keeps_the_history() {
+    let a = admin().await;
+    let mine = format!("/api/v1/admin/people/{}", a.id);
+    assert_eq!(
+        a.call(
+            Method::DELETE,
+            &mine,
+            Some(json!({ "confirm": "root@example.com" }))
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST,
+        "nobody deletes their own account"
+    );
+    assert_eq!(
+        a.call(
+            Method::DELETE,
+            "/api/v1/admin/people/9999",
+            Some(json!({ "confirm": "x" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let acme = a.app.company("acme", "active").await;
+    let gone = a.app.company("gone", "deleted").await;
+    let leaving = a.app.user("leaving@example.com").await;
+    let partner = a.app.user("partner@example.com").await;
+    a.app.member(acme, leaving, "owner").await;
+    a.app.member(gone, leaving, "owner").await;
+    let cookie = a.app.sign_in(leaving).await;
+    let path = format!("/api/v1/admin/people/{leaving}");
+
+    let outsider_csrf = body_json(a.app.get("/api/v1/me", Some(&cookie)).await).await["csrf_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        a.call_as(
+            &cookie,
+            Some(&outsider_csrf),
+            Method::DELETE,
+            &mine,
+            Some(json!({ "confirm": "root@example.com" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND,
+        "only super admins delete people"
+    );
+    assert_eq!(
+        a.call_as(
+            &a.cookie,
+            None,
+            Method::DELETE,
+            &path,
+            Some(json!({ "confirm": "leaving@example.com" }))
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN,
+        "the CSRF token is required"
+    );
+
+    let confirm = Some(json!({ "confirm": "LEAVING@example.com " }));
+    assert_eq!(
+        a.call(
+            Method::DELETE,
+            &path,
+            Some(json!({ "confirm": "partner@example.com" }))
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST,
+        "the typed address must match"
+    );
+    let refused = a.call(Method::DELETE, &path, confirm.clone()).await;
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert!(
+        body_json(refused).await.to_string().contains("ACME"),
+        "the refusal names the company that needs another owner"
+    );
+
+    a.app.member(acme, partner, "owner").await;
+    a.app
+        .sql(move |c| {
+            c.execute(
+                "INSERT INTO invites (org_id, email, company_role) VALUES (?1, 'leaving@example.com', 'member')",
+                params![acme],
+            )?;
+            c.execute(
+                "INSERT INTO audit_log (actor_id, action, org_id, target) VALUES (?1, 'invite_created', ?2, 'x@example.com')",
+                params![leaving, acme],
+            )?;
+            c.execute(
+                "INSERT INTO invites (org_id, email, company_role, created_by) VALUES (?1, 'x@example.com', 'member', ?2)",
+                params![acme, leaving],
+            )
+        })
+        .await;
+    ok(a.call(Method::DELETE, &path, confirm.clone()).await).await;
+
+    let left: (String, bool, i64, i64, i64, i64, i64) = a
+        .app
+        .sql(move |c| {
+            c.query_row(
+                "SELECT (SELECT email FROM users WHERE id = ?1),
+                        (SELECT deleted_at IS NOT NULL AND disabled = 1 AND google_sub IS NULL FROM users WHERE id = ?1),
+                        (SELECT count(*) FROM org_members WHERE user_id = ?1),
+                        (SELECT count(*) FROM sessions WHERE user_id = ?1),
+                        (SELECT count(*) FROM audit_log WHERE action = 'invite_created' AND actor_id = ?1),
+                        (SELECT count(*) FROM invites WHERE email = 'x@example.com' AND created_by = ?1),
+                        (SELECT count(*) FROM audit_log WHERE action = 'person_deleted' AND target = 'leaving@example.com' AND actor_id = ?2)",
+                params![leaving, a.id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+            )
+        })
+        .await;
+    assert_eq!(
+        left,
+        (
+            format!("deleted-{leaving}@deleted.invalid"),
+            true,
+            0,
+            0,
+            1,
+            1,
+            1
+        )
+    );
+    let pending: i64 = a
+        .app
+        .sql(|c| {
+            c.query_row(
+                "SELECT count(*) FROM invites WHERE email = 'leaving@example.com' AND revoked_at IS NULL",
+                [],
+                |r| r.get(0),
+            )
+        })
+        .await;
+    assert_eq!(pending, 0, "their pending invitations are cancelled");
+    let newcomer = a.app.user("newcomer@example.com").await;
+    assert!(
+        newcomer > leaving,
+        "a deleted account's id is never handed out again"
+    );
+    let people = body_json(a.app.get("/api/v1/admin/people", Some(&a.cookie)).await).await;
+    assert!(
+        !people.to_string().contains("deleted.invalid"),
+        "deleted accounts are not listed"
+    );
+    assert_eq!(
+        a.app.get("/api/v1/me", Some(&cookie)).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        a.call(Method::DELETE, &path, confirm).await.status(),
+        StatusCode::NOT_FOUND
+    );
 }
