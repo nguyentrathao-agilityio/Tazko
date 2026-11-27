@@ -17,6 +17,7 @@ import { useLoad } from '@/ui/useLoad'
 import { background } from '@/projects/look'
 import { Stack } from '@/projects/Stack'
 import { useRun } from '@/projects/useRun'
+import type { QuickCard } from '@/board/quickadd'
 import { Access } from '@/board/Access'
 import { BoardMenu } from '@/board/BoardMenu'
 import { BoardLists } from '@/board/BoardLists'
@@ -260,8 +261,14 @@ export function BoardPage({ company, id, cardId, me, go, view = 'board' }: { com
     )
   }
 
-  const addCards = (l: ListData, titles: string[]) =>
-    run(() => api('POST', `${base}/cards`, titles.length === 1 ? { list_id: l.id, title: titles[0] } : { list_id: l.id, titles }))
+  const addCards = (l: ListData, cards: QuickCard[]) =>
+    run(async () => {
+      if (cards.every((c) => !c.labels.length && !c.members.length && c.due_at === null)) {
+        return api('POST', `${base}/cards`, cards.length === 1 ? { list_id: l.id, title: cards[0].title } : { list_id: l.id, titles: cards.map((c) => c.title) })
+      }
+
+      return api('POST', `${base}/cards`, { list_id: l.id, items: cards })
+    })
 
   const rename = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()

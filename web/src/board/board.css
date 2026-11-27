@@ -325,6 +325,47 @@
     margin-top: 8px;
   }
 
+  .qa-sug,
+  .qa-sum {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .qa-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font: inherit;
+    font-size: 0.8rem;
+  }
+
+  button.qa-chip {
+    cursor: pointer;
+  }
+
+  .qa-sug .qa-chip[aria-selected='true'] {
+    border-color: var(--accent);
+  }
+
+  .qa-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .cmp .qa-tip {
+    padding: 4px 0 0;
+    border: 0;
+    font-size: 0.75rem;
+  }
+
   .lh {
     cursor: grab;
   }

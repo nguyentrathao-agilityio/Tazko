@@ -100,6 +100,39 @@
        "type": "string"
       }
      },
+     "items": {
+      "type": "array",
+      "description": "Cards with their labels, people and due date, created together",
+      "items": {
+       "type": "object",
+       "properties": {
+        "title": {
+         "type": "string"
+        },
+        "labels": {
+         "type": "array",
+         "items": {
+          "type": "integer"
+         }
+        },
+        "members": {
+         "type": "array",
+         "items": {
+          "type": "integer"
+         }
+        },
+        "due_at": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "title"
+       ]
+      }
+     },
      "top": {
       "type": "boolean"
      }

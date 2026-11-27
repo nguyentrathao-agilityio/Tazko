@@ -148,6 +148,27 @@ describe('board', () => {
     expect(calls.find((c) => c.url === '/api/v1/c/acme/boards/7/cards')?.body).toEqual({ list_id: 12, titles: ['Buy milk', 'Call Jo', 'Book room'] })
   })
 
+  it('sets labels, people and a due date typed into the new card title', async () => {
+    open('/c/acme/b/7')
+    const doing = await screen.findByRole('region', { name: 'Doing' })
+    fireEvent.click(within(doing).getByRole('button', { name: 'Add a card' }))
+    const box = within(doing).getByLabelText('Card title')
+    fireEvent.change(box, { target: { value: 'Fix login #b' } })
+    fireEvent.keyDown(box, { key: 'Tab' })
+    expect((box as HTMLTextAreaElement).value).toBe('Fix login #bug ')
+    fireEvent.change(box, { target: { value: 'Fix login #bug @mai ^2030-01-02 @jo' } })
+    const preview = within(doing).getByLabelText('Will be set on the new card')
+    expect(within(preview).getByText('Bug')).toBeTruthy()
+    expect(within(preview).getByText('@Mai Tran')).toBeTruthy()
+    expect(within(doing).getByText('No one on this board matches “@jo”.')).toBeTruthy()
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/v1/c/acme/boards/7/cards')).toBe(true))
+    expect(calls.find((c) => c.url === '/api/v1/c/acme/boards/7/cards')?.body).toEqual({
+      list_id: 12,
+      items: [{ title: 'Fix login @jo', labels: [31], members: [1], due_at: Math.floor(new Date(2030, 0, 2, 12).getTime() / 1000) }],
+    })
+  })
+
   it('renames a card from quick edit and sorts a list from its menu', async () => {
     open('/c/acme/b/7')
     const card = await screen.findByRole('button', { name: 'Write copy' })

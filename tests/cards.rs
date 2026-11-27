@@ -547,3 +547,68 @@ async fn changes_inside_a_card_move_its_last_updated_time() {
     .await;
     assert!(stamp(db).await > 1, "checklist item");
 }
+
+#[tokio::test]
+async fn quick_add_sets_labels_people_and_due_date_in_one_step() {
+    let w = world().await;
+    let (s, label) = req(
+        &w.app,
+        &w.member,
+        Method::POST,
+        &format!("{}/labels", w.base()),
+        Some(json!({ "name": "bug", "color": 1 })),
+    )
+    .await;
+    assert_eq!(s, StatusCode::CREATED, "{label}");
+    let label = label["id"].as_i64().unwrap();
+    let path = format!("{}/cards", w.base());
+    let new = |extra: Value| {
+        let mut card = json!({ "title": "Fix login" });
+        card.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        let body = json!({ "list_id": w.lists[0], "items": [card, { "title": "Second line" }] });
+        req(&w.app, &w.member, Method::POST, &path, Some(body))
+    };
+
+    let (s, v) =
+        new(json!({ "labels": [label], "members": [w.member.id], "due_at": 1_900_000_000 })).await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    let card = v["cards"][0]["id"].as_i64().unwrap();
+    let (_, c) = req(
+        &w.app,
+        &w.member,
+        Method::GET,
+        &format!("{}/cards/{card}", w.base()),
+        None,
+    )
+    .await;
+    assert_eq!(c["labels"], json!([label]), "{c}");
+    assert_eq!(c["members"], json!([w.member.id]), "{c}");
+    assert_eq!(c["due_at"], 1_900_000_000);
+
+    for (extra, why) in [
+        (json!({ "labels": [9999] }), "label from another board"),
+        (json!({ "members": [w.observer.id] }), "observer"),
+        (json!({ "due_at": -5 }), "bad date"),
+    ] {
+        let (s, _) = new(extra).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "{why}");
+    }
+    let (_, v) = req(&w.app, &w.member, Method::GET, &w.base(), None).await;
+    let count = v["lists"][0]["cards"].as_array().unwrap().len();
+    assert_eq!(count, 2, "refused quick adds create nothing");
+    let (_, activity) = req(
+        &w.app,
+        &w.member,
+        Method::GET,
+        &format!("{}/activity", w.base()),
+        None,
+    )
+    .await;
+    let kinds = activity.to_string();
+    assert!(
+        kinds.contains("label_added") && kinds.contains("member_assigned"),
+        "{kinds}"
+    );
+}
