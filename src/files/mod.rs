@@ -219,7 +219,7 @@ async fn read_checked(
     head_ok: impl Fn(&[u8]) -> bool,
 ) -> Result<Vec<u8>, ApiError> {
     let mut body = body;
-    let mut out = Vec::with_capacity(expected.unwrap_or(0).min(max) as usize);
+    let mut out = Vec::with_capacity(expected.unwrap_or(0).min(max).min(8 * MB) as usize);
     let mut checked = false;
     while let Some(frame) = body.frame().await {
         let frame = frame.map_err(|_| bad("the upload was interrupted; try again"))?;
