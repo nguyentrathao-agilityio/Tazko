@@ -29,6 +29,7 @@ const detail = {
       role: 'member',
       invited_by: 'Root Admin',
       created_at: 1_700_000_000,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
       company_slug: 'acme',
       company_name: 'Acme Studio',
     },
@@ -183,7 +184,8 @@ describe('admin console', () => {
 
   it('re-invites when a revoke is undone', async () => {
     open('/admin/companies/acme')
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+    expect(await screen.findByText(/expires within a day/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
     expect(await screen.findByText('Invite for jo.lee@gmail.com revoked')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/invites'))).toBe(true))

@@ -49,29 +49,31 @@ export function AdminShell({
           <Icon name="back" />
           {t('rail.backToApp')}
         </Link>
-        <h4>{t('rail.console')}</h4>
-        <nav aria-label={t('rail.console')} style={{ display: 'contents' }}>
-          {sections.map(([to, icon, label]) => (
-            <Link key={to} to={to} go={go} className={`nav${active === to ? ' on' : ''}`}>
-              <Icon name={icon} />
-              {t(label)}
+        <div className="railnav">
+          <h4>{t('rail.console')}</h4>
+          <nav aria-label={t('rail.console')} style={{ display: 'contents' }}>
+            {sections.map(([to, icon, label]) => (
+              <Link key={to} to={to} go={go} className={`nav${active === to ? ' on' : ''}`}>
+                <Icon name={icon} />
+                {t(label)}
+              </Link>
+            ))}
+          </nav>
+          <div className="grow" />
+          {home ? (
+            <Link to={`${companyRoute(home.slug)}/me`} go={go} className="nav me" label={`${name} · ${t('rail.superAdmin')} · ${t('settings.title')}`}>
+              <Who name={name} role={`${t('rail.superAdmin')} · ${t('settings.title')}`} />
             </Link>
-          ))}
-        </nav>
-        <div className="grow" />
-        {home ? (
-          <Link to={`${companyRoute(home.slug)}/me`} go={go} className="nav me">
-            <Who name={name} role={`${t('rail.superAdmin')} · ${t('settings.title')}`} />
-          </Link>
-        ) : (
-          <div className="nav me">
-            <Who name={name} role={t('rail.superAdmin')} />
-          </div>
-        )}
-        <button type="button" className="nav" onClick={onSignOut}>
-          <Icon name="out" />
-          {t('home.signOut')}
-        </button>
+          ) : (
+            <div className="nav me">
+              <Who name={name} role={t('rail.superAdmin')} />
+            </div>
+          )}
+          <button type="button" className="nav" onClick={onSignOut}>
+            <Icon name="out" />
+            {t('home.signOut')}
+          </button>
+        </div>
       </aside>
       <main className="page">{children}</main>
     </div>

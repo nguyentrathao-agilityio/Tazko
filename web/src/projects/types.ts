@@ -33,7 +33,7 @@ export type ProjectView = {
 
 export type ProjectMember = Person & { last_active: number | null; you: boolean }
 
-export type ProjectInvite = { id: number; email: string; role: ProjectRole; invited_by: string | null; created_at: number }
+export type ProjectInvite = { id: number; email: string; role: ProjectRole; invited_by: string | null; created_at: number; expires_at: number }
 
 export type ManagedProject = {
   id: number
