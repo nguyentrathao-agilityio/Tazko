@@ -23,7 +23,7 @@ export function AdminConsole({ me, path, go, onSignOut }: { me: Me; path: string
   const section = company ? '/admin/companies' : path.replace(/\/$/, '')
   let page
   if (company) page = <CompanyDetail key={company} slug={company} go={go} />
-  else if (section === '/admin/people') page = <People />
+  else if (section === '/admin/people') page = <People me={me.id} />
   else if (section === '/admin/invites') page = <Invites />
   else if (section === '/admin/audit') page = <Audit />
   else if (section === '/admin/server') page = <Server />

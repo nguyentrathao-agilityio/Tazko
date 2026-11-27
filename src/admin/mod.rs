@@ -76,7 +76,10 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/admin/invites", get(list_invites))
         .route("/api/v1/admin/invites/{id}", delete(revoke_invite))
         .route("/api/v1/admin/people", get(list_people))
-        .route("/api/v1/admin/people/{id}", patch(update_person))
+        .route(
+            "/api/v1/admin/people/{id}",
+            patch(update_person).delete(delete_person),
+        )
         .route("/api/v1/admin/audit", get(list_audit))
         .route("/api/v1/admin/server", get(server))
 }
@@ -980,14 +983,24 @@ async fn remove_member(
     UrlPath((slug, user_id)): UrlPath<(String, i64)>,
 ) -> Result<StatusCode, ApiError> {
     let by = admin.writing(&headers)?;
-    revoke_before_ownership_ends(&state, &slug, user_id, by).await?;
-    let slug_for_projects = slug.clone();
+    leave_company(&state, &slug, user_id, by).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn leave_company(
+    state: &AppState,
+    slug: &str,
+    user_id: i64,
+    by: i64,
+) -> Result<(), ApiError> {
+    revoke_before_ownership_ends(state, slug, user_id, by).await?;
+    let name = slug.to_string();
     let outcome = state
         .dbs
         .control()
         .write(move |c| {
             let tx = c.transaction()?;
-            let Some(o) = org(&tx, &slug)? else {
+            let Some(o) = org(&tx, &name)? else {
                 return refuse(ApiError::NotFound);
             };
             let change = remove_org_member(&tx, o.id, user_id, by)?;
@@ -997,8 +1010,7 @@ async fn remove_member(
         .await?;
     let (org_id, change) = finish(outcome)?;
     change.into_result()?;
-    crate::projects::forget_member(&state, &slug_for_projects, org_id, user_id).await?;
-    Ok(StatusCode::NO_CONTENT)
+    crate::projects::forget_member(state, slug, org_id, user_id).await
 }
 
 async fn list_invites(
@@ -1025,7 +1037,7 @@ async fn list_people(
                 "SELECT u.id, u.name, u.email, u.last_seen, u.is_super_admin, u.disabled,
                         (SELECT json_group_array(o.name) FROM org_members m JOIN orgs o ON o.id = m.org_id
                           WHERE m.user_id = u.id AND o.status != 'deleted')
-                 FROM users u ORDER BY u.name = '', u.name COLLATE NOCASE, u.email",
+                 FROM users u WHERE u.deleted_at IS NULL ORDER BY u.name = '', u.name COLLATE NOCASE, u.email",
             )?;
             let rows = stmt
                 .query_map([], |r| {
@@ -1074,7 +1086,7 @@ async fn update_person(
             let tx = c.transaction()?;
             let found: Option<(String, bool, bool)> = tx
                 .query_row(
-                    "SELECT email, is_super_admin, disabled FROM users WHERE id = ?1",
+                    "SELECT email, is_super_admin, disabled FROM users WHERE id = ?1 AND deleted_at IS NULL",
                     [id],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
@@ -1112,6 +1124,116 @@ async fn update_person(
                 audit::record(&tx, Some(by), action, None, &email, json!({}))?;
             }
 
+            tx.commit()?;
+            Ok(Outcome::Done(()))
+        })
+        .await?;
+    finish(outcome)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_person(
+    State(state): State<AppState>,
+    admin: SuperAdmin,
+    headers: HeaderMap,
+    UrlPath(id): UrlPath<i64>,
+    Json(body): Json<Confirm>,
+) -> Result<StatusCode, ApiError> {
+    let by = admin.writing(&headers)?;
+    if id == by {
+        return Err(bad("you cannot delete your own account"));
+    }
+
+    let found = state
+        .dbs
+        .control()
+        .read(move |c| {
+            let Some(email) = c
+                .query_row("SELECT email FROM users WHERE id = ?1 AND deleted_at IS NULL", [id], |r| r.get::<_, String>(0))
+                .optional()?
+            else {
+                return Ok(None);
+            };
+
+            let mut stmt = c.prepare(
+                "SELECT o.id, o.slug, o.name, m.role FROM org_members m JOIN orgs o ON o.id = m.org_id
+                 WHERE m.user_id = ?1 AND o.status != 'deleted' ORDER BY o.name",
+            )?;
+            let rows = stmt
+                .query_map([id], |r| {
+                    Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            let (mut slugs, mut sole) = (vec![], vec![]);
+            for (org_id, slug, name, role) in rows {
+                if role == "owner" && owners(c, org_id)? <= 1 {
+                    sole.push(name);
+                }
+                slugs.push(slug);
+            }
+            Ok(Some((email, slugs, sole)))
+        })
+        .await?;
+    let (email, slugs, sole) = found.ok_or(ApiError::NotFound)?;
+    if !body.confirm.trim().eq_ignore_ascii_case(&email) {
+        return Err(bad("type the person's email address to confirm"));
+    }
+
+    if !sole.is_empty() {
+        return Err(crate::error::conflict(&format!(
+            "this person is the only owner of {}; make someone else an owner first",
+            sole.join(", ")
+        )));
+    }
+
+    for slug in &slugs {
+        leave_company(&state, slug, id, by).await?;
+    }
+
+    let outcome = state
+        .dbs
+        .control()
+        .write(move |c| {
+            let tx = c.transaction()?;
+            let still_member: bool = tx.query_row(
+                "SELECT EXISTS (SELECT 1 FROM org_members m JOIN orgs o ON o.id = m.org_id
+                                WHERE m.user_id = ?1 AND o.status != 'deleted')",
+                [id],
+                |r| r.get(0),
+            )?;
+            if still_member {
+                return refuse(crate::error::conflict(
+                    "this person joined a company meanwhile; try again",
+                ));
+            }
+
+            if tx.execute(
+                "UPDATE users SET email = 'deleted-' || id || '@deleted.invalid', name = 'Deleted account',
+                        google_sub = NULL, avatar = NULL, hd = NULL, is_super_admin = 0, disabled = 1,
+                        deleted_at = unixepoch()
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                [id],
+            )? == 0
+            {
+                return refuse(ApiError::NotFound);
+            }
+
+            for table in ["sessions", "personal_tokens", "device_codes", "user_settings", "email_digests", "org_members"] {
+                tx.execute(&format!("DELETE FROM {table} WHERE user_id = ?1"), [id])?;
+            }
+
+            tx.execute(
+                "UPDATE invites SET revoked_at = unixepoch() WHERE email = ?1 AND accepted_at IS NULL AND revoked_at IS NULL",
+                [&email],
+            )?;
+            audit::record(
+                &tx,
+                Some(by),
+                "person_deleted",
+                None,
+                &email,
+                json!({ "companies": slugs.len() }),
+            )?;
             tx.commit()?;
             Ok(Outcome::Done(()))
         })

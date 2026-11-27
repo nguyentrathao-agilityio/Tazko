@@ -23,9 +23,20 @@ pub fn kind(action: &str) -> &'static str {
         a if a.starts_with("project_") || a == "board_imported" => "projects",
         a if a.starts_with("invite_") => "invites",
         a if a.starts_with("api_token_") || a.starts_with("webhook_") => "integrations",
+        a if a.starts_with("template_") => "templates",
         _ => "people",
     }
 }
+
+pub const KINDS: [&str; 7] = [
+    "refused",
+    "company",
+    "projects",
+    "invites",
+    "integrations",
+    "templates",
+    "people",
+];
 
 pub fn actions_of(kind: &str) -> Option<&'static [&'static str]> {
     match kind {
@@ -52,6 +63,11 @@ pub fn actions_of(kind: &str) -> Option<&'static [&'static str]> {
             "api_token_revoked",
             "webhook_secret_rotated",
         ]),
+        "templates" => Some(&[
+            "template_offered",
+            "template_withdrawn",
+            "template_cards_removed",
+        ]),
         "people" => Some(&[
             "role_changed",
             "member_removed",
@@ -59,6 +75,7 @@ pub fn actions_of(kind: &str) -> Option<&'static [&'static str]> {
             "super_admin_revoked",
             "person_disabled",
             "person_enabled",
+            "person_deleted",
         ]),
         _ => None,
     }
@@ -75,5 +92,14 @@ mod tests {
         }
         assert_eq!(kind("webhook_secret_rotated"), "integrations");
         assert_eq!(kind("invite_created"), "invites");
+    }
+
+    #[test]
+    fn every_listed_action_is_filed_under_its_own_filter() {
+        for k in KINDS {
+            for action in actions_of(k).unwrap() {
+                assert_eq!(kind(action), k, "{action}");
+            }
+        }
     }
 }

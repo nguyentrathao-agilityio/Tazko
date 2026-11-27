@@ -62,6 +62,7 @@ function respond(url: string, method: string): Response {
   if (url === '/api/v1/admin/people')
     return json({
       people: [
+        { id: 1, name: 'Root Admin', email: 'root@example.com', last_seen: null, is_super_admin: true, disabled: false, companies: [] },
         { id: 7, name: 'Mai Tran', email: 'mai@acme.example', last_seen: null, is_super_admin: false, disabled: false, companies: ['Acme Studio'] },
       ],
     })
@@ -162,6 +163,19 @@ describe('admin console', () => {
     open('/admin/people')
     fireEvent.click(await screen.findByRole('switch', { name: 'Super admin for Mai Tran' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ is_super_admin: true }))
+  })
+
+  it('deletes a person only after their email is typed, and never yourself', async () => {
+    open('/admin/people')
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete the account of Mai Tran' }))
+    expect(screen.queryByRole('button', { name: 'Delete the account of Root Admin' })).toBeNull()
+    const go = screen.getByRole('button', { name: 'Delete account' }) as HTMLButtonElement
+    expect(go.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText(/Type mai@acme.example to confirm/), { target: { value: 'mai@acme.example' } })
+    expect(go.disabled).toBe(false)
+    fireEvent.click(go)
+    await waitFor(() => expect(calls.find((c) => c.method === 'DELETE')).toEqual(expect.objectContaining({ url: '/api/v1/admin/people/7', body: { confirm: 'mai@acme.example' } })))
+    expect(await screen.findByText('Deleted the account of Mai Tran')).toBeTruthy()
   })
 
   it('marks refused sign-ins in the audit log', async () => {

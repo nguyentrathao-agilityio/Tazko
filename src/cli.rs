@@ -77,8 +77,39 @@ pub enum Command {
         #[command(subcommand)]
         action: DevAction,
     },
+    #[command(about = "Maintenance for board templates")]
+    Templates {
+        #[command(subcommand)]
+        action: TemplatesAction,
+    },
     #[command(about = "Check every database and stored file in a data folder")]
     Check {
+        #[arg(
+            long,
+            value_name = "DIR",
+            help = DATA_HELP
+        )]
+        data: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "PATH",
+            help = ENV_FILE_HELP
+        )]
+        env_file: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TemplatesAction {
+    #[command(
+        about = "Remove cards from templates saved from restricted boards, and from their shared copies; lists, labels and fields stay"
+    )]
+    CleanRestricted {
+        #[arg(
+            long,
+            help = "Make the change; without it, only show what would change"
+        )]
+        apply: bool,
         #[arg(
             long,
             value_name = "DIR",

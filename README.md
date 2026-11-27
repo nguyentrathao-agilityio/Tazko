@@ -42,6 +42,7 @@ For hot reload of the web app, keep the server running and start `pnpm dev` in `
 | `tazko dev seed` | Add the demo company (local addresses only) |
 | `tazko backup` | Snapshot the data folder and check it; `restore` and `verify` subcommands |
 | `tazko check` | Check every database and stored file in a data folder |
+| `tazko templates clean-restricted` | Show templates saved from restricted boards that still carry cards; `--apply` removes those cards from them and from their shared copies |
 
 `tazko <command> --help` lists the options.
 

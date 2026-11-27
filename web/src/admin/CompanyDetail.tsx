@@ -3,7 +3,7 @@ import { api, errorMessage } from '@/http'
 import { t } from '@/i18n'
 import { ErrorNote } from '@/ui/ErrorNote'
 import { Link, type Go } from '@/ui/Link'
-import { Modal } from '@/ui/Modal'
+import { TypeToConfirm } from '@/ui/TypeToConfirm'
 import { Avatar } from '@/ui/people'
 import { useToast } from '@/ui/toast'
 import { useLoad } from '@/ui/useLoad'
@@ -213,56 +213,18 @@ function SettingsPanel({
           {t('company.delete.button')}
         </button>
       </section>
-      {deleting && <DeleteCompany company={company} base={base} onClose={() => setDeleting(false)} onDeleted={onDeleted} />}
+      {deleting && (
+        <TypeToConfirm
+          title={t('deleteCompany.title', { name: company.name })}
+          lead={t('deleteCompany.lead')}
+          prompt={t('deleteCompany.confirm')}
+          word={company.slug}
+          url={base}
+          go={t('deleteCompany.go')}
+          onClose={() => setDeleting(false)}
+          onDone={onDeleted}
+        />
+      )}
     </>
-  )
-}
-
-function DeleteCompany({
-  company,
-  base,
-  onClose,
-  onDeleted,
-}: {
-  company: Detail
-  base: string
-  onClose: () => void
-  onDeleted: () => void
-}) {
-  const [typed, setTyped] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [before, after] = t('deleteCompany.confirm').split('{slug}')
-
-  const go = async () => {
-    try {
-      await api('DELETE', base, { confirm: typed })
-      onDeleted()
-    } catch (e) {
-      setError(errorMessage(e))
-    }
-  }
-
-  return (
-    <Modal label={t('deleteCompany.title', { name: company.name })} onClose={onClose}>
-      <h2>{t('deleteCompany.title', { name: company.name })}</h2>
-      <p className="muted">{t('deleteCompany.lead')}</p>
-      <div className="field">
-        <label htmlFor="d-t">
-          {before}
-          <b className="mono">{company.slug}</b>
-          {after}
-        </label>
-        <input type="text" id="d-t" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />
-      </div>
-      <ErrorNote message={error} />
-      <div className="acts">
-        <button type="button" className="btn" onClick={onClose}>
-          {t('common.cancel')}
-        </button>
-        <button type="button" className="btn danger" disabled={typed.trim() !== company.slug} onClick={() => void go()}>
-          {t('deleteCompany.go')}
-        </button>
-      </div>
-    </Modal>
   )
 }
