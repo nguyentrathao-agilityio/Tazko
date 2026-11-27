@@ -306,9 +306,22 @@ struct NewCards {
     list_id: i64,
     title: Option<String>,
     titles: Option<Vec<String>>,
+    items: Option<Vec<NewCard>>,
     #[serde(default)]
     top: bool,
 }
+
+#[derive(Deserialize)]
+struct NewCard {
+    title: String,
+    #[serde(default)]
+    labels: Vec<i64>,
+    #[serde(default)]
+    members: Vec<i64>,
+    due_at: Option<i64>,
+}
+
+const MAX_QUICK: usize = 20;
 
 async fn create(
     board: Board,
@@ -316,14 +329,24 @@ async fn create(
     Json(body): Json<NewCards>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let by = board.writing(&headers, Act::Edit)?;
-    let raw: Vec<String> = match (&body.title, &body.titles) {
-        (Some(t), None) => vec![t.clone()],
-        (None, Some(ts)) => ts
+    let plain = |t: &String| NewCard {
+        title: t.clone(),
+        labels: vec![],
+        members: vec![],
+        due_at: None,
+    };
+    let raw: Vec<NewCard> = match (&body.title, &body.titles, body.items) {
+        (Some(t), None, None) => vec![plain(t)],
+        (None, Some(ts), None) => ts
             .iter()
             .filter(|t| !t.trim().is_empty())
-            .cloned()
+            .map(plain)
             .collect(),
-        _ => return Err(bad("send a title or a list of titles")),
+        (None, None, Some(items)) => items
+            .into_iter()
+            .filter(|c| !c.title.trim().is_empty())
+            .collect(),
+        _ => return Err(bad("send a title, a list of titles or a list of cards")),
     };
     if raw.is_empty() {
         return Err(bad("enter a card title"));
@@ -333,18 +356,43 @@ async fn create(
         return Err(bad("paste at most 100 lines at once"));
     }
 
-    let titles = raw
-        .iter()
-        .map(|t| title(t))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut cards = Vec::with_capacity(raw.len());
+    for c in raw {
+        if c.labels.len() > MAX_QUICK || c.members.len() > MAX_QUICK {
+            return Err(bad("add at most 20 labels and 20 people at once"));
+        }
+
+        if c.due_at.is_some_and(|d| !detail::valid_time(d)) {
+            return Err(bad("that date is not valid"));
+        }
+
+        cards.push(NewCard {
+            title: title(&c.title)?,
+            ..c
+        });
+    }
+
     let (id, pid, list, top) = (board.id, board.project.id, body.list_id, body.top);
-    let cards = board
+    let created = board
         .project
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
             if !open_list(&tx, id, list)? {
                 return Ok(Err(bad("that list is not on this board")));
+            }
+
+            for card in &cards {
+                for label in &card.labels {
+                    if !detail::label_on_board(&tx, id, *label)? {
+                        return Ok(Err(bad("that label is not on this board")));
+                    }
+                }
+                for user in &card.members {
+                    if !detail::can_be_assigned(&tx, id, *user)? {
+                        return Ok(Err(bad("choose a project owner or member who can see this board")));
+                    }
+                }
             }
 
             let mut created = Vec::new();
@@ -358,17 +406,38 @@ async fn create(
             } else {
                 None
             };
-            for t in &titles {
+            for new in &cards {
                 let pos = if top {
                     order::between(prev.as_deref(), first_existing.as_deref())
                 } else {
                     end_of_list(&tx, list)?
                 };
                 tx.execute(
-                    "INSERT INTO cards (board_id, list_id, title, position, created_by) VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![id, list, t, pos, by],
+                    "INSERT INTO cards (board_id, list_id, title, position, created_by, due_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![id, list, new.title, pos, by, new.due_at],
                 )?;
-                created.push(json!({ "id": tx.last_insert_rowid(), "title": t, "position": pos, "list_id": list }));
+                let card = tx.last_insert_rowid();
+                let at = At::card(pid, id, card);
+                for label in &new.labels {
+                    if tx.execute(
+                        "INSERT INTO card_labels (card_id, label_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+                        params![card, label],
+                    )? > 0
+                    {
+                        events::record(&tx, by, "label_added", at, json!({ "label": label }))?;
+                    }
+                }
+                for user in &new.members {
+                    if tx.execute(
+                        "INSERT INTO card_members (card_id, user_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+                        params![card, user],
+                    )? > 0
+                    {
+                        events::record(&tx, by, "member_assigned", at, json!({ "user": user }))?;
+                        crate::notifications::notify(&tx, *user, by, id, card, crate::notifications::Kind::Assigned)?;
+                    }
+                }
+                created.push(json!({ "id": card, "title": new.title, "position": pos, "list_id": list }));
                 prev = Some(pos);
             }
             let ids: Vec<&Value> = created.iter().map(|c| &c["id"]).collect();
@@ -377,7 +446,7 @@ async fn create(
             }
             if created.len() == 1 {
                 let card = created[0]["id"].as_i64().unwrap_or_default();
-                events::record(&tx, by, "card_created", At::card(pid, id, card), json!({ "list": list, "title": titles[0] }))?;
+                events::record(&tx, by, "card_created", At::card(pid, id, card), json!({ "list": list, "title": cards[0].title }))?;
             } else {
                 events::record(&tx, by, "cards_created", At::board(pid, id), json!({ "list": list, "cards": ids }))?;
             }
@@ -385,7 +454,7 @@ async fn create(
             Ok(Ok(created))
         })
         .await??;
-    Ok((StatusCode::CREATED, Json(json!({ "cards": cards }))))
+    Ok((StatusCode::CREATED, Json(json!({ "cards": created }))))
 }
 
 #[derive(Deserialize)]

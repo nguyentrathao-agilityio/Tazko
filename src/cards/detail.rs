@@ -242,12 +242,24 @@ async fn view(board: Board, Path(params): Params) -> Result<Json<Value>, ApiErro
     Ok(Json(v))
 }
 
+pub(crate) fn valid_time(t: i64) -> bool {
+    (0..=32_503_680_000).contains(&t)
+}
+
+pub(crate) fn label_on_board(c: &Connection, board: i64, label: i64) -> rusqlite::Result<bool> {
+    c.query_row(
+        "SELECT EXISTS (SELECT 1 FROM labels WHERE id = ?1 AND board_id = ?2)",
+        params![label, board],
+        |r| r.get(0),
+    )
+}
+
 fn date(v: &Value) -> Result<Option<i64>, ApiError> {
     match v {
         Value::Null => Ok(None),
         Value::Number(n) => n
             .as_i64()
-            .filter(|t| (0..=32_503_680_000).contains(t))
+            .filter(|t| valid_time(*t))
             .map(Some)
             .ok_or_else(|| bad("that date is not valid")),
         _ => Err(bad("that date is not valid")),
@@ -516,11 +528,7 @@ async fn set_label(
         .db()
         .write(move |c| {
             let tx = c.transaction()?;
-            let known: bool = tx.query_row(
-                "SELECT EXISTS (SELECT 1 FROM labels WHERE id = ?1 AND board_id = ?2)",
-                params![label, id],
-                |r| r.get(0),
-            )?;
+            let known = label_on_board(&tx, id, label)?;
             if card_in_board(&tx, id, card, false)?.is_none() || !known {
                 return Ok(Err(ApiError::NotFound));
             }
@@ -988,7 +996,7 @@ async fn add_item(
     Ok((StatusCode::CREATED, Json(json!({ "id": item }))))
 }
 
-fn can_be_assigned(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
+pub(crate) fn can_be_assigned(c: &Connection, board: i64, user: i64) -> rusqlite::Result<bool> {
     c.query_row(
         &format!(
             "SELECT EXISTS (SELECT 1 FROM project_members m JOIN boards b ON b.project_id = m.project_id

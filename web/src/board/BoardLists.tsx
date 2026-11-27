@@ -16,6 +16,7 @@ import { useState, type ReactNode } from 'react'
 import { t } from '@/i18n'
 import { CardTile } from '@/board/CardTile'
 import { Composer } from '@/board/Composer'
+import type { QuickCard } from '@/board/quickadd'
 import { ListColumn, type ListActions } from '@/board/ListColumn'
 import { ageLevel, type Aging } from '@/card/aging'
 import type { BoardPerson, CardData, Label, ListData } from '@/board/types'
@@ -72,7 +73,7 @@ export function BoardLists({
   actions: ListActions
   composing: number | null
   setComposing: (id: number | null) => void
-  onAddCards: (list: ListData, titles: string[]) => Promise<boolean>
+  onAddCards: (list: ListData, cards: QuickCard[]) => Promise<boolean>
   onCardTemplate?: (list: ListData, el: Element) => void
   onMoveCard: (m: CardMove) => void
   onMoveList: (m: ListMove) => void
@@ -194,7 +195,9 @@ export function BoardLists({
                         open={composing === l.id}
                         onOpen={() => setComposing(l.id)}
                         onClose={() => setComposing(null)}
-                        onAdd={(titles) => onAddCards(l, titles)}
+                        onAdd={(cards) => onAddCards(l, cards)}
+                        labels={labels}
+                        people={people}
                         onTemplate={onCardTemplate ? (el) => onCardTemplate(l, el) : undefined}
                       />
                     ) : undefined
