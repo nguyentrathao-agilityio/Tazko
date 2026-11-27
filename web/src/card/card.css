@@ -625,14 +625,17 @@
 
   .rte-ed h3,
   .desc h3,
+  .cmt .body h3,
   .rte-ed h2,
-  .desc h2 {
+  .desc h2,
+  .cmt .body h2 {
     font-size: 1.05rem;
     margin: 0.6em 0 0.2em;
   }
 
   .rte-ed blockquote,
-  .desc blockquote {
+  .desc blockquote,
+  .cmt .body blockquote {
     margin: 0.4em 0;
     padding: 2px 12px;
     border-left: 3px solid var(--accent-line);
@@ -646,6 +649,39 @@
     background: var(--sunken);
     padding: 0 4px;
     border-radius: 4px;
+  }
+
+  .rte-ed pre,
+  .desc pre,
+  .cmt .body pre {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    background: var(--sunken);
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin: 0.4em 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .cmt .body p,
+  .cmt .body li {
+    margin: 0.2em 0;
+    white-space: pre-wrap;
+  }
+
+  .cmt .body ul,
+  .cmt .body ol {
+    margin: 0.2em 0;
+    padding-left: 1.2em;
+  }
+
+  .cmt .body ul {
+    list-style: disc;
+  }
+
+  .cmt .body ol {
+    list-style: decimal;
   }
 
   .ckb {
@@ -894,7 +930,6 @@
     padding: 6px 12px;
     margin: 4px 0;
     overflow-wrap: anywhere;
-    white-space: pre-wrap;
   }
 
   .cmt .acts {

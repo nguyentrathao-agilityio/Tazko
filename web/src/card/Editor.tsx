@@ -1,12 +1,107 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { t } from '@/i18n'
 import { Icon } from '@/ui/Icon'
 import { ESCAPE, ENTER } from '@/keys/keyNames'
+import { escapeHtml, pastedHtml } from '@/card/markdown'
 
 export type DescriptionSave = { description_html: string } | { description_markdown: string }
 
 function run(cmd: string, arg?: string) {
   document.execCommand(cmd, false, arg)
+}
+
+const MARK = '\u200b'
+
+const BLOCKS = new Set(['P', 'DIV', 'LI', 'H2', 'H3', 'BLOCKQUOTE', 'PRE'])
+
+const SHORTCUTS: Record<string, () => void> = {
+  '#': () => run('formatBlock', 'H2'),
+  '-': () => run('insertUnorderedList'),
+  '*': () => run('insertUnorderedList'),
+  '1.': () => run('insertOrderedList'),
+  '>': () => run('formatBlock', 'BLOCKQUOTE'),
+}
+
+function shortcutFor(marker: string): (() => void) | undefined {
+  return /^#{2,6}$/.test(marker) ? () => run('formatBlock', 'H3') : SHORTCUTS[marker]
+}
+
+type Caret = { sel: Selection; block: HTMLElement; line: Range; after: Range }
+
+function caret(root: HTMLElement): Caret | null {
+  const sel = window.getSelection()
+  if (!sel || !sel.isCollapsed || !sel.anchorNode || !root.contains(sel.anchorNode)) return null
+  let node: Node = sel.anchorNode
+  while (node !== root && !(node instanceof HTMLElement && BLOCKS.has(node.tagName))) node = node.parentNode ?? root
+  const block = node as HTMLElement
+  const line = document.createRange()
+  line.setStart(block, 0)
+  line.setEnd(sel.anchorNode, sel.anchorOffset)
+  const breaks = [...block.querySelectorAll('br')].filter((br) => line.intersectsNode(br))
+  if (breaks.length) line.setStartAfter(breaks[breaks.length - 1])
+  const after = document.createRange()
+  after.setStart(sel.anchorNode, sel.anchorOffset)
+  after.setEnd(block, block.childNodes.length)
+  return { sel, block, line, after }
+}
+
+function leaveBlock({ sel, block, line, after }: Caret): boolean {
+  if (!['BLOCKQUOTE', 'PRE'].includes(block.tagName) || after.toString()) return false
+  const text = line.toString()
+  if (block.tagName === 'PRE' ? text !== '' && !text.endsWith('\n') : text !== '') return false
+  for (let last = block.lastChild; last; last = block.lastChild) {
+    if (last.nodeType === Node.TEXT_NODE && last.textContent?.endsWith('\n')) {
+      last.textContent = last.textContent.slice(0, -1)
+      break
+    }
+    if (last.nodeName !== 'BR' && last.textContent) break
+    last.remove()
+  }
+  const p = document.createElement('p')
+  p.appendChild(document.createElement('br'))
+  block.after(p)
+  if (!block.textContent) block.remove()
+  sel.collapse(p, 0)
+  return true
+}
+
+function shortcut(root: HTMLElement, typed: string): boolean {
+  const at = caret(root)
+  if (!at) return false
+  if (typed === ENTER && leaveBlock(at)) return true
+  if (at.block.tagName === 'PRE') return false
+  const marker = at.line.toString()
+  const act = typed === ' ' ? shortcutFor(marker) : marker === '```' ? () => run('formatBlock', 'PRE') : undefined
+  if (!act) return false
+  at.sel.removeAllRanges()
+  at.sel.addRange(at.line)
+  run('delete')
+  act()
+  return true
+}
+
+const WRAPS: [RegExp, string][] = [
+  [/\*\*([^*]+)\*\*$/, 'strong'],
+  [/~~([^~]+)~~$/, 's'],
+  [/(?<!`)`([^`]+)`$/, 'code'],
+]
+
+function wrapInline(root: HTMLElement) {
+  const sel = window.getSelection()
+  const node = sel?.anchorNode
+  if (!sel || !node || node.nodeType !== Node.TEXT_NODE || !root.contains(node)) return
+  const text = (node.textContent ?? '').slice(0, sel.anchorOffset)
+  for (const [re, tag] of WRAPS) {
+    const m = re.exec(text)
+    if (!m) continue
+    const r = document.createRange()
+    r.setStart(node, sel.anchorOffset - m[0].length)
+    r.setEnd(node, sel.anchorOffset)
+    sel.removeAllRanges()
+    sel.addRange(r)
+    run('insertHTML', `<${tag}>${escapeHtml(m[1])}</${tag}>${MARK}`)
+    return
+  }
 }
 
 export function Editor({ initial, onSave, onCancel }: { initial: string; onSave: (body: DescriptionSave) => void; onCancel: () => void }) {
@@ -23,6 +118,7 @@ export function Editor({ initial, onSave, onCancel }: { initial: string; onSave:
     if (!el || mode !== 'rich') return
     el.innerHTML = html.current
     el.focus()
+    run('defaultParagraphSeparator', 'p')
     const r = document.createRange()
     r.selectNodeContents(el)
     r.collapse(false)
@@ -32,12 +128,29 @@ export function Editor({ initial, onSave, onCancel }: { initial: string; onSave:
   }, [mode])
 
   function remember(e: FormEvent<HTMLDivElement>) {
+    const data = (e.nativeEvent as InputEvent).data
+    if (data === '*' || data === '`' || data === '~') wrapInline(e.currentTarget)
+    html.current = e.currentTarget.innerHTML
+  }
+
+  function typing(e: KeyboardEvent<HTMLDivElement>) {
+    if ((e.key === ' ' || (e.key === ENTER && !e.shiftKey && !e.ctrlKey && !e.metaKey)) && shortcut(e.currentTarget, e.key)) {
+      e.preventDefault()
+      html.current = e.currentTarget.innerHTML
+    }
+  }
+
+  function paste(e: ClipboardEvent<HTMLDivElement>) {
+    const out = pastedHtml(e.clipboardData.getData('text/html'), e.clipboardData.getData('text/plain'))
+    if (out === null) return
+    e.preventDefault()
+    run('insertHTML', out)
     html.current = e.currentTarget.innerHTML
   }
 
   const save = () => {
     if (mode === 'markdown') onSave({ description_markdown: markdown })
-    else onSave({ description_html: box.current?.innerHTML ?? html.current })
+    else onSave({ description_html: (box.current?.innerHTML ?? html.current).replaceAll(MARK, '') })
   }
 
   const key = (e: KeyboardEvent) => {
@@ -119,7 +232,7 @@ export function Editor({ initial, onSave, onCancel }: { initial: string; onSave:
               <span className="rts" />
               {tool(t('editor.code'), '</>', () => {
                 const s = window.getSelection()?.toString()
-                if (s) run('insertHTML', `<code>${s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] ?? c)}</code>`)
+                if (s) run('insertHTML', `<code>${escapeHtml(s)}</code>`)
               })}
               {tool(t('editor.link'), <Icon name="link" />, () => {
                 const s = window.getSelection()
@@ -142,7 +255,7 @@ export function Editor({ initial, onSave, onCancel }: { initial: string; onSave:
                 </button>
               </div>
             )}
-            <div ref={box} className="rte-ed" onInput={remember} contentEditable role="textbox" aria-multiline="true" aria-label={t('card.description')} suppressContentEditableWarning />
+            <div ref={box} className="rte-ed" onInput={remember} onKeyDown={typing} onPaste={paste} contentEditable role="textbox" aria-multiline="true" aria-label={t('card.description')} suppressContentEditableWarning />
           </>
         )}
         {mode === 'markdown' && (
