@@ -632,3 +632,87 @@ async fn files_nobody_refers_to_are_swept() {
     assert_eq!(tazko::files::sweep(&db, dir).await.unwrap(), 1);
     assert!(!w.file_path(&hash).exists());
 }
+
+#[tokio::test]
+async fn videos_have_their_own_limit_and_play_in_parts() {
+    let w = world().await;
+    let mut video = b"\0\0\0\x18ftypisom\0\0\x02\0isomiso2".to_vec();
+    video.resize(12 * 1024 * 1024, 7);
+    let size = video.len();
+    let res = w.upload(&w.member, "demo.mp4", &video).await;
+    assert_eq!(
+        res.status(),
+        StatusCode::CREATED,
+        "videos may be larger than other files"
+    );
+    let id = body_json(res).await["id"].as_i64().unwrap();
+    let mut big = PNG.to_vec();
+    big.resize(12 * 1024 * 1024, 0);
+    assert_eq!(
+        w.upload(&w.member, "big.png", &big).await.status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+    let storage = body_json(w.get(&w.member, &format!("{C}/storage")).await).await;
+    assert_eq!(storage["max_video"], 100 * 1024 * 1024);
+
+    let url = format!("{C}/boards/{}/attachments/{id}", w.board);
+    let ranged = |range: &'static str, if_range: Option<&'static str>| {
+        let mut r = Request::get(&url)
+            .header(header::COOKIE, &w.observer.cookie)
+            .header(header::RANGE, range);
+        if let Some(v) = if_range {
+            r = r.header(header::IF_RANGE, v);
+        }
+        w.app.send(r.body(Body::empty()).unwrap())
+    };
+
+    let part = ranged("bytes=0-99", None).await;
+    assert_eq!(part.status(), StatusCode::PARTIAL_CONTENT);
+    let h = part.headers().clone();
+    assert_eq!(h[header::CONTENT_TYPE], "video/mp4");
+    assert_eq!(
+        h[header::CONTENT_RANGE],
+        format!("bytes 0-99/{size}").as_str()
+    );
+    assert_eq!(h[header::ACCEPT_RANGES], "bytes");
+    assert_eq!(h["x-content-type-options"], "nosniff");
+    assert!(
+        h[header::CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .starts_with("inline;")
+    );
+    assert_eq!(body_bytes(part).await, video[..100].to_vec());
+
+    let tail = ranged("bytes=-10", None).await;
+    assert_eq!(tail.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body_bytes(tail).await, video[size - 10..].to_vec());
+
+    let stale = ranged("bytes=0-99", Some("\"not-this-file\"")).await;
+    assert_eq!(
+        stale.status(),
+        StatusCode::OK,
+        "a changed file is sent whole"
+    );
+    assert_eq!(body_bytes(stale).await.len(), size);
+
+    assert_eq!(
+        ranged("bytes=999999999-", None).await.status(),
+        StatusCode::RANGE_NOT_SATISFIABLE
+    );
+
+    let whole = w.get(&w.member, &format!("{url}?download=1")).await;
+    assert_eq!(whole.status(), StatusCode::OK);
+    assert!(
+        whole.headers()[header::CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .starts_with("attachment;")
+    );
+    assert_eq!(body_bytes(whole).await, video);
+
+    assert_eq!(
+        w.get(&w.outsider, &url).await.status(),
+        StatusCode::NOT_FOUND
+    );
+}
